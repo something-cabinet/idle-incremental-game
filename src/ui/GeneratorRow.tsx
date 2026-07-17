@@ -1,11 +1,12 @@
 import { buyGenerator, canAfford, generatorCost } from '../game/logic';
-import { formatNumber } from '../game/format';
 import type { GeneratorDef } from '../game/types';
+import { useFormat } from '../hooks/useFormat';
 import { useGameState, useGameStore } from '../hooks/useGame';
 
 export function GeneratorRow({ def }: { def: GeneratorDef }) {
   const store = useGameStore();
   const state = useGameState();
+  const fmt = useFormat();
   const owned = state.generators[def.id] ?? 0;
   const cost = generatorCost(state, def.id);
   const affordable = canAfford(state, def.id);
@@ -28,11 +29,11 @@ export function GeneratorRow({ def }: { def: GeneratorDef }) {
         </span>
         <span className="generator-desc">{def.description}</span>
         <span className="generator-production">
-          {formatNumber(def.baseProduction)} /sec each
-          {owned > 0 && ` · ${formatNumber(def.baseProduction * owned)} /sec total`}
+          {fmt(def.baseProduction)} /sec each
+          {owned > 0 && ` · ${fmt(def.baseProduction * owned)} /sec total`}
         </span>
       </div>
-      <div className="generator-cost">{formatNumber(cost)} ⚡</div>
+      <div className="generator-cost">{fmt(cost)} ⚡</div>
     </button>
   );
 }

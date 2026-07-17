@@ -1,16 +1,15 @@
 import { useState } from 'react';
-import { GENERATORS } from './game/config';
-import {
-  applyOfflineProgress,
-  click,
-  createInitialState,
-  productionPerSecond,
-} from './game/logic';
+import { applyOfflineProgress, createInitialState, normalizeState, productionPerSecond } from './game/logic';
 import { GameStore } from './game/store';
-import { formatDuration, formatNumber } from './game/format';
-import { GameContext, useGameLoop, useGameState, useGameStore } from './hooks/useGame';
+import { formatDuration } from './game/format';
+import { GameContext, useGameLoop, useGameState } from './hooks/useGame';
+import { useFormat } from './hooks/useFormat';
 import { localStorageAdapter } from './platform/storage';
-import { GeneratorRow } from './ui/GeneratorRow';
+import { TabBar, type TabId } from './ui/TabBar';
+import { MainPanel } from './ui/panels/MainPanel';
+import { SkillsPanel } from './ui/panels/SkillsPanel';
+import { PrestigePanel } from './ui/panels/PrestigePanel';
+import { SettingsPanel } from './ui/panels/SettingsPanel';
 import './App.css';
 
 interface OfflineReport {
@@ -21,7 +20,8 @@ interface OfflineReport {
 function initGame(): { store: GameStore; offline: OfflineReport | null } {
   const saved = localStorageAdapter.load();
   if (!saved) return { store: new GameStore(createInitialState()), offline: null };
-  const { state, offlineSeconds, offlineEarnings } = applyOfflineProgress(saved.state);
+  const normalized = normalizeState(saved.state);
+  const { state, offlineSeconds, offlineEarnings } = applyOfflineProgress(normalized);
   return {
     store: new GameStore(state),
     offline:
@@ -34,6 +34,7 @@ function initGame(): { store: GameStore; offline: OfflineReport | null } {
 export default function App() {
   const [init] = useState(initGame);
   const [offlineReport, setOfflineReport] = useState(init.offline);
+  const [tab, setTab] = useState<TabId>('main');
 
   useGameLoop(init.store);
 
@@ -41,15 +42,17 @@ export default function App() {
     <GameContext.Provider value={init.store}>
       <div className="game">
         <Header />
-        <ClickerPanel />
-        <GeneratorList />
+        <TabBar active={tab} onChange={setTab} />
+        <main className="panel-host">
+          {tab === 'main' && <MainPanel />}
+          {tab === 'skills' && <SkillsPanel />}
+          {tab === 'prestige' && <PrestigePanel />}
+          {tab === 'settings' && <SettingsPanel />}
+        </main>
+
         {offlineReport && (
-          <div className="offline-toast" onClick={() => setOfflineReport(null)}>
-            Welcome back! You were away for {formatDuration(offlineReport.seconds)} and
-            earned <strong>{formatNumber(offlineReport.earnings)}</strong> energy. ✕
-          </div>
+          <OfflineToast report={offlineReport} onDismiss={() => setOfflineReport(null)} />
         )}
-        <DevBar />
       </div>
     </GameContext.Provider>
   );
@@ -57,53 +60,31 @@ export default function App() {
 
 function Header() {
   const state = useGameState();
+  const fmt = useFormat();
   return (
     <header className="header">
       <h1>⚡ Idle Energy</h1>
       <div className="energy-display">
-        <span className="energy-amount">{formatNumber(state.energy)}</span>
+        <span className="energy-amount">{fmt(state.energy)}</span>
         <span className="energy-label">energy</span>
       </div>
-      <div className="eps">{formatNumber(productionPerSecond(state))} /sec</div>
+      <div className="eps">{fmt(productionPerSecond(state))} /sec</div>
     </header>
   );
 }
 
-function ClickerPanel() {
-  const store = useGameStore();
-  const state = useGameState();
+function OfflineToast({
+  report,
+  onDismiss,
+}: {
+  report: OfflineReport;
+  onDismiss: () => void;
+}) {
+  const fmt = useFormat();
   return (
-    <button className="click-button" onClick={() => store.dispatch(click)}>
-      Generate ⚡
-      <span className="click-power">+{formatNumber(state.clickPower)} per click</span>
-    </button>
-  );
-}
-
-function GeneratorList() {
-  return (
-    <section className="generators">
-      {GENERATORS.map((g) => (
-        <GeneratorRow key={g.id} def={g} />
-      ))}
-    </section>
-  );
-}
-
-function DevBar() {
-  const store = useGameStore();
-  return (
-    <footer className="dev-bar">
-      <button
-        onClick={() => {
-          if (confirm('Wipe your save and start over?')) {
-            localStorageAdapter.clear();
-            store.dispatch(() => createInitialState());
-          }
-        }}
-      >
-        Reset save
-      </button>
-    </footer>
+    <div className="offline-toast" onClick={onDismiss}>
+      Welcome back! You were away for {formatDuration(report.seconds)} and earned{' '}
+      <strong>{fmt(report.earnings)}</strong> energy. ✕
+    </div>
   );
 }
