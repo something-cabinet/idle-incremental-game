@@ -628,6 +628,127 @@ button.row:disabled {
   cursor: pointer;
 }
 
+/* ---- Equipment grid & detail ---- */
+.equip-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  max-height: 340px;
+  overflow-y: auto;
+  padding: 2px;
+}
+
+.equip-grid-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 4px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  transition: background 0.1s, border-color 0.1s;
+}
+
+.equip-grid-item:hover {
+  background: var(--panel-hover);
+}
+
+.equip-grid-item.selected {
+  border-color: var(--accent);
+  background: var(--panel-hover);
+}
+
+.equip-grid-slot {
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+.equip-grid-name {
+  font-size: 0.7rem;
+  text-align: center;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.equip-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.equip-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.equip-detail-name {
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+.equip-detail-rarity {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid;
+}
+
+.rarity-common {
+  color: var(--text-dim);
+  border-color: var(--border);
+}
+
+.rarity-rare {
+  color: var(--rare);
+  border-color: var(--rare);
+}
+
+.rarity-epic {
+  color: var(--epic);
+  border-color: var(--epic);
+}
+
+.equip-detail-stats {
+  display: flex;
+  gap: 14px;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  flex-wrap: wrap;
+}
+
+.equip-detail-slot {
+  text-transform: capitalize;
+}
+
+.equip-detail-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 480px) {
+  .equip-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
 /* ---- Timeline / prestige ---- */
 .currency-banner {
   display: flex;

@@ -334,7 +334,6 @@ describe('offline progression', () => {
     s = assignAdventurer(s, s.adventurers[0].id, 'forest-edge', 'quest');
     // Injure during quest (tier 1 → 180s)
     s = tick(s, 5, 0, alwaysLose);
-    const injuredUntil = s.adventurers[0].injuredUntil;
     // Advance offline: wait 400s total — 180s to heal + 60s quest duration + 160s patrol time
     // The quest started at t=5, so at recovery (t=185) the quest is set to end at t=245.
     // Since we go to t=405, the quest resolves at t=245 and then patrols happen from t=245 to t=405.
