@@ -28,6 +28,18 @@ Three layers, dependencies point inward only:
 The game loop (`useGameLoop`) ticks 10×/sec with clamped dt; long absences are
 handled by `applyOfflineProgress` on load, not by giant ticks.
 
+## Design references
+
+`docs/` holds design research to consult before adding/tuning systems or
+picking a theme:
+
+- `docs/design-research-idle-games.md` — systems/progression/monetization/theme
+  survey across the genre (prestige formulas, platform-specific tuning, art
+  style tradeoffs, common pitfalls).
+- `docs/spaceplan-framework-notes.md` — the "finite narrative idle game"
+  pattern (acts gated by story beats, not numbers) in case the project leans
+  narrative/finite instead of endless live-service style.
+
 ## Conventions
 
 - New mechanics: add pure functions + tests in `src/game/` first, then UI.
