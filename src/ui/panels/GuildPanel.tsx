@@ -12,6 +12,7 @@ import { formatDuration } from '../../game/format';
 import {
   buyGuildUpgrade,
   canBuyGuildUpgrade,
+  equipItem,
   guildUpgradeCost,
   hireAdventurer,
   hireCost,
@@ -231,6 +232,7 @@ function AdventurerDetail({ adv, onClose }: { adv: Adventurer; onClose: () => vo
     : adv.assignment
       ? assignmentLabel(adv)
       : 'Idle at the guild hall';
+  const [pickerSlot, setPickerSlot] = useState<EquipSlot | null>(null);
 
   return (
     <div className="story-overlay" onClick={onClose}>
@@ -267,25 +269,61 @@ function AdventurerDetail({ adv, onClose }: { adv: Adventurer; onClose: () => vo
         <div className="rows">
           {(['weapon', 'armor', 'trinket'] as EquipSlot[]).map((slot) => {
             const item = adv.equipment[slot];
+            const candidates = state.inventory.filter((i) => i.slot === slot);
             return (
-              <div key={slot} className={`row ${item ? `item-${item.rarity}` : 'locked'}`}>
-                <div className="row-info">
-                  <span className="row-name">
-                    {SLOT_ICONS[slot]} {item ? item.name : `No ${slot}`}
-                  </span>
-                  {item && (
-                    <span className="row-desc">
-                      {item.rarity} {item.slot} · ⚔ {item.atk} · 🛡 {item.def}
+              <div key={slot}>
+                <div className={`row ${item ? `item-${item.rarity}` : 'locked'}`}>
+                  <div className="row-info">
+                    <span className="row-name">
+                      {SLOT_ICONS[slot]} {item ? item.name : `No ${slot}`}
                     </span>
-                  )}
+                    {item && (
+                      <span className="row-desc">
+                        {item.rarity} {item.slot} · ⚔ {item.atk} · 🛡 {item.def}
+                      </span>
+                    )}
+                  </div>
+                  <div className="equip-detail-actions">
+                    <button
+                      className="small-button"
+                      disabled={candidates.length === 0}
+                      onClick={() => setPickerSlot(pickerSlot === slot ? null : slot)}
+                    >
+                      {item ? 'Change' : 'Equip'}
+                      {candidates.length > 0 ? ` (${candidates.length})` : ''}
+                    </button>
+                    {item && (
+                      <button
+                        className="small-button"
+                        onClick={() => store.dispatch((s) => unequipItem(s, adv.id, slot))}
+                      >
+                        Unequip
+                      </button>
+                    )}
+                  </div>
                 </div>
-                {item && (
-                  <button
-                    className="small-button"
-                    onClick={() => store.dispatch((s) => unequipItem(s, adv.id, slot))}
-                  >
-                    Unequip
-                  </button>
+                {pickerSlot === slot && (
+                  <div className="equip-picker">
+                    {candidates.length === 0 ? (
+                      <div className="row locked">No {slot} in inventory.</div>
+                    ) : (
+                      candidates.map((cand) => (
+                        <button
+                          key={cand.id}
+                          className={`equip-picker-item item-${cand.rarity}`}
+                          onClick={() => {
+                            store.dispatch((s) => equipItem(s, adv.id, cand.id));
+                            setPickerSlot(null);
+                          }}
+                        >
+                          <span className="row-name">{cand.name}</span>
+                          <span className="row-desc">
+                            {cand.rarity} · ⚔ {cand.atk} · 🛡 {cand.def}
+                          </span>
+                        </button>
+                      ))
+                    )}
+                  </div>
                 )}
               </div>
             );

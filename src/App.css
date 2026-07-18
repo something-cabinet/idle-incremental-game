@@ -848,6 +848,47 @@ button.row:disabled {
   flex-wrap: wrap;
 }
 
+.equip-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 0 6px 12px;
+  margin-bottom: 6px;
+  border-left: 2px solid var(--border);
+}
+
+.equip-picker-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.equip-picker-item:hover,
+.equip-picker-item:focus-visible {
+  filter: brightness(1.25);
+}
+
+.equip-picker-item.item-common {
+  background: rgba(161, 153, 127, 0.08);
+}
+
+.equip-picker-item.item-rare {
+  background: rgba(111, 168, 255, 0.12);
+}
+
+.equip-picker-item.item-epic {
+  background: rgba(192, 126, 255, 0.12);
+}
+
 @media (max-width: 480px) {
   .equip-grid {
     grid-template-columns: repeat(2, 1fr);
