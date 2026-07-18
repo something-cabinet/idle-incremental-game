@@ -1,4 +1,4 @@
-import { adventurerPower, gainXp, generateEquipment } from './adventurers';
+import { adventurerPower, gainXp, generateEquipment, isInjured } from './adventurers';
 import {
   ACTIVITY_LOG_MAX,
   ENCOUNTER_INTERVAL,
@@ -100,13 +100,34 @@ function processAdventurer(
   rng: Rng,
 ): AdventurerResult {
   const result: AdventurerResult = { adventurer: adv, gold: 0, shards: 0 };
-  if (!adv.assignment || adv.assignment.mode === 'expedition') return result;
 
-  const loc = locationDef(adv.assignment.locationId);
-  if (!loc) return { ...result, adventurer: { ...adv, assignment: null } };
-
+  // Auto-reassign: if the adventurer has recovered from injury and has a
+  // lastAssignment, send them back to the same location/mode.
   let current = adv;
   const nowSec = state.runTimeSeconds;
+  if (!current.assignment && current.lastAssignment && !isInjured(current, nowSec)) {
+    const lastLoc = locationDef(current.lastAssignment.locationId);
+    if (lastLoc && lastLoc.kind === 'zone') {
+      current = {
+        ...current,
+        assignment: {
+          locationId: current.lastAssignment.locationId,
+          mode: current.lastAssignment.mode,
+          questEndsAt:
+            current.lastAssignment.mode === 'quest'
+              ? nowSec + lastLoc.questDuration
+              : undefined,
+          lastEncounterAt: nowSec,
+        },
+        lastAssignment: null, // clear so we don't loop on re-injury
+      };
+    }
+  }
+
+  if (!current.assignment || current.assignment.mode === 'expedition') return { ...result, adventurer: current };
+
+  const loc = locationDef(current.assignment.locationId);
+  if (!loc) return { ...result, adventurer: { ...current, assignment: null } };
 
   // Quest phase: nothing happens until the quest timer resolves.
   if (current.assignment!.mode === 'quest') {
@@ -265,7 +286,13 @@ function injure(
   healSpeedMult: number,
 ): Adventurer {
   const duration = (INJURY_SECONDS_PER_TIER * loc.tier) / healSpeedMult;
-  return { ...adv, assignment: null, injuredUntil: at + duration, injuredDuration: duration };
+  return {
+    ...adv,
+    assignment: null,
+    lastAssignment: adv.assignment, // remember what they were doing
+    injuredUntil: at + duration,
+    injuredDuration: duration,
+  };
 }
 
 function xpWithTraining(state: GameState, base: number): number {

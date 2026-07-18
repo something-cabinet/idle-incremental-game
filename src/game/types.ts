@@ -57,6 +57,9 @@ export interface Adventurer {
   injuredUntil: number;
   /** Total seconds of the current injury (for recovery progress bars) */
   injuredDuration: number;
+  /** The assignment the adventurer had before being injured, so they can
+   *  auto-reassign to the same location/mode when they recover. */
+  lastAssignment: Assignment | null;
 }
 
 export interface LocationDef {

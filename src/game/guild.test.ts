@@ -114,11 +114,76 @@ describe('patrol & quests', () => {
     expect(s.inventory.length).toBeGreaterThan(0); // guaranteed quest equipment
   });
 
-  it('recall clears the assignment', () => {
+  it('recall clears the assignment and lastAssignment', () => {
     let s = withAdventurer(guildState());
     s = assignAdventurer(s, s.adventurers[0].id, 'forest-edge', 'patrol');
+    // get injured so lastAssignment is set
+    s = tick(s, ENCOUNTER_INTERVAL, 0, alwaysLose);
+    expect(s.adventurers[0].lastAssignment).not.toBeNull();
+    // recall clears both
     s = recallAdventurer(s, s.adventurers[0].id);
     expect(s.adventurers[0].assignment).toBeNull();
+    expect(s.adventurers[0].lastAssignment).toBeNull();
+  });
+
+  it('injury saves lastAssignment for re-engagement on recovery', () => {
+    let s = withAdventurer(guildState());
+    s = assignAdventurer(s, s.adventurers[0].id, 'forest-edge', 'patrol');
+    // patrol fails → injured, lastAssignment set
+    s = tick(s, ENCOUNTER_INTERVAL, 0, alwaysLose);
+    expect(s.adventurers[0].assignment).toBeNull();
+    expect(s.adventurers[0].lastAssignment).not.toBeNull();
+    expect(s.adventurers[0].lastAssignment!.locationId).toBe('forest-edge');
+    expect(s.adventurers[0].lastAssignment!.mode).toBe('patrol');
+  });
+
+  it('recovers and auto-reassigns to the same location and mode', () => {
+    let s = withAdventurer(guildState());
+    s = assignAdventurer(s, s.adventurers[0].id, 'forest-edge', 'patrol');
+    // injury (tier 1 → 180s)
+    s = tick(s, ENCOUNTER_INTERVAL, 0, alwaysLose);
+    expect(s.adventurers[0].assignment).toBeNull();
+    expect(s.adventurers[0].injuredUntil).toBeGreaterThan(s.runTimeSeconds);
+    // tick past the injury duration
+    s = tick(s, 200, 0, alwaysWin);
+    // should now be re-assigned and patrolling
+    expect(s.adventurers[0].assignment).not.toBeNull();
+    expect(s.adventurers[0].assignment!.locationId).toBe('forest-edge');
+    expect(s.adventurers[0].assignment!.mode).toBe('patrol');
+    // lastAssignment should be cleared after re-assignment
+    expect(s.adventurers[0].lastAssignment).toBeNull();
+  });
+
+  it('manual assignment clears lastAssignment', () => {
+    let s = withAdventurer(guildState());
+    s = assignAdventurer(s, s.adventurers[0].id, 'forest-edge', 'patrol');
+    // get injured, then recover
+    s = tick(s, ENCOUNTER_INTERVAL, 0, alwaysLose);
+    s = tick(s, 200, 0, alwaysWin);
+    // auto-reassigned to forest-edge; now recall and manually re-assign to same zone
+    s = recallAdventurer(s, s.adventurers[0].id);
+    s = assignAdventurer(s, s.adventurers[0].id, 'forest-edge', 'quest');
+    expect(s.adventurers[0].assignment).not.toBeNull();
+    expect(s.adventurers[0].assignment!.locationId).toBe('forest-edge');
+    expect(s.adventurers[0].assignment!.mode).toBe('quest');
+    // manual assignment cleared lastAssignment
+    expect(s.adventurers[0].lastAssignment).toBeNull();
+  });
+
+  it('quest failure saves lastAssignment and auto-reassigns after recovery', () => {
+    let s = withAdventurer(guildState());
+    s = assignAdventurer(s, s.adventurers[0].id, 'forest-edge', 'quest');
+    // fail the quest (tier 1 → 180s injury)
+    s = tick(s, 61, 0, alwaysLose);
+    expect(s.adventurers[0].assignment).toBeNull();
+    expect(s.adventurers[0].lastAssignment).not.toBeNull();
+    expect(s.adventurers[0].lastAssignment!.mode).toBe('quest');
+    // tick past recovery
+    s = tick(s, 200, 0, alwaysWin);
+    // should re-quest (since lastAssignment.mode was 'quest')
+    expect(s.adventurers[0].assignment).not.toBeNull();
+    expect(s.adventurers[0].assignment!.mode).toBe('quest');
+    expect(s.adventurers[0].assignment!.locationId).toBe('forest-edge');
   });
 });
 

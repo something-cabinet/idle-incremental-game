@@ -62,10 +62,11 @@ export function migrateSave(data: SaveData, now = Date.now()): GameState {
     townSkills: { ...(s.townSkills ?? {}) },
     activityLog: s.activityLog ?? [],
     settings: { ...base.settings, ...(s.settings ?? {}) },
-    // v3 adventurers predate injuredDuration
+    // v3/4 adventurers predate injuredDuration and lastAssignment
     adventurers: (s.adventurers ?? []).map((a) => ({
       ...a,
       injuredDuration: a.injuredDuration ?? 0,
+      lastAssignment: 'lastAssignment' in a ? a.lastAssignment : null,
     })),
   };
 }

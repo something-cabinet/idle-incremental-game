@@ -211,13 +211,21 @@ export function assignAdventurer(
         mode === 'quest' ? state.runTimeSeconds + loc.questDuration : undefined,
       lastEncounterAt: state.runTimeSeconds,
     },
+    lastAssignment: null, // manual assignment overrides any auto-reassign memory
   }));
 }
 
 export function recallAdventurer(state: GameState, advId: number): GameState {
   const adv = state.adventurers.find((a) => a.id === advId);
-  if (!adv?.assignment || adv.assignment.mode === 'expedition') return state;
-  return updateAdventurer(state, advId, (a) => ({ ...a, assignment: null }));
+  if (!adv) return state;
+  // If on expedition, cannot recall
+  if (adv.assignment?.mode === 'expedition') return state;
+  // If already idle (from injury), still clear lastAssignment so they don't auto-re-engage
+  return updateAdventurer(state, advId, (a) => ({
+    ...a,
+    assignment: null,
+    lastAssignment: null, // player explicitly stopped them, so forget past work
+  }));
 }
 
 // ---------------------------------------------------------------------------

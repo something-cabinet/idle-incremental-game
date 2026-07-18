@@ -76,6 +76,7 @@ export function generateAdventurer(id: number, rng: Rng): Adventurer {
     assignment: null,
     injuredUntil: 0,
     injuredDuration: 0,
+    lastAssignment: null,
   };
 }
 
