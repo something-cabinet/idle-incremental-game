@@ -30,13 +30,17 @@ export function TabBar({
   return (
     <nav className="tab-bar">
       {TABS.map((tab) => {
-        // Tabs reveal as the acts unfold — early UI stays minimal.
-        if (state.act < 2 && ['guild', 'map', 'inventory'].includes(tab.id)) return null;
-        if (tab.id === 'timeline' && !isTimeTravelUnlocked(state)) return null;
+        // Tabs reveal as the acts unfold; locked tabs keep their slot so the
+        // bar doesn't reflow when they appear.
+        const locked =
+          (state.act < 2 && ['guild', 'map', 'inventory'].includes(tab.id)) ||
+          (tab.id === 'timeline' && !isTimeTravelUnlocked(state));
         return (
           <button
             key={tab.id}
-            className={`tab ${active === tab.id ? 'active' : ''}`}
+            className={`tab ${active === tab.id ? 'active' : ''} ${locked ? 'tab-locked' : ''}`}
+            aria-hidden={locked}
+            tabIndex={locked ? -1 : undefined}
             onClick={() => onChange(tab.id)}
           >
             <span className="tab-icon">{tab.icon}</span>

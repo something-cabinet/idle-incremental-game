@@ -122,6 +122,45 @@ describe('patrol & quests', () => {
   });
 });
 
+describe('activity log', () => {
+  it('a resolved quest writes a loot line', () => {
+    let s = withAdventurer(guildState());
+    s = assignAdventurer(s, s.adventurers[0].id, 'forest-edge', 'quest');
+    s = tick(s, 61, 0, alwaysWin);
+    const quest = s.activityLog.find((e) => e.kind === 'quest');
+    expect(quest).toBeDefined();
+    expect(quest!.text).toContain('Forest Edge');
+    expect(quest!.text).toContain('gold');
+    expect(quest!.text).toContain('XP');
+  });
+
+  it('patrol rewards in one tick group into a single line (offline-style)', () => {
+    let s = withAdventurer(guildState());
+    s = assignAdventurer(s, s.adventurers[0].id, 'forest-edge', 'patrol');
+    s = tick(s, ENCOUNTER_INTERVAL * 50, 0, alwaysWin); // 50 encounters, one tick
+    const patrols = s.activityLog.filter((e) => e.kind === 'patrol');
+    expect(patrols).toHaveLength(1);
+    expect(patrols[0].text).toContain('Forest Edge');
+  });
+
+  it('injuries write a line and record the recovery duration', () => {
+    let s = withAdventurer(guildState());
+    s = assignAdventurer(s, s.adventurers[0].id, 'forest-edge', 'patrol');
+    s = tick(s, ENCOUNTER_INTERVAL, 0, alwaysLose);
+    expect(s.activityLog.some((e) => e.kind === 'injury')).toBe(true);
+    expect(s.adventurers[0].injuredDuration).toBeGreaterThan(0);
+  });
+
+  it('the log is capped', () => {
+    let s = withAdventurer(guildState());
+    s = assignAdventurer(s, s.adventurers[0].id, 'forest-edge', 'patrol');
+    for (let i = 0; i < 100; i++) {
+      s = tick(s, ENCOUNTER_INTERVAL, i * ENCOUNTER_INTERVAL * 1000, alwaysWin);
+    }
+    expect(s.activityLog.length).toBeLessThanOrEqual(60);
+  });
+});
+
 describe('expeditions & prestige', () => {
   function act3State(): GameState {
     let s: GameState = { ...guildState(), act: 3 };

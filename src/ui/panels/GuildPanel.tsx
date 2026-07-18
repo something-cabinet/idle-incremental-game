@@ -1,5 +1,14 @@
+import { useState } from 'react';
 import { adventurerStats, isInjured } from '../../game/adventurers';
-import { GUILD_UPGRADES, MATERIALS } from '../../game/config';
+import {
+  CLASS_DEFS,
+  DAY_LENGTH_SECONDS,
+  ENCOUNTER_INTERVAL,
+  GUILD_UPGRADES,
+  MATERIALS,
+  xpToNext,
+} from '../../game/config';
+import { formatDuration } from '../../game/format';
 import {
   buyGuildUpgrade,
   canBuyGuildUpgrade,
@@ -9,8 +18,9 @@ import {
   locationDef,
   recallAdventurer,
   rosterCap,
+  unequipItem,
 } from '../../game/guild';
-import type { Adventurer } from '../../game/types';
+import type { Adventurer, EquipSlot, GameState, LogEntry } from '../../game/types';
 import { useFormat } from '../../hooks/useFormat';
 import { useGameState, useGameStore } from '../../hooks/useGame';
 
@@ -18,8 +28,10 @@ export function GuildPanel() {
   const store = useGameStore();
   const state = useGameState();
   const fmt = useFormat();
+  const [detailId, setDetailId] = useState<number | null>(null);
   const canHire =
     state.adventurers.length < rosterCap(state) && state.gold >= hireCost(state);
+  const detail = state.adventurers.find((a) => a.id === detailId);
 
   return (
     <div className="panel">
@@ -28,7 +40,7 @@ export function GuildPanel() {
           Adventurers ({state.adventurers.length}/{rosterCap(state)})
         </h3>
         {state.adventurers.map((adv) => (
-          <AdventurerCard key={adv.id} adv={adv} />
+          <AdventurerCard key={adv.id} adv={adv} onOpen={() => setDetailId(adv.id)} />
         ))}
         <button
           className={`row ${canHire ? '' : 'unaffordable'}`}
@@ -83,42 +95,98 @@ export function GuildPanel() {
           );
         })}
       </section>
+
+      <ActivityLog />
+
+      {detail && <AdventurerDetail adv={detail} onClose={() => setDetailId(null)} />}
     </div>
   );
 }
 
-function AdventurerCard({ adv }: { adv: Adventurer }) {
+// ---------------------------------------------------------------------------
+// Adventurer cards
+// ---------------------------------------------------------------------------
+
+function xpPercent(adv: Adventurer): number {
+  return Math.floor((adv.xp / xpToNext(adv.level)) * 100);
+}
+
+/** Current timed activity: progress fraction, seconds left, and a label. */
+function activityProgress(
+  state: GameState,
+  adv: Adventurer,
+): { label: string; fraction: number; secondsLeft: number } | null {
+  const now = state.runTimeSeconds;
+  if (isInjured(adv, now)) {
+    const left = adv.injuredUntil - now;
+    const total = adv.injuredDuration || left;
+    return { label: 'recovered', fraction: 1 - left / total, secondsLeft: left };
+  }
+  if (!adv.assignment) return null;
+  if (adv.assignment.mode === 'quest') {
+    const endsAt = adv.assignment.questEndsAt ?? now;
+    const total = locationDef(adv.assignment.locationId)?.questDuration ?? 1;
+    const left = Math.max(0, endsAt - now);
+    return { label: 'quest done', fraction: 1 - left / total, secondsLeft: left };
+  }
+  if (adv.assignment.mode === 'patrol') {
+    const elapsed = now - adv.assignment.lastEncounterAt;
+    const left = Math.max(0, ENCOUNTER_INTERVAL - elapsed);
+    return { label: 'next drop', fraction: elapsed / ENCOUNTER_INTERVAL, secondsLeft: left };
+  }
+  return null; // expeditions show party-wide status on the Map tab
+}
+
+function AdventurerCard({ adv, onOpen }: { adv: Adventurer; onOpen: () => void }) {
   const store = useGameStore();
   const state = useGameState();
   const { atk, def } = adventurerStats(adv);
   const injured = isInjured(adv, state.runTimeSeconds);
   const status = injured
-    ? `🩹 Recovering (${Math.ceil((adv.injuredUntil - state.runTimeSeconds) / 60)}m)`
+    ? '🩹 Recovering'
     : adv.assignment
       ? assignmentLabel(adv)
       : 'Idle at the guild hall';
+  const progress = activityProgress(state, adv);
 
   return (
-    <div className={`adventurer-card ${injured ? 'injured' : ''}`}>
+    <div
+      className={`adventurer-card clickable ${injured ? 'injured' : ''}`}
+      onClick={onOpen}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => e.key === 'Enter' && onOpen()}
+    >
       <div className="row-info">
         <span className="row-name">
           {adv.name}{' '}
           <span className="row-sub">
-            Lv {adv.level} {adv.className}
+            Lv {adv.level} ({xpPercent(adv)}%) {adv.className}
           </span>
         </span>
-        <span className="row-desc">
-          ⚔ {atk} · 🛡 {def} ·{' '}
-          {(['weapon', 'armor', 'trinket'] as const)
-            .map((slot) => adv.equipment[slot]?.name ?? `no ${slot}`)
-            .join(' · ')}
-        </span>
+        <span className="row-desc">⚔ {atk} · 🛡 {def}</span>
         <span className={injured ? 'row-bad' : 'row-good'}>{status}</span>
+        {progress && (
+          <div className="progress-line">
+            <div className="progress-track">
+              <div
+                className="progress-fill"
+                style={{ width: `${Math.min(100, Math.max(0, progress.fraction * 100))}%` }}
+              />
+            </div>
+            <span className="progress-time">
+              {formatDuration(progress.secondsLeft)} to {progress.label}
+            </span>
+          </div>
+        )}
       </div>
       {adv.assignment && adv.assignment.mode !== 'expedition' && (
         <button
           className="small-button"
-          onClick={() => store.dispatch((s) => recallAdventurer(s, adv.id))}
+          onClick={(e) => {
+            e.stopPropagation();
+            store.dispatch((s) => recallAdventurer(s, adv.id));
+          }}
         >
           Recall
         </button>
@@ -138,4 +206,129 @@ function assignmentLabel(adv: Adventurer): string {
     default:
       return `🐾 Patrolling — ${name}`;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Detail popup
+// ---------------------------------------------------------------------------
+
+const SLOT_ICONS: Record<EquipSlot, string> = {
+  weapon: '⚔',
+  armor: '🛡',
+  trinket: '💍',
+};
+
+function AdventurerDetail({ adv, onClose }: { adv: Adventurer; onClose: () => void }) {
+  const store = useGameStore();
+  const state = useGameState();
+  const { atk, def } = adventurerStats(adv);
+  const cls = CLASS_DEFS[adv.className];
+  const baseAtk = cls.atk + cls.atkGrowth * (adv.level - 1);
+  const baseDef = cls.def + cls.defGrowth * (adv.level - 1);
+  const injured = isInjured(adv, state.runTimeSeconds);
+  const status = injured
+    ? `🩹 Recovering — ${formatDuration(adv.injuredUntil - state.runTimeSeconds)} left`
+    : adv.assignment
+      ? assignmentLabel(adv)
+      : 'Idle at the guild hall';
+
+  return (
+    <div className="story-overlay" onClick={onClose}>
+      <div className="story-modal detail-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="detail-header">
+          <h2 className="story-title">{adv.name}</h2>
+          <button className="small-button" onClick={onClose}>✕</button>
+        </div>
+        <p className="detail-sub">
+          Level {adv.level} {adv.className} · {status}
+        </p>
+
+        <div className="progress-line">
+          <div className="progress-track">
+            <div className="progress-fill xp" style={{ width: `${xpPercent(adv)}%` }} />
+          </div>
+          <span className="progress-time">
+            {adv.xp}/{xpToNext(adv.level)} XP
+          </span>
+        </div>
+
+        <div className="detail-stats">
+          <div className="stat">
+            <span className="stat-value">⚔ {atk}</span>
+            <span className="stat-label">Attack ({baseAtk} base + {atk - baseAtk} gear)</span>
+          </div>
+          <div className="stat">
+            <span className="stat-value">🛡 {def}</span>
+            <span className="stat-label">Defense ({baseDef} base + {def - baseDef} gear)</span>
+          </div>
+        </div>
+
+        <h3 className="section-title">Equipment</h3>
+        <div className="rows">
+          {(['weapon', 'armor', 'trinket'] as EquipSlot[]).map((slot) => {
+            const item = adv.equipment[slot];
+            return (
+              <div key={slot} className={`row ${item ? `item-${item.rarity}` : 'locked'}`}>
+                <div className="row-info">
+                  <span className="row-name">
+                    {SLOT_ICONS[slot]} {item ? item.name : `No ${slot}`}
+                  </span>
+                  {item && (
+                    <span className="row-desc">
+                      {item.rarity} {item.slot} · ⚔ {item.atk} · 🛡 {item.def}
+                    </span>
+                  )}
+                </div>
+                {item && (
+                  <button
+                    className="small-button"
+                    onClick={() => store.dispatch((s) => unequipItem(s, adv.id, slot))}
+                  >
+                    Unequip
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Activity log
+// ---------------------------------------------------------------------------
+
+const LOG_ICONS: Record<LogEntry['kind'], string> = {
+  quest: '📜',
+  patrol: '🐾',
+  injury: '🩹',
+  expedition: '⚔',
+};
+
+function ActivityLog() {
+  const state = useGameState();
+  const entries = [...state.activityLog].reverse();
+
+  return (
+    <section className="rows">
+      <h3 className="section-title">Activity Log</h3>
+      {entries.length === 0 && (
+        <div className="row locked">Quest and patrol reports will appear here.</div>
+      )}
+      <div className="activity-log">
+        {entries.map((e) => (
+          <div key={e.id} className={`log-entry log-${e.kind}`}>
+            <span className="log-day">
+              Day {Math.floor(e.at / DAY_LENGTH_SECONDS) + 1}
+            </span>
+            <span className="log-text">
+              {LOG_ICONS[e.kind]} {e.text}
+            </span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
 }

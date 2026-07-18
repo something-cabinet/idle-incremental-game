@@ -75,6 +75,7 @@ export function generateAdventurer(id: number, rng: Rng): Adventurer {
     equipment: {},
     assignment: null,
     injuredUntil: 0,
+    injuredDuration: 0,
   };
 }
 

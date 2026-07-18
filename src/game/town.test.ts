@@ -6,11 +6,22 @@ import {
   click,
   createInitialState,
   currentDay,
+  debugAddGold,
+  debugAddMaterials,
+  debugAddShards,
+  effectiveClickPower,
   hireWorker,
   jobCost,
   migrateSave,
   productionPerSecond,
+  workerCost,
 } from './logic';
+import {
+  buyTownSkill,
+  canBuyTownSkill,
+  isTownSkillUnlocked,
+  townSkillCost,
+} from './skills';
 import { canFoundGuild, foundGuild } from './story';
 import type { GameState } from './types';
 
@@ -51,6 +62,98 @@ describe('act 1 town loop', () => {
     s = hireWorker(s);
     expect(s.workers).toBe(1);
     expect(productionPerSecond(s)).toBeCloseTo(2);
+  });
+});
+
+describe('bulk buying', () => {
+  it('bulk job cost is the sum of escalating prices', () => {
+    const s = { ...createInitialState(0), gold: 1_000_000 };
+    const oneByOne =
+      jobCost(s, 'errands') +
+      jobCost(buyJob(s, 'errands'), 'errands') +
+      jobCost(buyJob(buyJob(s, 'errands'), 'errands'), 'errands');
+    expect(jobCost(s, 'errands', 3)).toBe(oneByOne);
+  });
+
+  it('bulk buy purchases the full batch or nothing', () => {
+    let s = { ...createInitialState(0), gold: 1_000_000 };
+    s = buyJob(s, 'errands', 10);
+    expect(s.jobs.errands).toBe(10);
+    const poor = { ...createInitialState(0), gold: jobCost(createInitialState(0), 'errands', 5) - 1 };
+    expect(buyJob(poor, 'errands', 5).jobs.errands).toBe(0);
+  });
+
+  it('bulk worker hire clamps to the cap', () => {
+    let s: GameState = { ...createInitialState(0), act: 2, gold: 1e18, workers: 48 };
+    const cost = workerCost(s, 2); // only 2 slots left
+    s = hireWorker(s, 100);
+    expect(s.workers).toBe(50);
+    expect(s.gold).toBe(1e18 - cost);
+  });
+});
+
+describe('town skills', () => {
+  it('locked skills need their parent bought first', () => {
+    let s = { ...createInitialState(0), gold: 1_000_000 };
+    expect(isTownSkillUnlocked(s, 'guild-ledgers')).toBe(false);
+    expect(buyTownSkill(s, 'guild-ledgers').townSkills['guild-ledgers']).toBeUndefined();
+    s = buyTownSkill(s, 'work-ethic');
+    expect(isTownSkillUnlocked(s, 'guild-ledgers')).toBe(true);
+  });
+
+  it('flat gold and job multipliers boost production', () => {
+    let s = { ...createInitialState(0), gold: 1_000_000 };
+    s = buyJob(s, 'errands', 10); // 3.5/sec
+    const base = productionPerSecond(s);
+    s = buyTownSkill(s, 'work-ethic'); // +0.5 flat
+    expect(productionPerSecond(s)).toBeCloseTo(base + 0.5);
+    s = buyTownSkill(s, 'guild-ledgers'); // +10% jobs
+    expect(productionPerSecond(s)).toBeCloseTo(base * 1.1 + 0.5);
+  });
+
+  it('click skills add flat, percent, and gps-share gold', () => {
+    let s = { ...createInitialState(0), gold: 10_000_000 };
+    s = buyTownSkill(s, 'calloused-hands'); // +1 flat → 2/click
+    expect(effectiveClickPower(s)).toBeCloseTo(2);
+    s = buyTownSkill(s, 'market-instinct'); // +25%
+    expect(effectiveClickPower(s)).toBeCloseTo(2 * 1.25);
+    s = buyJob(s, 'stall', 10); // 20/sec
+    s = buyTownSkill(s, 'silver-tongue'); // +2% of gps
+    expect(effectiveClickPower(s)).toBeCloseTo((2 + productionPerSecond(s) * 0.02) * 1.25);
+  });
+
+  it('cost grows per level and can require materials', () => {
+    let s = { ...createInitialState(0), gold: 1_000_000 };
+    const first = townSkillCost(s, 'work-ethic').gold;
+    s = buyTownSkill(s, 'work-ethic');
+    expect(townSkillCost(s, 'work-ethic').gold).toBeGreaterThan(first);
+    // trade-contracts needs beast pelts
+    s = buyTownSkill(s, 'guild-ledgers');
+    expect(canBuyTownSkill(s, 'trade-contracts')).toBe(false);
+    s = { ...s, gold: 1_000_000, materials: { 'beast-pelt': 100 } };
+    expect(canBuyTownSkill(s, 'trade-contracts')).toBe(true);
+    const pelts = s.materials['beast-pelt'];
+    s = buyTownSkill(s, 'trade-contracts');
+    expect(s.materials['beast-pelt']).toBeLessThan(pelts);
+  });
+
+  it('skills cap at maxLevel', () => {
+    let s = { ...createInitialState(0), gold: Number.MAX_SAFE_INTEGER };
+    for (let i = 0; i < 15; i++) s = buyTownSkill(s, 'work-ethic');
+    expect(s.townSkills['work-ethic']).toBe(10);
+  });
+});
+
+describe('debug cheats', () => {
+  it('grant gold, materials, and shards', () => {
+    let s = createInitialState(0);
+    s = debugAddGold(s, 5000);
+    s = debugAddMaterials(s, 50);
+    s = debugAddShards(s, 10);
+    expect(s.gold).toBe(5000);
+    expect(s.materials['beast-pelt']).toBe(50);
+    expect(s.materials['demon-ash']).toBe(50);
+    expect(s.timeShards).toBe(10);
   });
 });
 
@@ -114,5 +217,21 @@ describe('save migration', () => {
     const s = migrateSave(old, 0);
     expect(s.act).toBe(1);
     expect(s.gold).toBe(0);
+  });
+
+  it('v3 saves gain v4 fields with defaults', () => {
+    const v3state = createInitialState(0) as unknown as Record<string, unknown>;
+    delete v3state.townSkills;
+    delete v3state.activityLog;
+    v3state.adventurers = [
+      { id: 1, name: 'Ash the Bold', className: 'warrior', level: 1, xp: 0,
+        equipment: {}, assignment: null, injuredUntil: 0 },
+    ];
+    const s = migrateSave({ version: 3, state: v3state } as never, 0);
+    expect(s.townSkills).toEqual({});
+    expect(s.activityLog).toEqual([]);
+    expect(s.adventurers[0].injuredDuration).toBe(0);
+    expect(s.settings.sfxEnabled).toBe(true);
+    expect(s.settings.gameSpeed).toBe(1);
   });
 });

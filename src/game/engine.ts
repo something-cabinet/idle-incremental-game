@@ -1,7 +1,10 @@
 import { adventurerPower, gainXp, generateEquipment } from './adventurers';
 import {
+  ACTIVITY_LOG_MAX,
   ENCOUNTER_INTERVAL,
   INJURY_SECONDS_PER_TIER,
+  LOG_PHRASES,
+  MATERIALS,
   MAX_ENCOUNTERS_PER_TICK,
   PATROL,
   QUEST,
@@ -12,12 +15,14 @@ import { locationDef } from './guild';
 import { productionPerSecond } from './logic';
 import { computeModifiers } from './perks';
 import { checkStoryTriggers } from './story';
-import type { Adventurer, GameState, LocationDef, Rng } from './types';
+import type { Adventurer, GameState, LocationDef, LogKind, Rng } from './types';
 
 /**
  * The simulation tick. Handles any dt — 100ms live ticks and multi-hour
  * offline catch-ups go through the same code path (encounters are processed
- * in fixed game-time steps, capped for safety).
+ * in fixed game-time steps, capped). Patrol rewards accumulated within one
+ * tick are logged as a single grouped line, so offline catch-up naturally
+ * produces one summary entry per adventurer.
  */
 export function tick(
   state: GameState,
@@ -36,6 +41,7 @@ export function tick(
     inventory: [...state.inventory],
     locationsCleared: { ...state.locationsCleared },
     bossesDefeated: { ...state.bossesDefeated },
+    activityLog: [...state.activityLog],
   };
 
   // Passive town income
@@ -57,6 +63,10 @@ export function tick(
   next.gold += goldGained;
   next.totalGoldEarned += goldGained;
 
+  if (next.activityLog.length > ACTIVITY_LOG_MAX) {
+    next.activityLog = next.activityLog.slice(-ACTIVITY_LOG_MAX);
+  }
+
   return checkStoryTriggers(next);
 }
 
@@ -68,7 +78,20 @@ interface AdventurerResult {
   shards: number;
 }
 
-/** Mutates `state`'s materials/inventory/locationsCleared; returns new adventurer. */
+/** Loot accumulated over one tick's worth of patrol encounters. */
+interface Loot {
+  gold: number;
+  xp: number;
+  materials: Record<string, number>;
+  equipment: string[];
+  shards: number;
+}
+
+function emptyLoot(): Loot {
+  return { gold: 0, xp: 0, materials: {}, equipment: [], shards: 0 };
+}
+
+/** Mutates `state`'s materials/inventory/log/etc; returns new adventurer. */
 function processAdventurer(
   state: GameState,
   adv: Adventurer,
@@ -94,37 +117,59 @@ function processAdventurer(
   }
 
   // Patrol phase: process encounters at fixed game-time intervals.
+  const loot = emptyLoot();
   let encounters = 0;
+  let lastAt = nowSec;
+  let injured = false;
   while (
     current.assignment &&
     nowSec - current.assignment.lastEncounterAt >= ENCOUNTER_INTERVAL &&
     encounters < MAX_ENCOUNTERS_PER_TICK
   ) {
     const at = current.assignment.lastEncounterAt + ENCOUNTER_INTERVAL;
+    lastAt = at;
     encounters += 1;
     const power = adventurerPower(state, current);
     const success = rng() < successChance(power, loc.power);
 
     if (!success) {
       current = injure(current, loc, at, healSpeedMult);
+      injured = true;
       break;
     }
 
-    result.gold += PATROL.goldPerTier * loc.tier;
-    current = gainXp(current, xpWithTraining(state, PATROL.xpPerTier * loc.tier));
-    if (rng() < PATROL.materialChance) addMaterial(state, loc.materialId, 1);
-    if (rng() < PATROL.equipmentChance) dropEquipment(state, loc.tier, rng);
+    loot.gold += PATROL.goldPerTier * loc.tier;
+    const xp = xpWithTraining(state, PATROL.xpPerTier * loc.tier);
+    loot.xp += xp;
+    current = gainXp(current, xp);
+    if (rng() < PATROL.materialChance) {
+      addMaterial(state, loc.materialId, 1);
+      loot.materials[loc.materialId] = (loot.materials[loc.materialId] ?? 0) + 1;
+    }
+    if (rng() < PATROL.equipmentChance) loot.equipment.push(dropEquipment(state, loc.tier, rng));
     if (rng() < PATROL.chestChance) {
       // Chest: guaranteed equipment or gold treasure
-      if (rng() < 0.5) dropEquipment(state, loc.tier, rng);
-      else result.gold += PATROL.chestGoldPerTier * loc.tier;
+      if (rng() < 0.5) loot.equipment.push(dropEquipment(state, loc.tier, rng));
+      else loot.gold += PATROL.chestGoldPerTier * loc.tier;
     }
-    if (rng() < loc.shardChance * shardFindMult) result.shards += 1;
+    if (rng() < loc.shardChance * shardFindMult) loot.shards += 1;
 
     current = {
       ...current,
       assignment: { ...current.assignment!, lastEncounterAt: at },
     };
+  }
+
+  result.gold += loot.gold;
+  result.shards += loot.shards;
+  if (loot.gold > 0 || loot.xp > 0) {
+    const verb = pick(LOG_PHRASES.patrol, rng);
+    pushLog(state, 'patrol', lastAt,
+      `${firstName(adv)} ${verb} ${lootText(loot)} patrolling ${loc.name}.`);
+  }
+  if (injured) {
+    pushLog(state, 'injury', lastAt,
+      `${firstName(adv)} ${pick(LOG_PHRASES.patrolFail, rng)} ${loc.name}.`);
   }
 
   return { ...result, adventurer: current };
@@ -145,19 +190,29 @@ function resolveQuest(
   const success = rng() < successChance(power, loc.power);
 
   if (!success) {
+    pushLog(state, 'injury', endedAt,
+      `${firstName(adv)} ${pick(LOG_PHRASES.questFail, rng)} the quest at ${loc.name}.`);
     result.adventurer = adv;
     return injure(adv, loc, endedAt, healSpeedMult);
   }
 
-  result.gold += QUEST.goldPerTier * loc.tier;
+  const loot = emptyLoot();
+  loot.gold = QUEST.goldPerTier * loc.tier;
+  result.gold += loot.gold;
   addMaterial(state, loc.materialId, QUEST.materialsPerTier * loc.tier);
-  dropEquipment(state, loc.tier, rng); // guaranteed equipment at quest end
+  loot.materials[loc.materialId] = QUEST.materialsPerTier * loc.tier;
+  loot.equipment.push(dropEquipment(state, loc.tier, rng)); // guaranteed at quest end
   if (rng() < loc.shardChance * QUEST.shardChanceMult * shardFindMult) {
     result.shards += 1;
+    loot.shards = 1;
   }
   state.locationsCleared[loc.id] = true;
 
-  const leveled = gainXp(adv, xpWithTraining(state, QUEST.xpPerTier * loc.tier));
+  const xp = xpWithTraining(state, QUEST.xpPerTier * loc.tier);
+  loot.xp = xp;
+  const leveled = gainXp(adv, xp);
+  pushLog(state, 'quest', endedAt,
+    `${firstName(adv)} ${pick(LOG_PHRASES.questSuccess, rng)} the quest at ${loc.name} — ${lootText(loot)}.`);
   // Design: after a quest, adventurers auto-switch to patrol.
   return {
     ...leveled,
@@ -187,6 +242,11 @@ function resolveExpedition(state: GameState, healSpeedMult: number, rng: Rng): v
     state.bossesDefeated[loc.id] = true;
     state.timeShards += loc.bossShardReward ?? 0;
     addMaterial(state, loc.materialId, QUEST.materialsPerTier * loc.tier);
+    pushLog(state, 'expedition', exp.endsAt,
+      `The expedition conquered ${loc.name}! +${loc.bossShardReward ?? 0} time shards.`);
+  } else {
+    pushLog(state, 'expedition', exp.endsAt,
+      `The expedition was routed at ${loc.name} — everyone limped home wounded.`);
   }
 }
 
@@ -205,7 +265,7 @@ function injure(
   healSpeedMult: number,
 ): Adventurer {
   const duration = (INJURY_SECONDS_PER_TIER * loc.tier) / healSpeedMult;
-  return { ...adv, assignment: null, injuredUntil: at + duration };
+  return { ...adv, assignment: null, injuredUntil: at + duration, injuredDuration: duration };
 }
 
 function xpWithTraining(state: GameState, base: number): number {
@@ -217,8 +277,42 @@ function addMaterial(state: GameState, materialId: string, amount: number): void
   state.materials[materialId] = (state.materials[materialId] ?? 0) + amount;
 }
 
-function dropEquipment(state: GameState, tier: number, rng: Rng): void {
-  state.inventory.push(generateEquipment(state.nextEntityId, tier, rng));
+/** Mutates state; returns the dropped item's name for log lines. */
+function dropEquipment(state: GameState, tier: number, rng: Rng): string {
+  const item = generateEquipment(state.nextEntityId, tier, rng);
+  state.inventory.push(item);
+  state.nextEntityId += 1;
+  return item.name;
+}
+
+function pick<T>(items: T[], rng: Rng): T {
+  return items[Math.floor(rng() * items.length)];
+}
+
+function firstName(adv: Adventurer): string {
+  return adv.name.split(' ')[0];
+}
+
+function materialName(id: string): string {
+  return MATERIALS.find((m) => m.id === id)?.name ?? id;
+}
+
+/** "120 gold, 5 Beast Pelt, Fine Bow, 1 time shard, 300 XP" */
+function lootText(loot: Loot): string {
+  const parts: string[] = [];
+  if (loot.gold > 0) parts.push(`${Math.round(loot.gold)} gold`);
+  for (const [id, n] of Object.entries(loot.materials)) {
+    parts.push(`${n} ${materialName(id)}`);
+  }
+  parts.push(...loot.equipment);
+  if (loot.shards > 0) parts.push(`${loot.shards} time shard${loot.shards > 1 ? 's' : ''}`);
+  if (loot.xp > 0) parts.push(`${loot.xp} XP`);
+  return parts.join(', ');
+}
+
+/** Mutates state: appends a log entry (trimmed to cap at end of tick). */
+function pushLog(state: GameState, kind: LogKind, at: number, text: string): void {
+  state.activityLog.push({ id: state.nextEntityId, at, kind, text });
   state.nextEntityId += 1;
 }
 

@@ -3,12 +3,14 @@ import {
   DAY_LENGTH_SECONDS,
   DEFAULT_SETTINGS,
   JOBS,
+  MATERIALS,
   WORKER_BASE_COST,
   WORKER_CAP,
   WORKER_COST_GROWTH,
   WORKER_PRODUCTION,
 } from './config';
 import { computeModifiers } from './perks';
+import { computeTownSkillBonuses } from './skills';
 import type { GameState, SaveData, Settings } from './types';
 
 /** Town economy + state lifecycle. Every function is pure: (state) => state. */
@@ -23,6 +25,7 @@ export function createInitialState(now = Date.now()): GameState {
     jobs: Object.fromEntries(JOBS.map((j) => [j.id, 0])),
     workers: 0,
     materials: {},
+    townSkills: {},
     adventurers: [],
     inventory: [],
     guildUpgrades: {},
@@ -30,6 +33,7 @@ export function createInitialState(now = Date.now()): GameState {
     nextEntityId: 1,
     locationsCleared: {},
     bossesDefeated: {},
+    activityLog: [],
     storyFlags: {},
     pendingStories: ['a1-arrival'],
     runTimeSeconds: 0,
@@ -55,7 +59,14 @@ export function migrateSave(data: SaveData, now = Date.now()): GameState {
     ...s,
     jobs: { ...base.jobs, ...(s.jobs ?? {}) },
     materials: { ...(s.materials ?? {}) },
+    townSkills: { ...(s.townSkills ?? {}) },
+    activityLog: s.activityLog ?? [],
     settings: { ...base.settings, ...(s.settings ?? {}) },
+    // v3 adventurers predate injuredDuration
+    adventurers: (s.adventurers ?? []).map((a) => ({
+      ...a,
+      injuredDuration: a.injuredDuration ?? 0,
+    })),
   };
 }
 
@@ -73,16 +84,25 @@ export function currentDay(state: GameState): number {
 // ---------------------------------------------------------------------------
 
 export function productionPerSecond(state: GameState): number {
+  const skills = computeTownSkillBonuses(state);
   const fromJobs = JOBS.reduce(
     (sum, j) => sum + j.baseProduction * (state.jobs[j.id] ?? 0),
     0,
   );
   const fromWorkers = state.workers * WORKER_PRODUCTION;
-  return (fromJobs + fromWorkers) * computeModifiers(state).productionMult;
+  return (
+    (fromJobs * skills.jobMult + fromWorkers + skills.flatGold) *
+    computeModifiers(state).productionMult
+  );
 }
 
 export function effectiveClickPower(state: GameState): number {
-  return state.clickPower * computeModifiers(state).clickMult;
+  const skills = computeTownSkillBonuses(state);
+  const base =
+    state.clickPower +
+    skills.clickFlat +
+    productionPerSecond(state) * skills.clickGpsPercent;
+  return base * skills.clickMult * computeModifiers(state).clickMult;
 }
 
 export function earnGold(state: GameState, amount: number): GameState {
@@ -101,36 +121,69 @@ export function click(state: GameState): GameState {
 // Purchases
 // ---------------------------------------------------------------------------
 
-export function jobCost(state: GameState, jobId: string): number {
+/** Sum of `count` escalating prices starting at `owned` units. */
+function bulkCost(base: number, growth: number, owned: number, count: number): number {
+  let total = 0;
+  for (let i = 0; i < count; i++) {
+    total += Math.ceil(base * Math.pow(growth, owned + i));
+  }
+  return total;
+}
+
+export function jobCost(state: GameState, jobId: string, count = 1): number {
   const def = JOBS.find((j) => j.id === jobId);
   if (!def) return Infinity;
   const owned = state.jobs[jobId] ?? 0;
   const costMult = computeModifiers(state).costMult;
-  return Math.ceil(def.baseCost * Math.pow(def.costGrowth, owned) * costMult);
+  return bulkCost(def.baseCost * costMult, def.costGrowth, owned, count);
 }
 
-export function buyJob(state: GameState, jobId: string): GameState {
-  const cost = jobCost(state, jobId);
+export function buyJob(state: GameState, jobId: string, count = 1): GameState {
+  const cost = jobCost(state, jobId, count);
   if (state.gold < cost) return state;
   return {
     ...state,
     gold: state.gold - cost,
-    jobs: { ...state.jobs, [jobId]: (state.jobs[jobId] ?? 0) + 1 },
+    jobs: { ...state.jobs, [jobId]: (state.jobs[jobId] ?? 0) + count },
   };
 }
 
-export function workerCost(state: GameState): number {
-  const costMult = computeModifiers(state).costMult;
-  return Math.ceil(
-    WORKER_BASE_COST * Math.pow(WORKER_COST_GROWTH, state.workers) * costMult,
-  );
+/** How many workers can still be hired (respects the cap). */
+export function workerBuyable(state: GameState, count = 1): number {
+  return Math.max(0, Math.min(count, WORKER_CAP - state.workers));
 }
 
-export function hireWorker(state: GameState): GameState {
-  if (state.workers >= WORKER_CAP) return state;
-  const cost = workerCost(state);
+export function workerCost(state: GameState, count = 1): number {
+  const costMult = computeModifiers(state).costMult;
+  return bulkCost(WORKER_BASE_COST * costMult, WORKER_COST_GROWTH, state.workers, count);
+}
+
+export function hireWorker(state: GameState, count = 1): GameState {
+  const n = workerBuyable(state, count);
+  if (n === 0) return state;
+  const cost = workerCost(state, n);
   if (state.gold < cost) return state;
-  return { ...state, gold: state.gold - cost, workers: state.workers + 1 };
+  return { ...state, gold: state.gold - cost, workers: state.workers + n };
+}
+
+// ---------------------------------------------------------------------------
+// Debug cheats (Settings → Debug; for playtesting)
+// ---------------------------------------------------------------------------
+
+export function debugAddGold(state: GameState, amount: number): GameState {
+  return earnGold(state, amount);
+}
+
+export function debugAddMaterials(state: GameState, amount: number): GameState {
+  const materials = { ...state.materials };
+  for (const mat of MATERIALS) {
+    materials[mat.id] = (materials[mat.id] ?? 0) + amount;
+  }
+  return { ...state, materials };
+}
+
+export function debugAddShards(state: GameState, amount: number): GameState {
+  return { ...state, timeShards: state.timeShards + amount };
 }
 
 // ---------------------------------------------------------------------------

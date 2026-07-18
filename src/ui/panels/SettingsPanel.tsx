@@ -1,4 +1,10 @@
-import { createInitialState, updateSettings } from '../../game/logic';
+import {
+  createInitialState,
+  debugAddGold,
+  debugAddMaterials,
+  debugAddShards,
+  updateSettings,
+} from '../../game/logic';
 import type { NumberFormat } from '../../game/types';
 import { useGameState, useGameStore } from '../../hooks/useGame';
 import { localStorageAdapter } from '../../platform/storage';
@@ -44,6 +50,59 @@ export function SettingsPanel() {
         checked={settings.reducedMotion}
         onChange={(v) => store.dispatch((s) => updateSettings(s, { reducedMotion: v }))}
       />
+
+      <Toggle
+        label="Sound effects"
+        hint="Click and notification sounds."
+        checked={settings.sfxEnabled}
+        onChange={(v) => store.dispatch((s) => updateSettings(s, { sfxEnabled: v }))}
+      />
+
+      <h3 className="section-title">Debug</h3>
+
+      <Row label="Game speed" hint="Debug: run the simulation faster.">
+        <select
+          value={settings.gameSpeed}
+          onChange={(e) =>
+            store.dispatch((s) => updateSettings(s, { gameSpeed: Number(e.target.value) }))
+          }
+        >
+          <option value={1}>×1</option>
+          <option value={2}>×2</option>
+          <option value={5}>×5</option>
+          <option value={10}>×10</option>
+          <option value={50}>×50</option>
+        </select>
+      </Row>
+
+      <Row label="Cheats" hint="Grant resources for quick testing.">
+        <div className="debug-buttons">
+          <button
+            className="small-button"
+            onClick={() => store.dispatch((s) => debugAddGold(s, 10_000))}
+          >
+            +10K 🪙
+          </button>
+          <button
+            className="small-button"
+            onClick={() => store.dispatch((s) => debugAddGold(s, 1_000_000))}
+          >
+            +1M 🪙
+          </button>
+          <button
+            className="small-button"
+            onClick={() => store.dispatch((s) => debugAddMaterials(s, 50))}
+          >
+            +50 materials
+          </button>
+          <button
+            className="small-button"
+            onClick={() => store.dispatch((s) => debugAddShards(s, 10))}
+          >
+            +10 ⏳
+          </button>
+        </div>
+      </Row>
 
       <div className="settings-danger">
         <button

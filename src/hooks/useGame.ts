@@ -26,7 +26,9 @@ export function useGameLoop(store: GameStore): void {
       const now = performance.now();
       // Clamp dt so a suspended tab doesn't produce one giant tick;
       // long gaps are handled by offline progress on load instead.
-      const dt = Math.min((now - last) / 1000, 1);
+      // Debug game-speed multiplies live game time only (offline stays 1:1).
+      const speed = store.getState().settings.gameSpeed || 1;
+      const dt = Math.min((now - last) / 1000, 1) * speed;
       last = now;
       store.dispatch((s) => tick(s, dt));
     }, 100);

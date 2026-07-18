@@ -55,6 +55,8 @@ export interface Adventurer {
   assignment: Assignment | null;
   /** runTimeSeconds until which this adventurer is recovering; 0 = healthy */
   injuredUntil: number;
+  /** Total seconds of the current injury (for recovery progress bars) */
+  injuredDuration: number;
 }
 
 export interface LocationDef {
@@ -96,6 +98,58 @@ export interface Expedition {
   locationId: string;
   endsAt: number;
   memberIds: number[];
+}
+
+// ---------------------------------------------------------------------------
+// Town skills (gold-bought tree, resets each timeline)
+// ---------------------------------------------------------------------------
+
+export type TownSkillEffect =
+  | { kind: 'flatGold'; perLevel: number } // +gold/sec, flat
+  | { kind: 'jobMult'; perLevel: number } // +% job production
+  | { kind: 'clickFlat'; perLevel: number } // +gold per click, flat
+  | { kind: 'clickMult'; perLevel: number } // +% click gold
+  | { kind: 'clickGpsPercent'; perLevel: number }; // click adds % of gold/sec
+
+export interface TownSkillDef {
+  id: string;
+  name: string;
+  description: string;
+  /** Depth in the tree; used for layout and implied by `requires` */
+  tier: number;
+  /** Which visual branch column this node belongs to */
+  branch: string;
+  maxLevel: number;
+  baseCostGold: number;
+  costGrowth: number;
+  /** Material cost at level 1 (scales with costGrowth); most skills omit this */
+  materials?: Record<string, number>;
+  /** Skill that must be owned (level ≥ 1) before this one unlocks */
+  requires?: string;
+  effect: TownSkillEffect;
+}
+
+/** Derived bonuses from bought town skills. */
+export interface TownSkillBonuses {
+  flatGold: number;
+  jobMult: number;
+  clickFlat: number;
+  clickMult: number;
+  clickGpsPercent: number;
+}
+
+// ---------------------------------------------------------------------------
+// Activity log (quest/patrol results shown in the Guild tab)
+// ---------------------------------------------------------------------------
+
+export type LogKind = 'quest' | 'patrol' | 'injury' | 'expedition';
+
+export interface LogEntry {
+  id: number;
+  /** runTimeSeconds when this happened */
+  at: number;
+  kind: LogKind;
+  text: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -154,6 +208,9 @@ export interface Settings {
   confirmPrestige: boolean;
   offlineProgress: boolean;
   reducedMotion: boolean;
+  sfxEnabled: boolean;
+  /** Debug: simulation speed multiplier applied to live ticks (1 = normal) */
+  gameSpeed: number;
 }
 
 export interface GameState {
@@ -167,6 +224,7 @@ export interface GameState {
   jobs: Record<string, number>;
   workers: number;
   materials: Record<string, number>;
+  townSkills: Record<string, number>;
 
   // Guild
   adventurers: Adventurer[];
@@ -176,6 +234,7 @@ export interface GameState {
   nextEntityId: number; // shared id counter for adventurers/equipment
   locationsCleared: Record<string, boolean>; // first quest success per zone
   bossesDefeated: Record<string, boolean>; // this timeline
+  activityLog: LogEntry[]; // newest last, capped at ACTIVITY_LOG_MAX
 
   // Story
   storyFlags: Record<string, boolean>; // beats already seen/dismissed

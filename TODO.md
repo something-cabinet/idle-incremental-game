@@ -1,11 +1,11 @@
 # TODO
 
 ## General UI
-- Move the tab to bottom of screne, like a navbar bottom. Locked tab (guild/map/inventory) should still occupy space, just hidden.
-- Add a detail view for adventurer, which open a popup show their equipment (and equipment info), their stat, xp level, more detailed info.
+- [x] Move the tab to bottom of screen, like a navbar bottom. Locked tab (guild/map/inventory) should still occupy space, just hidden. — tab bar is now a fixed bottom navbar; locked tabs render invisible but keep their slot.
+- [x] Add a detail view for adventurer, which open a popup show their equipment (and equipment info), their stat, xp level, more detailed info. — click an adventurer card to open the popup: stats with base/gear breakdown, XP bar, equipment per slot with unequip.
 
 ## SFX
-- Add sfx for clicking, notification
+- [x] Add sfx for clicking, notification — WebAudio-synthesized blip for button clicks, two-note chime for story beats/offline toast (no asset files); toggle in Settings.
 
 ## Progression balance
 - [x] Add a few more gold maker option to buy — added Money Lender and Trading Company jobs after Trade Caravan.
@@ -14,22 +14,11 @@
 - [x] Generally reduce duration for guild-activities (quest, patrol interval, recovery) to speed up the game. — quest durations cut ~5-8x across zones/bosses, patrol encounter interval 60s→20s, injury duration per tier 900s→180s.
 
 ## New features
-- QoL: Add by x5, x10, x100 buttons.
-- QoL: Add a few debug buttons in options where I can change game speed, receive cheat gold, receive material so I can quickly test it.
-- Upgrade section for town (divie the town tab into jobs and upgrades, like the guild tab):
-    - Skills: 
-        - Improve efficiency of jobs (add flat gold per second, increased by percetange, ..)
-        - Improve clicking efficency (by a percentage of current gold per second, by flat amount, by percentage, ..)
-    - Skill UI should be a tree-shape, with previous skill need to be unlocked to buy the next. Cost increased according to depth. Each skill can be buy multiple time to level up (to a cap). Powerful skill only have one.
-    - Skills usually cost gold, but depend on context, some skill may need materials too.
+- [x] QoL: Add by x5, x10, x100 buttons. — ×1/×5/×10/×100 selector in the Town tab, applies to jobs and workers (workers clamp to the cap).
+- [x] QoL: Add a few debug buttons in options where I can change game speed, receive cheat gold, receive material so I can quickly test it. — Settings → Debug: game speed ×1–×50, +gold/+materials/+shards buttons. (Currently always visible; gate or strip before release.)
+- [x] Upgrade section for town (divide the town tab into jobs and upgrades, like the guild tab) — Town tab split into Jobs/Skills subtabs; skill tree with two branches (Industry: flat gold + job %, Hustle: click flat/% and %-of-gps), parent node required to unlock the next, cost grows with depth, deeper nodes need materials, top nodes are one-time buys. Balance numbers are placeholders in `config.ts` → `TOWN_SKILLS`.
 
 - Guild tab:
-    - Show progress bar and time left for adventurers who on quest and patrol. On quest is until they finish the quest. On patrol is until they get the next reward drop. Or recovering time.
-    - Show adventure xp percentage next to level.
-    - Add a log that show the quest result, patrol result:
-        - Example: "[Adventurer name] acquired 2 pelts, 1 crystal, 1 new equipment (Black Iron Sword), 30xp from [quest name]".
-        - Example: "[Adventurer name] injured and retreat from quest"
-        - Example: "[Adventurer name] collected 5 herb and 2 pelt during patrol at [patrol location]"
-        - Add some variation so it more fun to read.
-        - Take into account offline progression too. Mostly Patrol since it can stay indefinitely. Just generate and group all the reward into a line.
-
+    - [x] Show progress bar and time left for adventurers who on quest and patrol. On quest is until they finish the quest. On patrol is until they get the next reward drop. Or recovering time.
+    - [x] Show adventure xp percentage next to level.
+    - [x] Add a log that show the quest result, patrol result — activity log at the bottom of the Guild tab with day stamps, phrase variation, loot lines (gold/materials/equipment names/shards/XP), injury and expedition lines; offline patrol rewards group into one line per adventurer; capped at 60 entries.

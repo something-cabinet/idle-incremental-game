@@ -8,6 +8,7 @@ import type {
   Rarity,
   Settings,
   StoryBeatDef,
+  TownSkillDef,
 } from './types';
 
 /**
@@ -30,7 +31,7 @@ export const HOMETOWN_DEADLINE_DAY = 100;
 export const OFFLINE_CAP_HOURS = 8;
 
 export const AUTOSAVE_INTERVAL_MS = 10_000;
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 
 // ---------------------------------------------------------------------------
 // Act 1 — town income (low numbers by design)
@@ -50,6 +51,66 @@ export const CLICK_BASE_GOLD = 1;
 
 /** Founding the Guild (act 1 → 2) */
 export const GUILD_FOUNDING_COST = 3_000;
+
+/**
+ * Town skill tree (Town tab → Skills). Two branches; each node needs the one
+ * above it. Cost scales with depth via baseCostGold. Resets on time travel.
+ */
+export const TOWN_SKILLS: TownSkillDef[] = [
+  // ---- Industry branch: job production ----
+  {
+    id: 'work-ethic', name: 'Work Ethic', tier: 1, branch: 'industry',
+    description: '+0.5 gold/sec per level.',
+    maxLevel: 10, baseCostGold: 50, costGrowth: 1.35,
+    effect: { kind: 'flatGold', perLevel: 0.5 },
+  },
+  {
+    id: 'guild-ledgers', name: 'Guild Ledgers', tier: 2, branch: 'industry',
+    description: '+10% job production per level.',
+    maxLevel: 10, baseCostGold: 600, costGrowth: 1.5, requires: 'work-ethic',
+    effect: { kind: 'jobMult', perLevel: 0.1 },
+  },
+  {
+    id: 'trade-contracts', name: 'Trade Contracts', tier: 3, branch: 'industry',
+    description: '+25% job production per level.',
+    maxLevel: 5, baseCostGold: 12_000, costGrowth: 2, requires: 'guild-ledgers',
+    materials: { 'beast-pelt': 5 },
+    effect: { kind: 'jobMult', perLevel: 0.25 },
+  },
+  {
+    id: 'town-charter', name: 'Town Charter', tier: 4, branch: 'industry',
+    description: 'Doubles job production.',
+    maxLevel: 1, baseCostGold: 250_000, costGrowth: 1, requires: 'trade-contracts',
+    materials: { 'iron-ore': 25 },
+    effect: { kind: 'jobMult', perLevel: 1 },
+  },
+  // ---- Hustle branch: clicking ----
+  {
+    id: 'calloused-hands', name: 'Calloused Hands', tier: 1, branch: 'hustle',
+    description: '+1 gold per click per level.',
+    maxLevel: 10, baseCostGold: 25, costGrowth: 1.4,
+    effect: { kind: 'clickFlat', perLevel: 1 },
+  },
+  {
+    id: 'market-instinct', name: 'Market Instinct', tier: 2, branch: 'hustle',
+    description: '+25% click gold per level.',
+    maxLevel: 10, baseCostGold: 400, costGrowth: 1.5, requires: 'calloused-hands',
+    effect: { kind: 'clickMult', perLevel: 0.25 },
+  },
+  {
+    id: 'silver-tongue', name: 'Silver Tongue', tier: 3, branch: 'hustle',
+    description: 'Clicks also earn +2% of your gold/sec per level.',
+    maxLevel: 10, baseCostGold: 6_000, costGrowth: 1.8, requires: 'market-instinct',
+    effect: { kind: 'clickGpsPercent', perLevel: 0.02 },
+  },
+  {
+    id: 'golden-touch', name: 'Golden Touch', tier: 4, branch: 'hustle',
+    description: 'Clicks earn an extra +25% of your gold/sec.',
+    maxLevel: 1, baseCostGold: 200_000, costGrowth: 1, requires: 'silver-tongue',
+    materials: { 'spirit-essence': 10 },
+    effect: { kind: 'clickGpsPercent', perLevel: 0.25 },
+  },
+];
 
 // ---------------------------------------------------------------------------
 // Act 2 — guild
@@ -204,6 +265,21 @@ export const QUEST = {
 /** Injury duration in game seconds per location tier (before infirmary/perks). */
 export const INJURY_SECONDS_PER_TIER = 180;
 
+// ---------------------------------------------------------------------------
+// Activity log
+// ---------------------------------------------------------------------------
+
+/** Max entries kept in the guild activity log. */
+export const ACTIVITY_LOG_MAX = 60;
+
+/** Phrase variations for log lines: "<name> <verb> ..." */
+export const LOG_PHRASES = {
+  questSuccess: ['completed', 'triumphed at', 'swept through', 'returned victorious from'],
+  questFail: ['was injured and retreated from', 'barely escaped', 'was driven back from'],
+  patrol: ['collected', 'brought back', 'scrounged up', 'hauled in'],
+  patrolFail: ['was ambushed and wounded patrolling', 'took a bad hit patrolling', 'limped home from a patrol at'],
+};
+
 /** Success chance = clamp(power/locationPower, min, max) */
 export const SUCCESS_CHANCE_MIN = 0.1;
 export const SUCCESS_CHANCE_MAX = 0.95;
@@ -306,4 +382,6 @@ export const DEFAULT_SETTINGS: Settings = {
   confirmPrestige: true,
   offlineProgress: true,
   reducedMotion: false,
+  sfxEnabled: true,
+  gameSpeed: 1,
 };

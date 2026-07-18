@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { applyOfflineProgress } from './game/engine';
 import {
   createInitialState,
@@ -11,6 +11,7 @@ import { formatDuration } from './game/format';
 import { GameContext, useGameLoop, useGameState } from './hooks/useGame';
 import { useFormat } from './hooks/useFormat';
 import { localStorageAdapter } from './platform/storage';
+import { playClick, playNotify } from './ui/sfx';
 import { StoryModal } from './ui/StoryModal';
 import { TabBar, type TabId } from './ui/TabBar';
 import { TownPanel } from './ui/panels/TownPanel';
@@ -48,12 +49,12 @@ export default function App() {
   const [tab, setTab] = useState<TabId>('town');
 
   useGameLoop(init.store);
+  useClickSfx(init.store);
 
   return (
     <GameContext.Provider value={init.store}>
       <div className="game">
         <Header />
-        <TabBar active={tab} onChange={setTab} />
         <main className="panel-host">
           {tab === 'town' && <TownPanel />}
           {tab === 'guild' && <GuildPanel />}
@@ -62,6 +63,7 @@ export default function App() {
           {tab === 'timeline' && <TimelinePanel />}
           {tab === 'settings' && <SettingsPanel />}
         </main>
+        <TabBar active={tab} onChange={setTab} />
 
         <StoryModal />
 
@@ -71,6 +73,18 @@ export default function App() {
       </div>
     </GameContext.Provider>
   );
+}
+
+/** Plays the click blip for any button press while SFX is enabled. */
+function useClickSfx(store: GameStore) {
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (!store.getState().settings.sfxEnabled) return;
+      if ((e.target as HTMLElement | null)?.closest('button')) playClick();
+    };
+    document.addEventListener('click', onClick);
+    return () => document.removeEventListener('click', onClick);
+  }, [store]);
 }
 
 function Header() {
@@ -101,7 +115,12 @@ function OfflineToast({
   report: OfflineReport;
   onDismiss: () => void;
 }) {
+  const state = useGameState();
   const fmt = useFormat();
+  useEffect(() => {
+    if (state.settings.sfxEnabled) playNotify();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   return (
     <div className="offline-toast" onClick={onDismiss}>
       Welcome back! While you were away ({formatDuration(report.seconds)}), the town
