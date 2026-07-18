@@ -27,23 +27,23 @@ describe('act 1 town loop', () => {
   it('buying a job spends gold and adds production', () => {
     let s = { ...createInitialState(0), gold: 20 };
     s = buyJob(s, 'errands');
-    expect(s.gold).toBe(10);
+    expect(s.gold).toBe(15);
     expect(s.jobs.errands).toBe(1);
-    expect(productionPerSecond(s)).toBeCloseTo(0.2);
+    expect(productionPerSecond(s)).toBeCloseTo(0.35);
   });
 
   it('job cost grows exponentially', () => {
     let s = { ...createInitialState(0), gold: 10_000 };
-    expect(jobCost(s, 'errands')).toBe(10);
+    expect(jobCost(s, 'errands')).toBe(5);
     s = buyJob(s, 'errands');
-    expect(jobCost(s, 'errands')).toBe(Math.ceil(10 * 1.15));
+    expect(jobCost(s, 'errands')).toBe(Math.ceil(5 * 1.15));
   });
 
   it('tick earns production over time', () => {
     let s = { ...createInitialState(0), gold: 20 };
     s = buyJob(s, 'errands');
     s = tick(s, 100, 0, rng);
-    expect(s.gold).toBeCloseTo(10 + 20); // 0.2/sec * 100s
+    expect(s.gold).toBeCloseTo(15 + 35); // 0.35/sec * 100s
   });
 
   it('workers add production (act 2)', () => {
@@ -88,7 +88,7 @@ describe('offline progress', () => {
     s = { ...s, lastUpdate: 0 };
     const { offlineSeconds, goldEarned } = applyOfflineProgress(s, 3600_000, rng);
     expect(offlineSeconds).toBe(3600);
-    expect(goldEarned).toBeCloseTo(720); // 0.2/sec * 1h
+    expect(goldEarned).toBeCloseTo(1260); // 0.35/sec * 1h
   });
 
   it('caps offline time at 8h base', () => {

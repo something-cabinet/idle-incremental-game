@@ -80,9 +80,10 @@ describe('patrol & quests', () => {
   it('zones unlock in order via quest clears', () => {
     const s = guildState();
     expect(isZoneUnlocked(s, 'forest-edge')).toBe(true);
-    expect(isZoneUnlocked(s, 'old-mines')).toBe(false);
+    expect(isZoneUnlocked(s, 'river-crossing')).toBe(false);
     const cleared = { ...s, locationsCleared: { 'forest-edge': true } };
-    expect(isZoneUnlocked(cleared, 'old-mines')).toBe(true);
+    expect(isZoneUnlocked(cleared, 'river-crossing')).toBe(true);
+    expect(isZoneUnlocked(cleared, 'old-mines')).toBe(false);
   });
 
   it('patrolling earns gold and xp per encounter', () => {
@@ -107,7 +108,7 @@ describe('patrol & quests', () => {
     let s = withAdventurer(guildState());
     s = assignAdventurer(s, s.adventurers[0].id, 'forest-edge', 'quest');
     expect(s.adventurers[0].assignment?.mode).toBe('quest');
-    s = tick(s, 700, 0, alwaysWin); // quest duration 600
+    s = tick(s, 700, 0, alwaysWin); // quest duration 60
     expect(s.locationsCleared['forest-edge']).toBe(true);
     expect(s.adventurers[0].assignment?.mode).toBe('patrol');
     expect(s.inventory.length).toBeGreaterThan(0); // guaranteed quest equipment

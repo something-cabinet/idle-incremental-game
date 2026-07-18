@@ -37,11 +37,13 @@ export const SAVE_VERSION = 3;
 // ---------------------------------------------------------------------------
 
 export const JOBS: JobDef[] = [
-  { id: 'errands', name: 'Run Errands', description: 'Fetch, carry, repeat.', baseCost: 10, costGrowth: 1.15, baseProduction: 0.2 },
-  { id: 'stall', name: 'Market Stall', description: 'Sell whatever sells.', baseCost: 60, costGrowth: 1.15, baseProduction: 1.2 },
-  { id: 'garden', name: 'Herb Garden', description: 'Healers pay well.', baseCost: 400, costGrowth: 1.15, baseProduction: 7 },
-  { id: 'workshop', name: 'Workshop', description: 'Tools for the town.', baseCost: 2_500, costGrowth: 1.15, baseProduction: 35 },
+  { id: 'errands', name: 'Run Errands', description: 'Fetch, carry, repeat.', baseCost: 5, costGrowth: 1.15, baseProduction: 0.35 },
+  { id: 'stall', name: 'Market Stall', description: 'Sell whatever sells.', baseCost: 25, costGrowth: 1.15, baseProduction: 2 },
+  { id: 'garden', name: 'Herb Garden', description: 'Healers pay well.', baseCost: 150, costGrowth: 1.15, baseProduction: 11 },
+  { id: 'workshop', name: 'Workshop', description: 'Tools for the town.', baseCost: 900, costGrowth: 1.15, baseProduction: 55 },
   { id: 'caravan', name: 'Trade Caravan', description: 'Goods to distant markets.', baseCost: 15_000, costGrowth: 1.15, baseProduction: 180 },
+  { id: 'bank', name: 'Money Lender', description: 'Coin breeds coin.', baseCost: 90_000, costGrowth: 1.15, baseProduction: 900 },
+  { id: 'trade-guild', name: 'Trading Company', description: 'Ships on every horizon.', baseCost: 550_000, costGrowth: 1.15, baseProduction: 4_500 },
 ];
 
 export const CLICK_BASE_GOLD = 1;
@@ -101,44 +103,54 @@ export const MATERIALS: MaterialDef[] = [
  */
 export const LOCATIONS: LocationDef[] = [
   {
-    id: 'forest-edge', name: 'Forest Edge', kind: 'zone', tier: 1, power: 20,
-    materialId: 'beast-pelt', questDuration: 600, shardChance: 0.005,
+    id: 'forest-edge', name: 'Forest Edge', kind: 'zone', tier: 1, power: 16,
+    materialId: 'beast-pelt', questDuration: 60, shardChance: 0.005,
     description: 'Wolves and worse in the treeline.',
   },
   {
-    id: 'old-mines', name: 'Old Mines', kind: 'zone', tier: 2, power: 60,
-    materialId: 'iron-ore', questDuration: 1200, shardChance: 0.005,
+    id: 'river-crossing', name: 'River Crossing', kind: 'zone', tier: 2, power: 30,
+    materialId: 'beast-pelt', questDuration: 180, shardChance: 0.005,
+    description: 'Bandits favor the ford.',
+  },
+  {
+    id: 'old-mines', name: 'Old Mines', kind: 'zone', tier: 3, power: 50,
+    materialId: 'iron-ore', questDuration: 300, shardChance: 0.006,
     description: 'Abandoned shafts, occupied tunnels.',
   },
   {
-    id: 'haunted-marsh', name: 'Haunted Marsh', kind: 'zone', tier: 3, power: 150,
-    materialId: 'spirit-essence', questDuration: 1800, shardChance: 0.008,
+    id: 'haunted-marsh', name: 'Haunted Marsh', kind: 'zone', tier: 4, power: 85,
+    materialId: 'spirit-essence', questDuration: 480, shardChance: 0.008,
     description: 'The dead here are restless.',
   },
   {
-    id: 'frontier-pass', name: 'Frontier Pass', kind: 'zone', tier: 4, power: 300,
-    materialId: 'demon-ash', questDuration: 2400, shardChance: 0.01,
+    id: 'sunken-ruins', name: 'Sunken Ruins', kind: 'zone', tier: 5, power: 140,
+    materialId: 'spirit-essence', questDuration: 660, shardChance: 0.009,
+    description: 'Something ancient still guards the depths.',
+  },
+  {
+    id: 'frontier-pass', name: 'Frontier Pass', kind: 'zone', tier: 6, power: 230,
+    materialId: 'demon-ash', questDuration: 900, shardChance: 0.01,
     description: 'The road home. Something burned through here.',
   },
   // ---- Act 3 expedition targets ----
   {
-    id: 'general-marrow', name: "General Marrow's Camp", kind: 'boss', tier: 5,
-    power: 500, materialId: 'demon-ash', questDuration: 1800, shardChance: 0.02,
+    id: 'general-marrow', name: "General Marrow's Camp", kind: 'boss', tier: 7,
+    power: 500, materialId: 'demon-ash', questDuration: 600, shardChance: 0.02,
     bossShardReward: 15, description: 'The legion’s butcher.',
   },
   {
-    id: 'general-vex', name: "General Vex's Spire", kind: 'boss', tier: 6,
-    power: 750, materialId: 'demon-ash', questDuration: 1800, shardChance: 0.02,
+    id: 'general-vex', name: "General Vex's Spire", kind: 'boss', tier: 8,
+    power: 750, materialId: 'demon-ash', questDuration: 720, shardChance: 0.02,
     bossShardReward: 20, description: 'The legion’s sorcerer.',
   },
   {
-    id: 'general-thane', name: "General Thane's Bastion", kind: 'boss', tier: 7,
-    power: 1000, materialId: 'demon-ash', questDuration: 1800, shardChance: 0.02,
+    id: 'general-thane', name: "General Thane's Bastion", kind: 'boss', tier: 9,
+    power: 1000, materialId: 'demon-ash', questDuration: 840, shardChance: 0.02,
     bossShardReward: 25, description: 'The legion’s shield.',
   },
   {
-    id: 'demon-king', name: 'The Demon King’s Citadel', kind: 'boss', tier: 8,
-    power: 1300, materialId: 'demon-ash', questDuration: 2400, shardChance: 0.02,
+    id: 'demon-king', name: 'The Demon King’s Citadel', kind: 'boss', tier: 10,
+    power: 1300, materialId: 'demon-ash', questDuration: 1200, shardChance: 0.02,
     bossShardReward: 60, description: 'Where it all ends. Or begins.',
   },
 ];
@@ -169,9 +181,9 @@ export const GUILD_UPGRADES: GuildUpgradeDef[] = [
 // ---------------------------------------------------------------------------
 
 /** Game seconds between patrol encounters. */
-export const ENCOUNTER_INTERVAL = 60;
+export const ENCOUNTER_INTERVAL = 20;
 /** Safety cap on encounters processed per adventurer per tick (offline catch-up). */
-export const MAX_ENCOUNTERS_PER_TICK = 1000;
+export const MAX_ENCOUNTERS_PER_TICK = 2000;
 
 export const PATROL = {
   goldPerTier: 5,
@@ -190,7 +202,7 @@ export const QUEST = {
 };
 
 /** Injury duration in game seconds per location tier (before infirmary/perks). */
-export const INJURY_SECONDS_PER_TIER = 900;
+export const INJURY_SECONDS_PER_TIER = 180;
 
 /** Success chance = clamp(power/locationPower, min, max) */
 export const SUCCESS_CHANCE_MIN = 0.1;
