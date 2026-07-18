@@ -26,81 +26,129 @@ import { useFormat } from '../../hooks/useFormat';
 import { useGameState, useGameStore } from '../../hooks/useGame';
 
 export function GuildPanel() {
-  const store = useGameStore();
   const state = useGameState();
-  const fmt = useFormat();
+  const [section, setSection] = useState<'adventurers' | 'upgrades' | 'logs'>('adventurers');
   const [detailId, setDetailId] = useState<number | null>(null);
-  const canHire =
-    state.adventurers.length < rosterCap(state) && state.gold >= hireCost(state);
   const detail = state.adventurers.find((a) => a.id === detailId);
 
   return (
     <div className="panel">
-      <section className="rows">
-        <h3 className="section-title">
-          Adventurers ({state.adventurers.length}/{rosterCap(state)})
-        </h3>
-        {state.adventurers.map((adv) => (
-          <AdventurerCard key={adv.id} adv={adv} onOpen={() => setDetailId(adv.id)} />
-        ))}
+      <div className="subtab-bar">
         <button
-          className={`row ${canHire ? '' : 'unaffordable'}`}
-          disabled={!canHire}
-          onClick={() => store.dispatch((s) => hireAdventurer(s))}
+          className={`subtab ${section === 'adventurers' ? 'active' : ''}`}
+          onClick={() => setSection('adventurers')}
         >
-          <div className="row-info">
-            <span className="row-name">Hire Adventurer</span>
-            <span className="row-desc">
-              {state.adventurers.length >= rosterCap(state)
-                ? 'Roster full — upgrade the Guild Hall.'
-                : 'A new blade for the guild.'}
-            </span>
-          </div>
-          <div className="row-cost">{fmt(hireCost(state))} 🪙</div>
+          Adventurers
         </button>
-      </section>
+        <button
+          className={`subtab ${section === 'upgrades' ? 'active' : ''}`}
+          onClick={() => setSection('upgrades')}
+        >
+          Upgrades
+        </button>
+        <button
+          className={`subtab ${section === 'logs' ? 'active' : ''}`}
+          onClick={() => setSection('logs')}
+        >
+          Logs
+        </button>
+      </div>
 
-      <section className="rows">
-        <h3 className="section-title">Guild Upgrades</h3>
-        {GUILD_UPGRADES.map((def) => {
-          const level = state.guildUpgrades[def.id] ?? 0;
-          const maxed = level >= def.maxLevel;
-          const cost = guildUpgradeCost(state, def.id);
-          const affordable = canBuyGuildUpgrade(state, def.id);
-          return (
-            <button
-              key={def.id}
-              className={`row ${affordable ? '' : 'unaffordable'}`}
-              disabled={!affordable}
-              onClick={() => store.dispatch((s) => buyGuildUpgrade(s, def.id))}
-            >
-              <div className="row-info">
-                <span className="row-name">
-                  {def.name} <span className="row-sub">Lv {level}/{def.maxLevel}</span>
-                </span>
-                <span className="row-desc">{def.description}</span>
-              </div>
-              <div className="row-cost">
-                {maxed ? 'Max' : (
-                  <>
-                    {fmt(cost.gold)} 🪙
-                    {Object.entries(cost.materials).map(([id, n]) => (
-                      <span key={id} className="mat-cost">
-                        {n} {MATERIALS.find((m) => m.id === id)?.name ?? id}
-                      </span>
-                    ))}
-                  </>
-                )}
-              </div>
-            </button>
-          );
-        })}
-      </section>
-
-      <ActivityLog />
+      {section === 'adventurers' && (
+        <AdventurersSection onOpen={(id) => setDetailId(id)} />
+      )}
+      {section === 'upgrades' && <UpgradesSection />}
+      {section === 'logs' && <ActivityLog />}
 
       {detail && <AdventurerDetail adv={detail} onClose={() => setDetailId(null)} />}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Adventurers section
+// ---------------------------------------------------------------------------
+
+function AdventurersSection({ onOpen }: { onOpen: (id: number) => void }) {
+  const store = useGameStore();
+  const state = useGameState();
+  const fmt = useFormat();
+  const canHire =
+    state.adventurers.length < rosterCap(state) && state.gold >= hireCost(state);
+
+  return (
+    <section className="rows">
+      <h3 className="section-title">
+        Adventurers ({state.adventurers.length}/{rosterCap(state)})
+      </h3>
+      {state.adventurers.map((adv) => (
+        <AdventurerCard key={adv.id} adv={adv} onOpen={() => onOpen(adv.id)} />
+      ))}
+      <button
+        className={`row ${canHire ? '' : 'unaffordable'}`}
+        disabled={!canHire}
+        onClick={() => store.dispatch((s) => hireAdventurer(s))}
+      >
+        <div className="row-info">
+          <span className="row-name">Hire Adventurer</span>
+          <span className="row-desc">
+            {state.adventurers.length >= rosterCap(state)
+              ? 'Roster full — upgrade the Guild Hall.'
+              : 'A new blade for the guild.'}
+          </span>
+        </div>
+        <div className="row-cost">{fmt(hireCost(state))} 🪙</div>
+      </button>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Upgrades section
+// ---------------------------------------------------------------------------
+
+function UpgradesSection() {
+  const store = useGameStore();
+  const state = useGameState();
+  const fmt = useFormat();
+
+  return (
+    <section className="rows">
+      <h3 className="section-title">Guild Upgrades</h3>
+      {GUILD_UPGRADES.map((def) => {
+        const level = state.guildUpgrades[def.id] ?? 0;
+        const maxed = level >= def.maxLevel;
+        const cost = guildUpgradeCost(state, def.id);
+        const affordable = canBuyGuildUpgrade(state, def.id);
+        return (
+          <button
+            key={def.id}
+            className={`row ${affordable ? '' : 'unaffordable'}`}
+            disabled={!affordable}
+            onClick={() => store.dispatch((s) => buyGuildUpgrade(s, def.id))}
+          >
+            <div className="row-info">
+              <span className="row-name">
+                {def.name} <span className="row-sub">Lv {level}/{def.maxLevel}</span>
+              </span>
+              <span className="row-desc">{def.description}</span>
+            </div>
+            <div className="row-cost">
+              {maxed ? 'Max' : (
+                <>
+                  {fmt(cost.gold)} 🪙
+                  {Object.entries(cost.materials).map(([id, n]) => (
+                    <span key={id} className="mat-cost">
+                      {n} {MATERIALS.find((m) => m.id === id)?.name ?? id}
+                    </span>
+                  ))}
+                </>
+              )}
+            </div>
+          </button>
+        );
+      })}
+    </section>
   );
 }
 
