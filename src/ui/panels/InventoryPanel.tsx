@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { MATERIALS, RARITY_SELL_GOLD } from '../../game/config';
 import { equipItem, sellItem, unequipItem } from '../../game/guild';
-import type { EquipSlot, Equipment } from '../../game/types';
+import type { EquipSlot, Equipment, Rarity } from '../../game/types';
 import { useFormat } from '../../hooks/useFormat';
 import { useGameState, useGameStore } from '../../hooks/useGame';
 
@@ -11,12 +11,54 @@ const SLOT_ICON: Record<EquipSlot, string> = {
   trinket: '💍',
 };
 
+type SortMode = 'newest' | 'rarity' | 'atk' | 'def';
+
+const SORT_LABEL: Record<SortMode, string> = {
+  newest: 'Newest',
+  rarity: 'Rarity',
+  atk: 'Attack',
+  def: 'Defense',
+};
+
+const RARITY_ORDER: Record<Rarity, number> = { common: 0, rare: 1, epic: 2 };
+
+function sortInventory(items: Equipment[], mode: SortMode): Equipment[] {
+  const sorted = [...items];
+  switch (mode) {
+    case 'rarity':
+      sorted.sort((a, b) => RARITY_ORDER[b.rarity] - RARITY_ORDER[a.rarity]);
+      break;
+    case 'atk':
+      sorted.sort((a, b) => b.atk - a.atk);
+      break;
+    case 'def':
+      sorted.sort((a, b) => b.def - a.def);
+      break;
+    case 'newest':
+      sorted.reverse();
+      break;
+  }
+  return sorted;
+}
+
 export function InventoryPanel() {
   const store = useGameStore();
   const state = useGameState();
   const fmt = useFormat();
   const [target, setTarget] = useState<number | ''>('');
   const [selected, setSelected] = useState<Equipment | null>(null);
+  const [sortMode, setSortMode] = useState<SortMode>('newest');
+  const [rarityFilter, setRarityFilter] = useState<Rarity | 'all'>('all');
+  const [slotFilter, setSlotFilter] = useState<EquipSlot | 'all'>('all');
+
+  const visibleItems = sortInventory(
+    state.inventory.filter(
+      (item) =>
+        (rarityFilter === 'all' || item.rarity === rarityFilter) &&
+        (slotFilter === 'all' || item.slot === slotFilter),
+    ),
+    sortMode,
+  );
 
   const handleEquip = () => {
     if (selected && target !== '') {
@@ -48,6 +90,46 @@ export function InventoryPanel() {
 
       <section className="rows">
         <h3 className="section-title">Equipment ({state.inventory.length})</h3>
+
+        <div className="equip-toolbar">
+          <label className="equip-toolbar-control">
+            <span className="equip-toolbar-label">Sort</span>
+            <select
+              value={sortMode}
+              onChange={(e) => setSortMode(e.target.value as SortMode)}
+            >
+              {(Object.keys(SORT_LABEL) as SortMode[]).map((mode) => (
+                <option key={mode} value={mode}>
+                  {SORT_LABEL[mode]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="equip-toolbar-control">
+            <span className="equip-toolbar-label">Rarity</span>
+            <select
+              value={rarityFilter}
+              onChange={(e) => setRarityFilter(e.target.value as Rarity | 'all')}
+            >
+              <option value="all">All</option>
+              <option value="common">Common</option>
+              <option value="rare">Rare</option>
+              <option value="epic">Epic</option>
+            </select>
+          </label>
+          <label className="equip-toolbar-control">
+            <span className="equip-toolbar-label">Type</span>
+            <select
+              value={slotFilter}
+              onChange={(e) => setSlotFilter(e.target.value as EquipSlot | 'all')}
+            >
+              <option value="all">All</option>
+              <option value="weapon">Weapon</option>
+              <option value="armor">Armor</option>
+              <option value="trinket">Trinket</option>
+            </select>
+          </label>
+        </div>
 
         {selected && (
           <div className={`equip-detail item-${selected.rarity}`}>
@@ -87,9 +169,9 @@ export function InventoryPanel() {
           </div>
         )}
 
-        {state.inventory.length > 0 ? (
+        {visibleItems.length > 0 ? (
           <div className="equip-grid">
-            {state.inventory.map((item) => (
+            {visibleItems.map((item) => (
               <button
                 key={item.id}
                 className={`equip-grid-item item-${item.rarity}${selected?.id === item.id ? ' selected' : ''}`}
@@ -100,6 +182,8 @@ export function InventoryPanel() {
               </button>
             ))}
           </div>
+        ) : state.inventory.length > 0 ? (
+          <div className="row locked">No equipment matches the current filters.</div>
         ) : (
           <div className="row locked">No equipment — quests guarantee a drop.</div>
         )}
