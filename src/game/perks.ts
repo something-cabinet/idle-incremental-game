@@ -21,7 +21,6 @@ export function perkCost(state: GameState, id: string): number {
 export function isPerkUnlocked(state: GameState, id: string): boolean {
   const def = perkDef(id);
   if (!def?.requires) return true;
-  // A requirement is met once you own at least one level of it.
   return def.requires.every((req) => req === id || perkLevel(state, req) > 0);
 }
 
@@ -36,7 +35,7 @@ export function canBuyPerk(state: GameState, id: string): boolean {
   return (
     isPerkUnlocked(state, id) &&
     !isPerkMaxed(state, id) &&
-    state.prestigePoints >= perkCost(state, id)
+    state.timeShards >= perkCost(state, id)
   );
 }
 
@@ -45,7 +44,7 @@ export function buyPerk(state: GameState, id: string): GameState {
   const cost = perkCost(state, id);
   return {
     ...state,
-    prestigePoints: state.prestigePoints - cost,
+    timeShards: state.timeShards - cost,
     perks: { ...state.perks, [id]: perkLevel(state, id) + 1 },
   };
 }
@@ -57,7 +56,9 @@ export function computeModifiers(state: GameState): Modifiers {
     clickMult: 1,
     costMult: 1,
     offlineCapHours: OFFLINE_CAP_HOURS,
-    prestigeGainMult: 1,
+    powerMult: 1,
+    healSpeedMult: 1,
+    shardFindMult: 1,
   };
 
   for (const def of PERKS) {
@@ -65,7 +66,7 @@ export function computeModifiers(state: GameState): Modifiers {
     if (level <= 0) continue;
     const { effect } = def;
     switch (effect.kind) {
-      case 'globalProduction':
+      case 'goldProduction':
         mods.productionMult += effect.perLevel * level;
         break;
       case 'clickPower':
@@ -77,8 +78,14 @@ export function computeModifiers(state: GameState): Modifiers {
       case 'offlineCap':
         mods.offlineCapHours += effect.perLevel * level;
         break;
-      case 'prestigeGain':
-        mods.prestigeGainMult += effect.perLevel * level;
+      case 'adventurerPower':
+        mods.powerMult += effect.perLevel * level;
+        break;
+      case 'healSpeed':
+        mods.healSpeedMult += effect.perLevel * level;
+        break;
+      case 'shardFind':
+        mods.shardFindMult += effect.perLevel * level;
         break;
     }
   }

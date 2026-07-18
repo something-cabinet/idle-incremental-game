@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useSyncExternalStore } from 'react';
 import { AUTOSAVE_INTERVAL_MS } from '../game/config';
-import { tick } from '../game/logic';
+import { tick } from '../game/engine';
 import type { GameStore } from '../game/store';
 import type { GameState } from '../game/types';
 import { localStorageAdapter, toSaveData } from '../platform/storage';

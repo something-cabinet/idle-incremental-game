@@ -1,7 +1,7 @@
-import { isPrestigeUnlocked } from '../game/prestige';
+import { isTimeTravelUnlocked } from '../game/prestige';
 import { useGameState } from '../hooks/useGame';
 
-export type TabId = 'main' | 'skills' | 'prestige' | 'settings';
+export type TabId = 'town' | 'guild' | 'map' | 'inventory' | 'timeline' | 'settings';
 
 interface TabDef {
   id: TabId;
@@ -10,9 +10,11 @@ interface TabDef {
 }
 
 const TABS: TabDef[] = [
-  { id: 'main', label: 'Generators', icon: '⚡' },
-  { id: 'skills', label: 'Perks', icon: '✦' },
-  { id: 'prestige', label: 'Prestige', icon: '♻' },
+  { id: 'town', label: 'Town', icon: '🏘' },
+  { id: 'guild', label: 'Guild', icon: '🛡' },
+  { id: 'map', label: 'Map', icon: '🗺' },
+  { id: 'inventory', label: 'Items', icon: '🎒' },
+  { id: 'timeline', label: 'Timeline', icon: '⏳' },
   { id: 'settings', label: 'Settings', icon: '⚙' },
 ];
 
@@ -24,15 +26,13 @@ export function TabBar({
   onChange: (tab: TabId) => void;
 }) {
   const state = useGameState();
-  const prestigeReady = isPrestigeUnlocked(state);
-  const hasPerks = state.prestigePoints > 0 || Object.keys(state.perks).length > 0;
 
   return (
     <nav className="tab-bar">
       {TABS.map((tab) => {
-        // Gate late-game tabs until they're relevant, so early UI stays clean.
-        if (tab.id === 'prestige' && !prestigeReady) return null;
-        if (tab.id === 'skills' && !prestigeReady && !hasPerks) return null;
+        // Tabs reveal as the acts unfold — early UI stays minimal.
+        if (state.act < 2 && ['guild', 'map', 'inventory'].includes(tab.id)) return null;
+        if (tab.id === 'timeline' && !isTimeTravelUnlocked(state)) return null;
         return (
           <button
             key={tab.id}

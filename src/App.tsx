@@ -1,32 +1,43 @@
 import { useState } from 'react';
-import { applyOfflineProgress, createInitialState, normalizeState, productionPerSecond } from './game/logic';
+import { applyOfflineProgress } from './game/engine';
+import {
+  createInitialState,
+  currentDay,
+  migrateSave,
+  productionPerSecond,
+} from './game/logic';
 import { GameStore } from './game/store';
 import { formatDuration } from './game/format';
 import { GameContext, useGameLoop, useGameState } from './hooks/useGame';
 import { useFormat } from './hooks/useFormat';
 import { localStorageAdapter } from './platform/storage';
+import { StoryModal } from './ui/StoryModal';
 import { TabBar, type TabId } from './ui/TabBar';
-import { MainPanel } from './ui/panels/MainPanel';
-import { SkillsPanel } from './ui/panels/SkillsPanel';
-import { PrestigePanel } from './ui/panels/PrestigePanel';
+import { TownPanel } from './ui/panels/TownPanel';
+import { GuildPanel } from './ui/panels/GuildPanel';
+import { MapPanel } from './ui/panels/MapPanel';
+import { InventoryPanel } from './ui/panels/InventoryPanel';
+import { TimelinePanel } from './ui/panels/TimelinePanel';
 import { SettingsPanel } from './ui/panels/SettingsPanel';
 import './App.css';
 
 interface OfflineReport {
   seconds: number;
-  earnings: number;
+  gold: number;
+  shards: number;
 }
 
 function initGame(): { store: GameStore; offline: OfflineReport | null } {
   const saved = localStorageAdapter.load();
   if (!saved) return { store: new GameStore(createInitialState()), offline: null };
-  const normalized = normalizeState(saved.state);
-  const { state, offlineSeconds, offlineEarnings } = applyOfflineProgress(normalized);
+  const migrated = migrateSave(saved);
+  const { state, offlineSeconds, goldEarned, shardsFound } =
+    applyOfflineProgress(migrated);
   return {
     store: new GameStore(state),
     offline:
-      offlineSeconds > 60 && offlineEarnings > 0
-        ? { seconds: offlineSeconds, earnings: offlineEarnings }
+      offlineSeconds > 60 && goldEarned > 0
+        ? { seconds: offlineSeconds, gold: goldEarned, shards: shardsFound }
         : null,
   };
 }
@@ -34,7 +45,7 @@ function initGame(): { store: GameStore; offline: OfflineReport | null } {
 export default function App() {
   const [init] = useState(initGame);
   const [offlineReport, setOfflineReport] = useState(init.offline);
-  const [tab, setTab] = useState<TabId>('main');
+  const [tab, setTab] = useState<TabId>('town');
 
   useGameLoop(init.store);
 
@@ -44,11 +55,15 @@ export default function App() {
         <Header />
         <TabBar active={tab} onChange={setTab} />
         <main className="panel-host">
-          {tab === 'main' && <MainPanel />}
-          {tab === 'skills' && <SkillsPanel />}
-          {tab === 'prestige' && <PrestigePanel />}
+          {tab === 'town' && <TownPanel />}
+          {tab === 'guild' && <GuildPanel />}
+          {tab === 'map' && <MapPanel />}
+          {tab === 'inventory' && <InventoryPanel />}
+          {tab === 'timeline' && <TimelinePanel />}
           {tab === 'settings' && <SettingsPanel />}
         </main>
+
+        <StoryModal />
 
         {offlineReport && (
           <OfflineToast report={offlineReport} onDismiss={() => setOfflineReport(null)} />
@@ -63,12 +78,18 @@ function Header() {
   const fmt = useFormat();
   return (
     <header className="header">
-      <h1>⚡ Idle Energy</h1>
+      <h1>🛡 Guild of Second Chances</h1>
       <div className="energy-display">
-        <span className="energy-amount">{fmt(state.energy)}</span>
-        <span className="energy-label">energy</span>
+        <span className="energy-amount">{fmt(state.gold)}</span>
+        <span className="energy-label">gold</span>
       </div>
-      <div className="eps">{fmt(productionPerSecond(state))} /sec</div>
+      <div className="header-sub">
+        <span className="eps">{fmt(productionPerSecond(state))} /sec</span>
+        <span className="day-counter">Day {currentDay(state)}</span>
+        {(state.timeShards > 0 || state.prestigeCount > 0) && (
+          <span className="shard-counter">⏳ {fmt(state.timeShards)}</span>
+        )}
+      </div>
     </header>
   );
 }
@@ -83,8 +104,14 @@ function OfflineToast({
   const fmt = useFormat();
   return (
     <div className="offline-toast" onClick={onDismiss}>
-      Welcome back! You were away for {formatDuration(report.seconds)} and earned{' '}
-      <strong>{fmt(report.earnings)}</strong> energy. ✕
+      Welcome back! While you were away ({formatDuration(report.seconds)}), the town
+      earned <strong>{fmt(report.gold)}</strong> gold
+      {report.shards > 0 && (
+        <>
+          {' '}and your adventurers found <strong>{fmt(report.shards)}</strong> time shards
+        </>
+      )}
+      . ✕
     </div>
   );
 }

@@ -1,119 +1,142 @@
-import { DEFAULT_SETTINGS, GENERATORS } from './config';
+import {
+  CLICK_BASE_GOLD,
+  DAY_LENGTH_SECONDS,
+  DEFAULT_SETTINGS,
+  JOBS,
+  WORKER_BASE_COST,
+  WORKER_CAP,
+  WORKER_COST_GROWTH,
+  WORKER_PRODUCTION,
+} from './config';
 import { computeModifiers } from './perks';
-import type { GameState, Settings } from './types';
+import type { GameState, SaveData, Settings } from './types';
 
-/** Pure game logic: every function takes state and returns new state. */
+/** Town economy + state lifecycle. Every function is pure: (state) => state. */
 
 export function createInitialState(now = Date.now()): GameState {
   return {
-    energy: 0,
-    totalEnergyEarned: 0,
-    lifetimeEnergyEarned: 0,
-    generators: Object.fromEntries(GENERATORS.map((g) => [g.id, 0])),
-    clickPower: 1,
-    prestigePoints: 0,
+    act: 1,
+    gold: 0,
+    totalGoldEarned: 0,
+    lifetimeGoldEarned: 0,
+    clickPower: CLICK_BASE_GOLD,
+    jobs: Object.fromEntries(JOBS.map((j) => [j.id, 0])),
+    workers: 0,
+    materials: {},
+    adventurers: [],
+    inventory: [],
+    guildUpgrades: {},
+    expedition: null,
+    nextEntityId: 1,
+    locationsCleared: {},
+    bossesDefeated: {},
+    storyFlags: {},
+    pendingStories: ['a1-arrival'],
+    runTimeSeconds: 0,
+    timeShards: 0,
     prestigeCount: 0,
     perks: {},
+    hometownSaved: false,
     settings: { ...DEFAULT_SETTINGS },
     lastUpdate: now,
   };
 }
 
 /**
- * Fill in any fields missing from an older save so the app never reads
- * undefined. Runs on load, before offline progress. This is the migration
- * seam — extend it when the save shape changes.
+ * Load-time migration seam. The v2→v3 redesign (energy game → narrative guild
+ * game) shares no meaningful fields, so older saves start a fresh game.
  */
-export function normalizeState(partial: Partial<GameState>): GameState {
-  const base = createInitialState(partial.lastUpdate ?? Date.now());
+export function migrateSave(data: SaveData, now = Date.now()): GameState {
+  if (data.version < 3) return createInitialState(now);
+  const base = createInitialState(data.state.lastUpdate ?? now);
+  const s = data.state;
   return {
     ...base,
-    ...partial,
-    generators: { ...base.generators, ...(partial.generators ?? {}) },
-    perks: { ...base.perks, ...(partial.perks ?? {}) },
-    settings: { ...base.settings, ...(partial.settings ?? {}) },
+    ...s,
+    jobs: { ...base.jobs, ...(s.jobs ?? {}) },
+    materials: { ...(s.materials ?? {}) },
+    settings: { ...base.settings, ...(s.settings ?? {}) },
   };
 }
 
+// ---------------------------------------------------------------------------
+// Time
+// ---------------------------------------------------------------------------
+
+/** In-game day number, starting at day 1. */
+export function currentDay(state: GameState): number {
+  return Math.floor(state.runTimeSeconds / DAY_LENGTH_SECONDS) + 1;
+}
+
+// ---------------------------------------------------------------------------
+// Income
+// ---------------------------------------------------------------------------
+
 export function productionPerSecond(state: GameState): number {
-  const raw = GENERATORS.reduce(
-    (sum, g) => sum + g.baseProduction * (state.generators[g.id] ?? 0),
+  const fromJobs = JOBS.reduce(
+    (sum, j) => sum + j.baseProduction * (state.jobs[j.id] ?? 0),
     0,
   );
-  return raw * computeModifiers(state).productionMult;
+  const fromWorkers = state.workers * WORKER_PRODUCTION;
+  return (fromJobs + fromWorkers) * computeModifiers(state).productionMult;
 }
 
 export function effectiveClickPower(state: GameState): number {
   return state.clickPower * computeModifiers(state).clickMult;
 }
 
-export function generatorCost(state: GameState, generatorId: string): number {
-  const def = GENERATORS.find((g) => g.id === generatorId);
-  if (!def) return Infinity;
-  const owned = state.generators[generatorId] ?? 0;
-  const costMult = computeModifiers(state).costMult;
-  return Math.ceil(def.baseCost * Math.pow(def.costGrowth, owned) * costMult);
-}
-
-export function canAfford(state: GameState, generatorId: string): boolean {
-  return state.energy >= generatorCost(state, generatorId);
-}
-
-export function buyGenerator(state: GameState, generatorId: string): GameState {
-  const cost = generatorCost(state, generatorId);
-  if (state.energy < cost) return state;
+export function earnGold(state: GameState, amount: number): GameState {
   return {
     ...state,
-    energy: state.energy - cost,
-    generators: {
-      ...state.generators,
-      [generatorId]: (state.generators[generatorId] ?? 0) + 1,
-    },
+    gold: state.gold + amount,
+    totalGoldEarned: state.totalGoldEarned + amount,
   };
 }
 
 export function click(state: GameState): GameState {
-  return earn(state, effectiveClickPower(state));
+  return earnGold(state, effectiveClickPower(state));
 }
+
+// ---------------------------------------------------------------------------
+// Purchases
+// ---------------------------------------------------------------------------
+
+export function jobCost(state: GameState, jobId: string): number {
+  const def = JOBS.find((j) => j.id === jobId);
+  if (!def) return Infinity;
+  const owned = state.jobs[jobId] ?? 0;
+  const costMult = computeModifiers(state).costMult;
+  return Math.ceil(def.baseCost * Math.pow(def.costGrowth, owned) * costMult);
+}
+
+export function buyJob(state: GameState, jobId: string): GameState {
+  const cost = jobCost(state, jobId);
+  if (state.gold < cost) return state;
+  return {
+    ...state,
+    gold: state.gold - cost,
+    jobs: { ...state.jobs, [jobId]: (state.jobs[jobId] ?? 0) + 1 },
+  };
+}
+
+export function workerCost(state: GameState): number {
+  const costMult = computeModifiers(state).costMult;
+  return Math.ceil(
+    WORKER_BASE_COST * Math.pow(WORKER_COST_GROWTH, state.workers) * costMult,
+  );
+}
+
+export function hireWorker(state: GameState): GameState {
+  if (state.workers >= WORKER_CAP) return state;
+  const cost = workerCost(state);
+  if (state.gold < cost) return state;
+  return { ...state, gold: state.gold - cost, workers: state.workers + 1 };
+}
+
+// ---------------------------------------------------------------------------
+// Settings
+// ---------------------------------------------------------------------------
 
 export function updateSettings(state: GameState, patch: Partial<Settings>): GameState {
   return { ...state, settings: { ...state.settings, ...patch } };
-}
-
-/** Advance the simulation by dt seconds. */
-export function tick(state: GameState, dtSeconds: number, now = Date.now()): GameState {
-  const gained = productionPerSecond(state) * dtSeconds;
-  return { ...earn(state, gained), lastUpdate: now };
-}
-
-/**
- * Catch up production for time elapsed since the save's lastUpdate.
- * Returns the new state and how much was earned, so the UI can show
- * a "welcome back" message. Respects the offline-progress setting and the
- * offline cap (which the Night Shift perk can raise).
- */
-export function applyOfflineProgress(
-  state: GameState,
-  now = Date.now(),
-): { state: GameState; offlineSeconds: number; offlineEarnings: number } {
-  if (!state.settings.offlineProgress) {
-    return { state: { ...state, lastUpdate: now }, offlineSeconds: 0, offlineEarnings: 0 };
-  }
-  const capHours = computeModifiers(state).offlineCapHours;
-  const elapsed = Math.max(0, (now - state.lastUpdate) / 1000);
-  const credited = Math.min(elapsed, capHours * 3600);
-  const earnings = productionPerSecond(state) * credited;
-  return {
-    state: { ...earn(state, earnings), lastUpdate: now },
-    offlineSeconds: credited,
-    offlineEarnings: earnings,
-  };
-}
-
-function earn(state: GameState, amount: number): GameState {
-  return {
-    ...state,
-    energy: state.energy + amount,
-    totalEnergyEarned: state.totalEnergyEarned + amount,
-  };
 }

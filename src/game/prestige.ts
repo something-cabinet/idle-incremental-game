@@ -1,55 +1,37 @@
-import {
-  PRESTIGE_DIVISOR,
-  PRESTIGE_EXPONENT,
-  PRESTIGE_UNLOCK_ENERGY,
-} from './config';
+import { DEMON_KING_ID } from './config';
 import { createInitialState } from './logic';
-import { computeModifiers } from './perks';
 import type { GameState } from './types';
 
 /**
- * Prestige loop: reset the current run in exchange for permanent prestige
- * points, which are spent in the perk/skill menu. Kept separate from the base
- * loop so it's easy to re-theme (e.g. "Ascend", "Rebirth") without touching it.
+ * Prestige = time travel. After defeating the demon king, the player uses the
+ * time crystal to start a new timeline. Time Shards, perks, settings, and
+ * lifetime stats persist; the town, guild, and story reset.
+ * (Shards are found by adventurers and awarded by bosses — there is no
+ * computed prestige-gain formula in this design.)
  */
 
-/** How many prestige points a reset would grant right now. */
-export function prestigeGain(state: GameState): number {
-  const raw = Math.pow(state.totalEnergyEarned / PRESTIGE_DIVISOR, PRESTIGE_EXPONENT);
-  const withPerks = raw * computeModifiers(state).prestigeGainMult;
-  return Math.max(0, Math.floor(withPerks));
+export function canTimeTravel(state: GameState): boolean {
+  return !!state.bossesDefeated[DEMON_KING_ID];
 }
 
-/** Whether the player has unlocked prestige and would gain at least 1 point. */
-export function canPrestige(state: GameState): boolean {
-  return (
-    state.totalEnergyEarned >= PRESTIGE_UNLOCK_ENERGY && prestigeGain(state) >= 1
-  );
+/** Prestige/timeline UI becomes visible once the king has fallen once, ever. */
+export function isTimeTravelUnlocked(state: GameState): boolean {
+  return state.prestigeCount > 0 || canTimeTravel(state);
 }
 
-/** Whether the prestige feature has ever been available (for UI reveal). */
-export function isPrestigeUnlocked(state: GameState): boolean {
-  return (
-    state.prestigeCount > 0 ||
-    state.lifetimeEnergyEarned >= PRESTIGE_UNLOCK_ENERGY ||
-    state.totalEnergyEarned >= PRESTIGE_UNLOCK_ENERGY
-  );
-}
-
-/**
- * Perform a prestige: wipe the run but keep prestige points, perks, settings,
- * and lifetime stats. A no-op if the player can't prestige yet.
- */
-export function performPrestige(state: GameState, now = Date.now()): GameState {
-  if (!canPrestige(state)) return state;
-  const gain = prestigeGain(state);
+export function timeTravel(state: GameState, now = Date.now()): GameState {
+  if (!canTimeTravel(state)) return state;
   const fresh = createInitialState(now);
   return {
     ...fresh,
-    prestigePoints: state.prestigePoints + gain,
+    timeShards: state.timeShards,
     prestigeCount: state.prestigeCount + 1,
-    lifetimeEnergyEarned: state.lifetimeEnergyEarned + state.totalEnergyEarned,
+    lifetimeGoldEarned: state.lifetimeGoldEarned + state.totalGoldEarned,
     perks: state.perks,
+    hometownSaved: state.hometownSaved,
     settings: state.settings,
+    // Returning travelers skip the intro beat; they've lived this before.
+    storyFlags: { 'a1-arrival': true },
+    pendingStories: [],
   };
 }
