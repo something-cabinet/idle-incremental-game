@@ -13,6 +13,7 @@ import {
   recallAdventurer,
   rosterCap,
   sellItem,
+  sellItems,
 } from './guild';
 import { createInitialState } from './logic';
 import { buyPerk } from './perks';
@@ -73,6 +74,17 @@ describe('equipment', () => {
     s = sellItem(s, 99);
     expect(s.inventory).toHaveLength(0);
     expect(s.gold).toBeGreaterThan(0);
+  });
+
+  it('bulk selling removes only the given items and sums the gold', () => {
+    let s = guildState();
+    const items = [generateEquipment(1, 1, mid), generateEquipment(2, 1, mid), generateEquipment(3, 1, mid)];
+    s = { ...s, inventory: items, gold: 0 };
+    const single = sellItem(s, 1).gold + sellItem(s, 2).gold;
+    s = sellItems(s, [1, 2, 999]);
+    expect(s.inventory.map((i) => i.id)).toEqual([3]);
+    expect(s.gold).toBe(single);
+    expect(sellItems(s, [999])).toBe(s);
   });
 });
 

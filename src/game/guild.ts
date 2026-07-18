@@ -148,6 +148,19 @@ export function sellItem(state: GameState, itemId: number): GameState {
   };
 }
 
+export function sellItems(state: GameState, itemIds: number[]): GameState {
+  const ids = new Set(itemIds);
+  const sold = state.inventory.filter((i) => ids.has(i.id));
+  if (sold.length === 0) return state;
+  const gold = sold.reduce((sum, i) => sum + RARITY_SELL_GOLD[i.rarity], 0);
+  return {
+    ...state,
+    inventory: state.inventory.filter((i) => !ids.has(i.id)),
+    gold: state.gold + gold,
+    totalGoldEarned: state.totalGoldEarned + gold,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Locations & assignments
 // ---------------------------------------------------------------------------

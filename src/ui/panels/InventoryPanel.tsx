@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { MATERIALS, RARITY_SELL_GOLD } from '../../game/config';
-import { equipItem, sellItem, unequipItem } from '../../game/guild';
+import { equipItem, sellItem, sellItems, unequipItem } from '../../game/guild';
 import type { EquipSlot, Equipment, Rarity } from '../../game/types';
 import { useFormat } from '../../hooks/useFormat';
 import { useGameState, useGameStore } from '../../hooks/useGame';
@@ -50,6 +50,8 @@ export function InventoryPanel() {
   const [sortMode, setSortMode] = useState<SortMode>('newest');
   const [rarityFilter, setRarityFilter] = useState<Rarity | 'all'>('all');
   const [slotFilter, setSlotFilter] = useState<EquipSlot | 'all'>('all');
+  const [openMenu, setOpenMenu] = useState<'sort' | 'filter' | null>(null);
+  const [confirmBulkSell, setConfirmBulkSell] = useState(false);
 
   const visibleItems = sortInventory(
     state.inventory.filter(
@@ -74,6 +76,20 @@ export function InventoryPanel() {
     }
   };
 
+  const bulkSellGold = visibleItems.reduce(
+    (sum, item) => sum + RARITY_SELL_GOLD[item.rarity],
+    0,
+  );
+
+  const handleBulkSell = () => {
+    const ids = visibleItems.map((i) => i.id);
+    store.dispatch((s) => sellItems(s, ids));
+    if (selected && ids.includes(selected.id)) setSelected(null);
+    setConfirmBulkSell(false);
+  };
+
+  const filterActive = rarityFilter !== 'all' || slotFilter !== 'all';
+
   return (
     <div className="panel">
       <section className="rows">
@@ -92,43 +108,77 @@ export function InventoryPanel() {
         <h3 className="section-title">Equipment ({state.inventory.length})</h3>
 
         <div className="equip-toolbar">
-          <label className="equip-toolbar-control">
-            <span className="equip-toolbar-label">Sort</span>
-            <select
-              value={sortMode}
-              onChange={(e) => setSortMode(e.target.value as SortMode)}
+          <div className="equip-menu-wrap">
+            <button
+              className={`small-button${sortMode !== 'newest' ? ' active' : ''}`}
+              onClick={() => setOpenMenu(openMenu === 'sort' ? null : 'sort')}
             >
-              {(Object.keys(SORT_LABEL) as SortMode[]).map((mode) => (
-                <option key={mode} value={mode}>
-                  {SORT_LABEL[mode]}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="equip-toolbar-control">
-            <span className="equip-toolbar-label">Rarity</span>
-            <select
-              value={rarityFilter}
-              onChange={(e) => setRarityFilter(e.target.value as Rarity | 'all')}
+              Sort: {SORT_LABEL[sortMode]} ▾
+            </button>
+            {openMenu === 'sort' && (
+              <>
+                <div className="equip-menu-backdrop" onClick={() => setOpenMenu(null)} />
+                <div className="equip-menu">
+                  {(Object.keys(SORT_LABEL) as SortMode[]).map((mode) => (
+                    <button
+                      key={mode}
+                      className={`equip-menu-option${sortMode === mode ? ' active' : ''}`}
+                      onClick={() => {
+                        setSortMode(mode);
+                        setOpenMenu(null);
+                      }}
+                    >
+                      {SORT_LABEL[mode]}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="equip-menu-wrap">
+            <button
+              className={`small-button${filterActive ? ' active' : ''}`}
+              onClick={() => setOpenMenu(openMenu === 'filter' ? null : 'filter')}
             >
-              <option value="all">All</option>
-              <option value="common">Common</option>
-              <option value="rare">Rare</option>
-              <option value="epic">Epic</option>
-            </select>
-          </label>
-          <label className="equip-toolbar-control">
-            <span className="equip-toolbar-label">Type</span>
-            <select
-              value={slotFilter}
-              onChange={(e) => setSlotFilter(e.target.value as EquipSlot | 'all')}
-            >
-              <option value="all">All</option>
-              <option value="weapon">Weapon</option>
-              <option value="armor">Armor</option>
-              <option value="trinket">Trinket</option>
-            </select>
-          </label>
+              Filter{filterActive ? ' ●' : ''} ▾
+            </button>
+            {openMenu === 'filter' && (
+              <>
+                <div className="equip-menu-backdrop" onClick={() => setOpenMenu(null)} />
+                <div className="equip-menu">
+                  <div className="equip-menu-group">Rarity</div>
+                  {(['all', 'common', 'rare', 'epic'] as const).map((r) => (
+                    <button
+                      key={r}
+                      className={`equip-menu-option${rarityFilter === r ? ' active' : ''}`}
+                      onClick={() => setRarityFilter(r)}
+                    >
+                      {r === 'all' ? 'All rarities' : r}
+                    </button>
+                  ))}
+                  <div className="equip-menu-group">Type</div>
+                  {(['all', 'weapon', 'armor', 'trinket'] as const).map((s) => (
+                    <button
+                      key={s}
+                      className={`equip-menu-option${slotFilter === s ? ' active' : ''}`}
+                      onClick={() => setSlotFilter(s)}
+                    >
+                      {s === 'all' ? 'All types' : `${SLOT_ICON[s]} ${s}`}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+
+          <button
+            className="small-button danger"
+            disabled={visibleItems.length === 0}
+            onClick={() => setConfirmBulkSell(true)}
+          >
+            Sell {filterActive ? 'filtered' : 'all'} ({visibleItems.length})
+          </button>
         </div>
 
         {selected && (
@@ -219,6 +269,26 @@ export function InventoryPanel() {
           </div>
         ))}
       </section>
+
+      {confirmBulkSell && (
+        <div className="story-overlay" onClick={() => setConfirmBulkSell(false)}>
+          <div className="story-modal" onClick={(e) => e.stopPropagation()}>
+            <h2 className="story-title">Sell {visibleItems.length} items?</h2>
+            <p className="story-text">
+              This will sell {filterActive ? 'every item matching the current filters' : 'your entire equipment inventory'}{' '}
+              for {fmt(bulkSellGold)}🪙. This cannot be undone.
+            </p>
+            <div className="equip-detail-actions">
+              <button className="small-button danger" onClick={handleBulkSell}>
+                Sell for {fmt(bulkSellGold)}🪙
+              </button>
+              <button className="small-button" onClick={() => setConfirmBulkSell(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

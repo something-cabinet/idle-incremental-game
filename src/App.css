@@ -668,43 +668,103 @@ button.row:disabled {
   background: rgba(192, 126, 255, 0.12);
 }
 
-.equip-grid-item:hover {
-  background: var(--panel-hover);
+/* Hover/focus/selected brighten the item without hiding its rarity tint. */
+.equip-grid-item:hover,
+.equip-grid-item:focus-visible {
+  filter: brightness(1.25);
+}
+
+.equip-grid-item.item-common:hover,
+.equip-grid-item.item-common:focus-visible {
+  background: rgba(161, 153, 127, 0.16);
+}
+
+.equip-grid-item.item-rare:hover,
+.equip-grid-item.item-rare:focus-visible {
+  background: rgba(111, 168, 255, 0.2);
+}
+
+.equip-grid-item.item-epic:hover,
+.equip-grid-item.item-epic:focus-visible {
+  background: rgba(192, 126, 255, 0.2);
 }
 
 .equip-grid-item.selected {
-  border-color: var(--accent);
-  background: var(--panel-hover);
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
 }
 
 .equip-toolbar {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
-}
-
-.equip-toolbar-control {
-  display: flex;
   align-items: center;
-  gap: 6px;
 }
 
-.equip-toolbar-label {
-  font-size: 0.7rem;
+.equip-menu-wrap {
+  position: relative;
+}
+
+.equip-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+}
+
+.equip-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 6;
+  min-width: 150px;
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  gap: 2px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.equip-menu-group {
+  padding: 6px 8px 2px;
+  font-size: 0.65rem;
+  font-weight: 600;
   color: var(--text-dim);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
-.equip-toolbar select {
-  background: var(--panel);
+.equip-menu-option {
+  padding: 6px 8px;
+  border: none;
+  border-radius: 6px;
+  background: none;
   color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 4px 8px;
   font: inherit;
-  font-size: 0.8rem;
+  font-size: 0.82rem;
+  text-align: left;
+  text-transform: capitalize;
   cursor: pointer;
+}
+
+.equip-menu-option:hover {
+  background: var(--panel-hover);
+}
+
+.equip-menu-option.active {
+  background: var(--panel-hover);
+  color: var(--accent);
+}
+
+.equip-menu-option.active::after {
+  content: ' ✓';
+}
+
+.small-button.active {
+  border-color: var(--accent-dim);
+  color: var(--accent);
 }
 
 .equip-grid-slot {
