@@ -103,8 +103,11 @@ function processAdventurer(
 
   // Auto-reassign: if the adventurer has recovered from injury and has a
   // lastAssignment, send them back to the same location/mode.
+  // Use injuredUntil as the base time so offline progression properly credits
+  // work done from the recovery moment onward, not just from the tick end.
   let current = adv;
   const nowSec = state.runTimeSeconds;
+  const resumeAt = Math.max(current.injuredUntil, 0); // recovery moment, or 0 if never injured
   if (!current.assignment && current.lastAssignment && !isInjured(current, nowSec)) {
     const lastLoc = locationDef(current.lastAssignment.locationId);
     if (lastLoc && lastLoc.kind === 'zone') {
@@ -115,9 +118,9 @@ function processAdventurer(
           mode: current.lastAssignment.mode,
           questEndsAt:
             current.lastAssignment.mode === 'quest'
-              ? nowSec + lastLoc.questDuration
+              ? resumeAt + lastLoc.questDuration
               : undefined,
-          lastEncounterAt: nowSec,
+          lastEncounterAt: resumeAt,
         },
         lastAssignment: null, // clear so we don't loop on re-injury
       };
@@ -355,18 +358,46 @@ export function applyOfflineProgress(
   state: GameState,
   now = Date.now(),
   rng: Rng = Math.random,
-): { state: GameState; offlineSeconds: number; goldEarned: number; shardsFound: number } {
+): {
+  state: GameState;
+  offlineSeconds: number;
+  goldEarned: number;
+  shardsFound: number;
+  materialsGained: Record<string, number>;
+  equipmentGained: number;
+} {
   if (!state.settings.offlineProgress) {
-    return { state: { ...state, lastUpdate: now }, offlineSeconds: 0, goldEarned: 0, shardsFound: 0 };
+    return {
+      state: { ...state, lastUpdate: now },
+      offlineSeconds: 0,
+      goldEarned: 0,
+      shardsFound: 0,
+      materialsGained: {},
+      equipmentGained: 0,
+    };
   }
   const capHours = computeModifiers(state).offlineCapHours;
   const elapsed = Math.max(0, (now - state.lastUpdate) / 1000);
   const credited = Math.min(elapsed, capHours * 3600);
   const next = tick(state, credited, now, rng);
+
+  // Diff materials
+  const materialsGained: Record<string, number> = {};
+  for (const key of new Set([...Object.keys(state.materials), ...Object.keys(next.materials)])) {
+    const before = state.materials[key] ?? 0;
+    const after = next.materials[key] ?? 0;
+    if (after > before) materialsGained[key] = after - before;
+  }
+
+  // Diff equipment (inventory items that appeared)
+  const equipmentGained = next.inventory.length - state.inventory.length;
+
   return {
     state: next,
     offlineSeconds: credited,
     goldEarned: next.totalGoldEarned - state.totalGoldEarned,
     shardsFound: next.timeShards - state.timeShards,
+    materialsGained,
+    equipmentGained,
   };
 }

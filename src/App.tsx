@@ -26,19 +26,21 @@ interface OfflineReport {
   seconds: number;
   gold: number;
   shards: number;
+  materials: Record<string, number>;
+  equipment: number;
 }
 
 function initGame(): { store: GameStore; offline: OfflineReport | null } {
   const saved = localStorageAdapter.load();
   if (!saved) return { store: new GameStore(createInitialState()), offline: null };
   const migrated = migrateSave(saved);
-  const { state, offlineSeconds, goldEarned, shardsFound } =
+  const { state, offlineSeconds, goldEarned, shardsFound, materialsGained, equipmentGained } =
     applyOfflineProgress(migrated);
   return {
     store: new GameStore(state),
     offline:
-      offlineSeconds > 60 && goldEarned > 0
-        ? { seconds: offlineSeconds, gold: goldEarned, shards: shardsFound }
+      offlineSeconds > 60 && (goldEarned > 0 || Object.keys(materialsGained).length > 0 || equipmentGained > 0)
+        ? { seconds: offlineSeconds, gold: goldEarned, shards: shardsFound, materials: materialsGained, equipment: equipmentGained }
         : null,
   };
 }
@@ -108,6 +110,16 @@ function Header() {
   );
 }
 
+function materialName(id: string): string {
+  const names: Record<string, string> = {
+    'beast-pelt': 'Beast Pelt',
+    'iron-ore': 'Iron Ore',
+    'spirit-essence': 'Spirit Essence',
+    'demon-ash': 'Demon Ash',
+  };
+  return names[id] ?? id;
+}
+
 function OfflineToast({
   report,
   onDismiss,
@@ -121,13 +133,24 @@ function OfflineToast({
     if (state.settings.sfxEnabled) playNotify();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  const materialEntries = Object.entries(report.materials);
   return (
     <div className="offline-toast" onClick={onDismiss}>
       Welcome back! While you were away ({formatDuration(report.seconds)}), the town
       earned <strong>{fmt(report.gold)}</strong> gold
+      {materialEntries.length > 0 && (
+        <>
+          , <strong>{materialEntries.map(([id, n]) => `${n} ${materialName(id)}`).join(', ')}</strong>
+        </>
+      )}
+      {report.equipment > 0 && (
+        <>
+          {' '}and <strong>{report.equipment}</strong> piece{report.equipment > 1 ? 's' : ''} of equipment
+        </>
+      )}
       {report.shards > 0 && (
         <>
-          {' '}and your adventurers found <strong>{fmt(report.shards)}</strong> time shards
+          {' '}and <strong>{fmt(report.shards)}</strong> time shard{report.shards > 1 ? 's' : ''}
         </>
       )}
       . ✕

@@ -303,3 +303,63 @@ describe('expeditions & prestige', () => {
     expect(adventurerPower(s, a30)).toBeGreaterThan(adventurerPower(s, a1));
   });
 });
+
+describe('offline progression', () => {
+  it('patroller who recovers during offline gets credit for encounters from recovery moment', () => {
+    let s = withAdventurer(guildState());
+    s = assignAdventurer(s, s.adventurers[0].id, 'forest-edge', 'patrol');
+    // Injure the adventurer (tier 1 → 180s injury)
+    s = tick(s, ENCOUNTER_INTERVAL, 0, alwaysLose);
+    const injuredUntil = s.adventurers[0].injuredUntil;
+    expect(injuredUntil).toBeGreaterThan(s.runTimeSeconds);
+    // Now simulate an offline tick where the adventurer recovers partway through.
+    // Set runTimeSeconds so the injury recovers mid-way: advance 280s (heals at 180, so 100s of work left)
+    const offlineDuration = 280;
+    s = tick(s, offlineDuration, 0, alwaysWin);
+    // The adventurer should have been auto-reassigned from their injuredUntil moment (t=200)
+    // and processed encounters from t=200 to t=280 (80 seconds → 4 encounters at 20s intervals)
+    expect(s.adventurers[0].assignment).not.toBeNull();
+    expect(s.adventurers[0].assignment!.mode).toBe('patrol');
+    // Should have earned gold from patrols during the offline period
+    const patrolLogs = s.activityLog.filter((e) => e.kind === 'patrol');
+    expect(patrolLogs.length).toBeGreaterThanOrEqual(1);
+    // Gold should be at least from the online tick + offline work (after recovery)
+    // Online encounter (injury happened): 5 gold
+    // Offline work after recovery: ~4 encounters * 5 gold = 20 gold
+    expect(s.gold).toBeGreaterThanOrEqual(25);
+  });
+
+  it('quest-capable adventurer who recovers during offline resolves quest for full reward', () => {
+    let s = withAdventurer(guildState());
+    s = assignAdventurer(s, s.adventurers[0].id, 'forest-edge', 'quest');
+    // Injure during quest (tier 1 → 180s)
+    s = tick(s, 5, 0, alwaysLose);
+    const injuredUntil = s.adventurers[0].injuredUntil;
+    // Advance offline: wait 400s total — 180s to heal + 60s quest duration + 160s patrol time
+    // The quest started at t=5, so at recovery (t=185) the quest is set to end at t=245.
+    // Since we go to t=405, the quest resolves at t=245 and then patrols happen from t=245 to t=405.
+    const offlineDuration = 400;
+    s = tick(s, offlineDuration, 0, alwaysWin);
+    // Should have completed the quest (cleared the zone)
+    expect(s.locationsCleared['forest-edge']).toBe(true);
+    // Should have gold from quest reward + patrols
+    const questLog = s.activityLog.find((e) => e.kind === 'quest');
+    expect(questLog).toBeDefined();
+    const questText = questLog!.text;
+    expect(questText).toContain('150 gold'); // QUEST.goldPerTier * 1
+  });
+
+  it('adventurer who never gets injured still works through entire offline period', () => {
+    let s = withAdventurer(guildState());
+    s = assignAdventurer(s, s.adventurers[0].id, 'forest-edge', 'patrol');
+    const goldBefore = s.totalGoldEarned;
+    // Process 500 seconds of offline work (guaranteed success)
+    s = tick(s, 500, 0, alwaysWin);
+    // 500s / 20s per encounter = 25 encounters
+    // Each encounter: 5 gold → 125 gold
+    expect(s.totalGoldEarned - goldBefore).toBeGreaterThanOrEqual(100);
+    // All patrols should be logged as a single grouped line
+    const patrolLogs = s.activityLog.filter((e) => e.kind === 'patrol');
+    expect(patrolLogs.length).toBe(1);
+  });
+});
