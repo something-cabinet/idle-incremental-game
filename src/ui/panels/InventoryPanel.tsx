@@ -11,6 +11,13 @@ const SLOT_ICON: Record<EquipSlot, string> = {
   trinket: '💍',
 };
 
+const MATERIAL_ICON: Record<string, string> = {
+  'beast-pelt': '🐾',
+  'iron-ore': '⛏️',
+  'spirit-essence': '✨',
+  'demon-ash': '🔥',
+};
+
 type SortMode = 'newest' | 'rarity' | 'atk' | 'def';
 
 const SORT_LABEL: Record<SortMode, string> = {
@@ -94,11 +101,12 @@ export function InventoryPanel() {
     <div className="panel">
       <section className="rows">
         <h3 className="section-title">Materials</h3>
-        <div className="materials-grid">
+        <div className="materials-list">
           {MATERIALS.map((mat) => (
-            <div key={mat.id} className="stat">
-              <span className="stat-value">{fmt(state.materials[mat.id] ?? 0)}</span>
-              <span className="stat-label">{mat.name}</span>
+            <div key={mat.id} className="materials-list-item">
+              <span className="materials-list-icon">{MATERIAL_ICON[mat.id] ?? '❔'}</span>
+              <span className="materials-list-name">{mat.name}</span>
+              <span className="materials-list-qty">{fmt(state.materials[mat.id] ?? 0)}</span>
             </div>
           ))}
         </div>

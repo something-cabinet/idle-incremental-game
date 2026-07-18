@@ -578,10 +578,36 @@ button.row:disabled {
 }
 
 /* ---- Inventory ---- */
-.materials-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
+.materials-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.materials-list-item {
+  display: flex;
+  align-items: center;
   gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.materials-list-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.materials-list-name {
+  flex: 1;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.materials-list-qty {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 .stat {
