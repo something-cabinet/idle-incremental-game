@@ -103,7 +103,7 @@ export function currentDay(state: GameState): number {
 export function productionPerSecond(state: GameState): number {
   const skills = computeTownSkillBonuses(state);
   const fromJobs = JOBS.reduce(
-    (sum, j) => sum + j.baseProduction * (state.jobs[j.id] ?? 0),
+    (sum, j) => sum + (j.baseProduction / j.jobDurationSeconds) * (state.jobs[j.id] ?? 0),
     0,
   );
   const fromWorkers = state.workers * WORKER_PRODUCTION;
@@ -156,6 +156,9 @@ export function jobCost(state: GameState, jobId: string, count = 1): number {
 }
 
 export function buyJob(state: GameState, jobId: string, count = 1): GameState {
+  const def = JOBS.find((j) => j.id === jobId);
+  if (!def) return state;
+  if (def.requiresUpgrade && (state.guildUpgrades[def.requiresUpgrade] ?? 0) < 1) return state;
   const cost = jobCost(state, jobId, count);
   if (state.gold < cost) return state;
   return {

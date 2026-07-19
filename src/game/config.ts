@@ -43,13 +43,13 @@ export const SAVE_VERSION = 5;
 // ---------------------------------------------------------------------------
 
 export const JOBS: JobDef[] = [
-  { id: 'errands', name: 'Run Errands', description: 'Fetch, carry, repeat.', baseCost: 5, costGrowth: 1.15, baseProduction: 0.35 },
-  { id: 'stall', name: 'Market Stall', description: 'Sell whatever sells.', baseCost: 25, costGrowth: 1.15, baseProduction: 2 },
-  { id: 'garden', name: 'Herb Garden', description: 'Healers pay well.', baseCost: 150, costGrowth: 1.15, baseProduction: 11 },
-  { id: 'workshop', name: 'Workshop', description: 'Tools for the town.', baseCost: 900, costGrowth: 1.15, baseProduction: 55 },
-  { id: 'caravan', name: 'Trade Caravan', description: 'Goods to distant markets.', baseCost: 15_000, costGrowth: 1.15, baseProduction: 180 },
-  { id: 'bank', name: 'Money Lender', description: 'Coin breeds coin.', baseCost: 90_000, costGrowth: 1.15, baseProduction: 900 },
-  { id: 'trade-guild', name: 'Trading Company', description: 'Ships on every horizon.', baseCost: 550_000, costGrowth: 1.15, baseProduction: 4_500 },
+  { id: 'errands', name: 'Run Errands', description: 'Fetch, carry, repeat.', baseCost: 5, costGrowth: 1.15, baseProduction: 0.35, jobDurationSeconds: 1 },
+  { id: 'stall', name: 'Market Stall', description: 'Sell whatever sells.', baseCost: 25, costGrowth: 1.15, baseProduction: 6, jobDurationSeconds: 3 },
+  { id: 'garden', name: 'Herb Garden', description: 'Healers pay well.', baseCost: 150, costGrowth: 1.15, baseProduction: 66, jobDurationSeconds: 6 },
+  { id: 'workshop', name: 'Workshop', description: 'Tools for the town.', baseCost: 900, costGrowth: 1.15, baseProduction: 550, jobDurationSeconds: 10 },
+  { id: 'caravan', name: 'Trade Caravan', description: 'Goods to distant markets.', baseCost: 15_000, costGrowth: 1.15, baseProduction: 2_700, jobDurationSeconds: 15, requiresUpgrade: 'unlock-caravan' },
+  { id: 'bank', name: 'Money Lender', description: 'Coin breeds coin.', baseCost: 90_000, costGrowth: 1.15, baseProduction: 22_500, jobDurationSeconds: 25, requiresUpgrade: 'unlock-bank' },
+  { id: 'trade-guild', name: 'Trading Company', description: 'Ships on every horizon.', baseCost: 550_000, costGrowth: 1.15, baseProduction: 180_000, jobDurationSeconds: 40, requiresUpgrade: 'unlock-trade-guild' },
 ];
 
 export const CLICK_BASE_GOLD = 1;
@@ -321,6 +321,22 @@ export const GUILD_UPGRADES: GuildUpgradeDef[] = [
     id: 'training-yard', name: 'Training Yard', maxLevel: 5,
     description: 'Adventurers gain +15% XP per level.',
     baseCostGold: 1_200, costGrowth: 2.2, materials: { 'beast-pelt': 5, 'iron-ore': 5 },
+  },
+  // ---- Job unlocks (one-time) ----
+  {
+    id: 'unlock-caravan', name: 'Trade Routes', maxLevel: 1,
+    description: 'Unlock the Trade Caravan job.',
+    baseCostGold: 8_000, costGrowth: 1, materials: { 'beast-pelt': 5 },
+  },
+  {
+    id: 'unlock-bank', name: 'Coin Lending', maxLevel: 1,
+    description: 'Unlock the Money Lender job.',
+    baseCostGold: 50_000, costGrowth: 1, materials: { 'iron-ore': 10 },
+  },
+  {
+    id: 'unlock-trade-guild', name: 'Merchant Guild', maxLevel: 1,
+    description: 'Unlock the Trading Company job.',
+    baseCostGold: 300_000, costGrowth: 1, materials: { 'iron-ore': 20, 'spirit-essence': 5 },
   },
 ];
 

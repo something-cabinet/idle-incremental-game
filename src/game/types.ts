@@ -13,8 +13,12 @@ export interface JobDef {
   description: string;
   baseCost: number;
   costGrowth: number;
-  /** Gold produced per second per unit */
+  /** Gold produced per job completion */
   baseProduction: number;
+  /** Seconds per job cycle */
+  jobDurationSeconds: number;
+  /** Guild upgrade id that must be purchased to unlock this job (one-time) */
+  requiresUpgrade?: string;
 }
 
 // ---------------------------------------------------------------------------

@@ -109,7 +109,8 @@ function JobsSection({
           const owned = state.jobs[job.id] ?? 0;
           const cost = jobCost(state, job.id, buyAmount);
           const affordable = state.gold >= cost;
-          const revealed = owned > 0 || state.totalGoldEarned >= job.baseCost * 0.5;
+          const unlocked = !job.requiresUpgrade || (state.guildUpgrades[job.requiresUpgrade] ?? 0) >= 1;
+          const revealed = unlocked && (owned > 0 || state.totalGoldEarned >= job.baseCost * 0.5);
           if (!revealed) return <div key={job.id} className="row locked">???</div>;
           return (
             <button
@@ -124,8 +125,8 @@ function JobsSection({
                 </span>
                 <span className="row-desc">{job.description}</span>
                 <span className="row-good">
-                  {fmt(job.baseProduction)} /sec each
-                  {owned > 0 && ` · ${fmt(job.baseProduction * owned)} /sec`}
+                  {fmt(job.baseProduction)} gold / {job.jobDurationSeconds}s each
+                  {owned > 0 && ` · ${fmt(job.baseProduction * owned / job.jobDurationSeconds)} /sec`}
                 </span>
               </div>
               <div className="row-cost">
