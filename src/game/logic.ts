@@ -1,4 +1,7 @@
+import { maxHp } from './adventurers';
 import {
+  ATTRIBUTES,
+  CLASS_DEFS,
   CLICK_BASE_GOLD,
   DAY_LENGTH_SECONDS,
   DEFAULT_SETTINGS,
@@ -11,7 +14,7 @@ import {
 } from './config';
 import { computeModifiers } from './perks';
 import { computeTownSkillBonuses } from './skills';
-import type { GameState, SaveData, Settings } from './types';
+import type { Adventurer, Attributes, GameState, SaveData, Settings } from './types';
 
 /** Town economy + state lifecycle. Every function is pure: (state) => state. */
 
@@ -54,6 +57,7 @@ export function migrateSave(data: SaveData, now = Date.now()): GameState {
   if (data.version < 3) return createInitialState(now);
   const base = createInitialState(data.state.lastUpdate ?? now);
   const s = data.state;
+  const preV5 = data.version < 5;
   return {
     ...base,
     ...s,
@@ -62,13 +66,25 @@ export function migrateSave(data: SaveData, now = Date.now()): GameState {
     townSkills: { ...(s.townSkills ?? {}) },
     activityLog: s.activityLog ?? [],
     settings: { ...base.settings, ...(s.settings ?? {}) },
-    // v3/4 adventurers predate injuredDuration and lastAssignment
-    adventurers: (s.adventurers ?? []).map((a) => ({
-      ...a,
-      injuredDuration: a.injuredDuration ?? 0,
-      lastAssignment: 'lastAssignment' in a ? a.lastAssignment : null,
-    })),
+    // v5 introduced the attribute/HP combat model and typed equipment. Old
+    // items can't map to the new equipment types, so pre-v5 inventory and
+    // equipped gear are dropped; adventurers gain fresh attributes + HP.
+    inventory: preV5 ? [] : (s.inventory ?? []),
+    adventurers: (s.adventurers ?? []).map((a) => migrateAdventurer(a, preV5)),
   };
+}
+
+function migrateAdventurer(a: Adventurer, preV5: boolean): Adventurer {
+  const patched: Adventurer = {
+    ...a,
+    injuredDuration: a.injuredDuration ?? 0,
+    lastAssignment: 'lastAssignment' in a ? a.lastAssignment : null,
+  };
+  if (!preV5) return patched;
+  const attributes = { ...CLASS_DEFS[patched.className].base } as Attributes;
+  for (const { id } of ATTRIBUTES) attributes[id] = attributes[id] ?? 1;
+  const migrated: Adventurer = { ...patched, attributes, equipment: {}, hp: 0 };
+  return { ...migrated, hp: maxHp(migrated) };
 }
 
 // ---------------------------------------------------------------------------

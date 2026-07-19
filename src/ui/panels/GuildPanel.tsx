@@ -1,6 +1,12 @@
 import { useState } from 'react';
-import { adventurerStats, isInjured } from '../../game/adventurers';
 import {
+  adventurerStats,
+  effectiveAttributes,
+  isInjured,
+  maxHp,
+} from '../../game/adventurers';
+import {
+  ATTRIBUTES,
   CLASS_DEFS,
   DAY_LENGTH_SECONDS,
   ENCOUNTER_INTERVAL,
@@ -24,6 +30,7 @@ import {
 import type { Adventurer, EquipSlot, GameState, LogEntry } from '../../game/types';
 import { useFormat } from '../../hooks/useFormat';
 import { useGameState, useGameStore } from '../../hooks/useGame';
+import { itemIcon, itemStatParts, itemTypeLabel } from '../itemDisplay';
 
 export function GuildPanel() {
   const state = useGameState();
@@ -191,6 +198,9 @@ function AdventurerCard({ adv, onOpen }: { adv: Adventurer; onOpen: () => void }
   const state = useGameState();
   const { atk, def } = adventurerStats(adv);
   const injured = isInjured(adv, state.runTimeSeconds);
+  const hpMax = maxHp(adv);
+  const hpNow = injured ? 0 : Math.round(adv.hp);
+  const hpPct = injured ? 0 : Math.min(100, Math.max(0, (adv.hp / hpMax) * 100));
   const status = injured
     ? '🩹 Recovering'
     : adv.assignment
@@ -213,7 +223,12 @@ function AdventurerCard({ adv, onOpen }: { adv: Adventurer; onOpen: () => void }
             Lv {adv.level} ({xpPercent(adv)}%) {adv.className}
           </span>
         </span>
-        <span className="row-desc">⚔ {atk} · 🛡 {def}</span>
+        <span className="row-desc">⚔ {atk} · 🛡 {def} · ❤ {hpNow}/{hpMax}</span>
+        <div className="progress-line">
+          <div className="progress-track">
+            <div className="progress-fill hp" style={{ width: `${hpPct}%` }} />
+          </div>
+        </div>
         <span className={injured ? 'row-bad' : 'row-good'}>{status}</span>
         {progress && (
           <div className="progress-line">
@@ -261,20 +276,15 @@ function assignmentLabel(adv: Adventurer): string {
 // Detail popup
 // ---------------------------------------------------------------------------
 
-const SLOT_ICONS: Record<EquipSlot, string> = {
-  weapon: '⚔',
-  armor: '🛡',
-  trinket: '💍',
-};
-
 function AdventurerDetail({ adv, onClose }: { adv: Adventurer; onClose: () => void }) {
   const store = useGameStore();
   const state = useGameState();
   const { atk, def } = adventurerStats(adv);
-  const cls = CLASS_DEFS[adv.className];
-  const baseAtk = cls.atk + cls.atkGrowth * (adv.level - 1);
-  const baseDef = cls.def + cls.defGrowth * (adv.level - 1);
+  const attrs = effectiveAttributes(adv);
+  const primary = CLASS_DEFS[adv.className].primary;
   const injured = isInjured(adv, state.runTimeSeconds);
+  const hpMax = maxHp(adv);
+  const hpNow = injured ? 0 : Math.round(adv.hp);
   const status = injured
     ? `🩹 Recovering — ${formatDuration(adv.injuredUntil - state.runTimeSeconds)} left`
     : adv.assignment
@@ -305,13 +315,31 @@ function AdventurerDetail({ adv, onClose }: { adv: Adventurer; onClose: () => vo
         <div className="detail-stats">
           <div className="stat">
             <span className="stat-value">⚔ {atk}</span>
-            <span className="stat-label">Attack ({baseAtk} base + {atk - baseAtk} gear)</span>
+            <span className="stat-label">Attack</span>
           </div>
           <div className="stat">
             <span className="stat-value">🛡 {def}</span>
-            <span className="stat-label">Defense ({baseDef} base + {def - baseDef} gear)</span>
+            <span className="stat-label">Defense</span>
+          </div>
+          <div className="stat">
+            <span className="stat-value">❤ {hpNow}/{hpMax}</span>
+            <span className="stat-label">Health</span>
           </div>
         </div>
+
+        <h3 className="section-title">Attributes</h3>
+        <div className="attr-grid">
+          {ATTRIBUTES.map((a) => (
+            <div key={a.id} className={`attr-cell ${a.id === primary ? 'primary' : ''}`}>
+              <span className="attr-abbr">{a.abbr}</span>
+              <span className="attr-value">{attrs[a.id]}</span>
+            </div>
+          ))}
+        </div>
+        <p className="detail-sub attr-hint">
+          {CLASS_DEFS[adv.className].primary.toUpperCase()} drives this {adv.className}'s
+          attack — match their weapon to it.
+        </p>
 
         <h3 className="section-title">Equipment</h3>
         <div className="rows">
@@ -323,11 +351,11 @@ function AdventurerDetail({ adv, onClose }: { adv: Adventurer; onClose: () => vo
                 <div className={`row ${item ? `item-${item.rarity}` : 'locked'}`}>
                   <div className="row-info">
                     <span className="row-name">
-                      {SLOT_ICONS[slot]} {item ? item.name : `No ${slot}`}
+                      {item ? `${itemIcon(item)} ${item.name}` : `${SLOT_FALLBACK_ICON[slot]} No ${slot}`}
                     </span>
                     {item && (
                       <span className="row-desc">
-                        {item.rarity} {item.slot} · ⚔ {item.atk} · 🛡 {item.def}
+                        {item.rarity} {itemTypeLabel(item)} · {itemStatParts(item).join(' · ')}
                       </span>
                     )}
                   </div>
@@ -364,9 +392,9 @@ function AdventurerDetail({ adv, onClose }: { adv: Adventurer; onClose: () => vo
                             setPickerSlot(null);
                           }}
                         >
-                          <span className="row-name">{cand.name}</span>
+                          <span className="row-name">{itemIcon(cand)} {cand.name}</span>
                           <span className="row-desc">
-                            {cand.rarity} · ⚔ {cand.atk} · 🛡 {cand.def}
+                            {cand.rarity} · {itemStatParts(cand).join(' · ')}
                           </span>
                         </button>
                       ))
@@ -381,6 +409,12 @@ function AdventurerDetail({ adv, onClose }: { adv: Adventurer; onClose: () => vo
     </div>
   );
 }
+
+const SLOT_FALLBACK_ICON: Record<EquipSlot, string> = {
+  weapon: '⚔️',
+  armor: '🛡️',
+  trinket: '💍',
+};
 
 // ---------------------------------------------------------------------------
 // Activity log

@@ -1,13 +1,27 @@
-import { adventurerPower, gainXp, generateEquipment, isInjured } from './adventurers';
+import {
+  adventurerPower,
+  effectiveAttributes,
+  gainXp,
+  generateEquipment,
+  isInjured,
+  luckFindMult,
+  maxHp,
+} from './adventurers';
 import {
   ACTIVITY_LOG_MAX,
+  DAMAGE_PER_TIER,
   ENCOUNTER_INTERVAL,
+  INFIRMARY_HEAL_BONUS,
   INJURY_SECONDS_PER_TIER,
   LOG_PHRASES,
   MATERIALS,
   MAX_ENCOUNTERS_PER_TICK,
   PATROL,
   QUEST,
+  QUEST_DAMAGE_MULT,
+  REGEN_FRACTION_ACTIVE,
+  REGEN_FRACTION_IDLE,
+  RES_MITIGATION_K,
   SUCCESS_CHANCE_MAX,
   SUCCESS_CHANCE_MIN,
 } from './config';
@@ -47,9 +61,13 @@ export function tick(
   // Passive town income
   let goldGained = productionPerSecond(state) * dtSeconds;
 
+  // Infirmary speeds both injury recovery and HP regen, on top of perks.
+  const healMult =
+    mods.healSpeedMult * (1 + INFIRMARY_HEAL_BONUS * (state.guildUpgrades['infirmary'] ?? 0));
+
   // Adventurer activity
   next.adventurers = next.adventurers.map((adv) => {
-    const result = processAdventurer(next, adv, mods.healSpeedMult, mods.shardFindMult, rng);
+    const result = processAdventurer(next, adv, dtSeconds, healMult, mods.shardFindMult, rng);
     goldGained += result.gold;
     next.timeShards += result.shards;
     return result.adventurer;
@@ -57,7 +75,7 @@ export function tick(
 
   // Expedition resolution (combined party fight)
   if (next.expedition && next.runTimeSeconds >= next.expedition.endsAt) {
-    resolveExpedition(next, mods.healSpeedMult, rng);
+    resolveExpedition(next, healMult, rng);
   }
 
   next.gold += goldGained;
@@ -95,6 +113,7 @@ function emptyLoot(): Loot {
 function processAdventurer(
   state: GameState,
   adv: Adventurer,
+  dtSeconds: number,
   healSpeedMult: number,
   shardFindMult: number,
   rng: Rng,
@@ -105,9 +124,11 @@ function processAdventurer(
   // lastAssignment, send them back to the same location/mode.
   // Use injuredUntil as the base time so offline progression properly credits
   // work done from the recovery moment onward, not just from the tick end.
-  let current = adv;
   const nowSec = state.runTimeSeconds;
-  const resumeAt = Math.max(current.injuredUntil, 0); // recovery moment, or 0 if never injured
+  // Capture the recovery moment before applyRegen may clear injuredUntil, so
+  // offline catch-up credits patrol work from the moment they recovered.
+  const resumeAt = Math.max(adv.injuredUntil, 0);
+  let current = applyRegen(state, adv, dtSeconds, healSpeedMult);
   if (!current.assignment && current.lastAssignment && !isInjured(current, nowSec)) {
     const lastLoc = locationDef(current.lastAssignment.locationId);
     if (lastLoc && lastLoc.kind === 'zone') {
@@ -132,18 +153,29 @@ function processAdventurer(
   const loc = locationDef(current.assignment.locationId);
   if (!loc) return { ...result, adventurer: { ...current, assignment: null } };
 
-  // Quest phase: nothing happens until the quest timer resolves.
-  if (current.assignment!.mode === 'quest') {
-    const endsAt = current.assignment!.questEndsAt ?? 0;
-    if (nowSec < endsAt) return { ...result, adventurer: current };
+  // Quest phase: attempts resolve on the quest timer; a failed (but not
+  // knocked-out) adventurer licks their wounds and tries again.
+  let questAttempts = 0;
+  while (
+    current.assignment?.mode === 'quest' &&
+    nowSec >= (current.assignment.questEndsAt ?? 0) &&
+    questAttempts < MAX_ENCOUNTERS_PER_TICK
+  ) {
+    questAttempts += 1;
+    const endsAt = current.assignment.questEndsAt ?? 0;
     current = resolveQuest(state, current, loc, endsAt, healSpeedMult, shardFindMult, rng, result);
-    if (!current.assignment) return { ...result, adventurer: current }; // failed → injured
+    if (!current.assignment) return { ...result, adventurer: current }; // knocked out
   }
+  if (current.assignment?.mode === 'quest') return { ...result, adventurer: current };
 
-  // Patrol phase: process encounters at fixed game-time intervals.
+  // Patrol phase: process encounters at fixed game-time intervals. A lost
+  // encounter deals damage scaled to the location; hitting 0 HP knocks the
+  // adventurer out (injury, as before).
   const loot = emptyLoot();
+  const luckMult = luckFindMult(current);
   let encounters = 0;
   let lastAt = nowSec;
+  let damageTaken = 0;
   let injured = false;
   while (
     current.assignment &&
@@ -157,26 +189,37 @@ function processAdventurer(
     const success = rng() < successChance(power, loc.power);
 
     if (!success) {
-      current = injure(current, loc, at, healSpeedMult);
-      injured = true;
-      break;
+      const damage = encounterDamage(current, loc, 1);
+      damageTaken += damage;
+      const hp = current.hp - damage;
+      if (hp <= 0) {
+        current = injure({ ...current, hp: 0 }, loc, at, healSpeedMult);
+        injured = true;
+        break;
+      }
+      current = {
+        ...current,
+        hp,
+        assignment: { ...current.assignment!, lastEncounterAt: at },
+      };
+      continue;
     }
 
     loot.gold += PATROL.goldPerTier * loc.tier;
     const xp = xpWithTraining(state, PATROL.xpPerTier * loc.tier);
     loot.xp += xp;
     current = gainXp(current, xp);
-    if (rng() < PATROL.materialChance) {
+    if (rng() < PATROL.materialChance * luckMult) {
       addMaterial(state, loc.materialId, 1);
       loot.materials[loc.materialId] = (loot.materials[loc.materialId] ?? 0) + 1;
     }
-    if (rng() < PATROL.equipmentChance) loot.equipment.push(dropEquipment(state, loc.tier, rng));
-    if (rng() < PATROL.chestChance) {
+    if (rng() < PATROL.equipmentChance * luckMult) loot.equipment.push(dropEquipment(state, loc.tier, rng));
+    if (rng() < PATROL.chestChance * luckMult) {
       // Chest: guaranteed equipment or gold treasure
       if (rng() < 0.5) loot.equipment.push(dropEquipment(state, loc.tier, rng));
       else loot.gold += PATROL.chestGoldPerTier * loc.tier;
     }
-    if (rng() < loc.shardChance * shardFindMult) loot.shards += 1;
+    if (rng() < loc.shardChance * shardFindMult * luckMult) loot.shards += 1;
 
     current = {
       ...current,
@@ -188,8 +231,9 @@ function processAdventurer(
   result.shards += loot.shards;
   if (loot.gold > 0 || loot.xp > 0) {
     const verb = pick(LOG_PHRASES.patrol, rng);
+    const hurt = damageTaken > 0 && !injured ? ` Took ${Math.round(damageTaken)} damage.` : '';
     pushLog(state, 'patrol', lastAt,
-      `${firstName(adv)} ${verb} ${lootText(loot)} patrolling ${loc.name}.`);
+      `${firstName(adv)} ${verb} ${lootText(loot)} patrolling ${loc.name}.${hurt}`);
   }
   if (injured) {
     pushLog(state, 'injury', lastAt,
@@ -214,10 +258,21 @@ function resolveQuest(
   const success = rng() < successChance(power, loc.power);
 
   if (!success) {
-    pushLog(state, 'injury', endedAt,
-      `${firstName(adv)} ${pick(LOG_PHRASES.questFail, rng)} the quest at ${loc.name}.`);
-    result.adventurer = adv;
-    return injure(adv, loc, endedAt, healSpeedMult);
+    // A failed quest deals a heavy hit. If it doesn't knock them out, they
+    // regroup and re-attempt (a fresh quest timer from this moment).
+    const damage = encounterDamage(adv, loc, QUEST_DAMAGE_MULT);
+    const hp = adv.hp - damage;
+    if (hp <= 0) {
+      pushLog(state, 'injury', endedAt,
+        `${firstName(adv)} ${pick(LOG_PHRASES.questFail, rng)} the quest at ${loc.name}.`);
+      result.adventurer = injure({ ...adv, hp: 0 }, loc, endedAt, healSpeedMult);
+      return result.adventurer;
+    }
+    return {
+      ...adv,
+      hp,
+      assignment: { ...adv.assignment!, questEndsAt: endedAt + loc.questDuration },
+    };
   }
 
   const loot = emptyLoot();
@@ -259,6 +314,7 @@ function resolveExpedition(state: GameState, healSpeedMult: number, rng: Rng): v
   state.adventurers = state.adventurers.map((a) => {
     if (!exp.memberIds.includes(a.id)) return a;
     const back = { ...a, assignment: null };
+    // A routed boss expedition is all-or-nothing: the whole party is injured.
     return success ? gainXp(back, xp) : injure(back, loc, exp.endsAt, healSpeedMult);
   });
 
@@ -291,11 +347,46 @@ function injure(
   const duration = (INJURY_SECONDS_PER_TIER * loc.tier) / healSpeedMult;
   return {
     ...adv,
+    hp: 0, // knocked out; HP is restored to full on recovery (see applyRegen)
     assignment: null,
     lastAssignment: adv.assignment, // remember what they were doing
     injuredUntil: at + duration,
     injuredDuration: duration,
   };
+}
+
+/**
+ * Damage from one failed encounter: scaled to location tier and multiplied for
+ * quests/expeditions, mitigated by the adventurer's RES.
+ */
+function encounterDamage(adv: Adventurer, loc: LocationDef, mult: number): number {
+  const raw = DAMAGE_PER_TIER * loc.tier * mult;
+  const res = effectiveAttributes(adv).res;
+  return raw * (RES_MITIGATION_K / (RES_MITIGATION_K + res));
+}
+
+/**
+ * Passive HP regen and injury-recovery healing. Injured adventurers are healed
+ * to full at the moment their recovery timer elapses; everyone else regens a
+ * fraction of max HP per second (faster when idle at the guild hall).
+ */
+function applyRegen(
+  state: GameState,
+  adv: Adventurer,
+  dtSeconds: number,
+  healMult: number,
+): Adventurer {
+  const cap = maxHp(adv);
+  // Recovering from a knockout: heal to full and clear the injury marker so
+  // it doesn't re-trigger when they take fresh damage later.
+  if (adv.injuredUntil > 0 && state.runTimeSeconds >= adv.injuredUntil) {
+    return { ...adv, hp: cap, injuredUntil: 0 };
+  }
+  if (isInjured(adv, state.runTimeSeconds)) return adv; // still knocked out
+  if (adv.hp >= cap) return adv;
+  const fraction = adv.assignment ? REGEN_FRACTION_ACTIVE : REGEN_FRACTION_IDLE;
+  const healed = adv.hp + cap * fraction * healMult * dtSeconds;
+  return { ...adv, hp: Math.min(cap, healed) };
 }
 
 function xpWithTraining(state: GameState, base: number): number {

@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { adventurerPower, generateAdventurer, generateEquipment } from './adventurers';
+import {
+  adventurerPower,
+  adventurerStats,
+  effectiveAttributes,
+  equipTypeDef,
+  generateAdventurer,
+  generateEquipment,
+  maxHp,
+} from './adventurers';
 import { DEMON_KING_ID, ENCOUNTER_INTERVAL, GENERAL_IDS } from './config';
 import { tick } from './engine';
 import {
@@ -88,6 +96,66 @@ describe('equipment', () => {
   });
 });
 
+describe('attributes, HP & equipment', () => {
+  const roll = (values: number[]): (() => number) => {
+    let i = 0;
+    return () => values[i++ % values.length];
+  };
+
+  it('generated adventurers have class-appropriate attributes and full HP', () => {
+    const warrior = { ...generateAdventurer(1, mid), className: 'warrior' as const };
+    const attrs = effectiveAttributes(warrior);
+    expect(attrs.str).toBeGreaterThan(attrs.int); // warriors favor STR
+    const fresh = generateAdventurer(2, mid);
+    expect(fresh.hp).toBe(maxHp(fresh)); // spawns at full health
+    expect(fresh.hp).toBeGreaterThan(0);
+  });
+
+  it('effective attributes grow with level; max HP scales with CON', () => {
+    const a1 = generateAdventurer(1, mid);
+    const a20 = { ...a1, level: 20 };
+    expect(effectiveAttributes(a20).con).toBeGreaterThan(effectiveAttributes(a1).con);
+    expect(maxHp(a20)).toBeGreaterThan(maxHp(a1));
+  });
+
+  it('a matching weapon on a high-primary class beats an off-class weapon', () => {
+    // roll([0,...]) picks the weapon slot and a STR-scaling weapon (sword).
+    const gs = generateEquipment(50, 5, roll([0, 0, 0, 0.5]));
+    // Only compare when we actually rolled a STR-scaling weapon.
+    if (equipTypeDef(gs.typeId)?.scaling === 'str') {
+      const warrior = { ...generateAdventurer(1, mid), className: 'warrior' as const, level: 15 };
+      const mage = { ...generateAdventurer(2, mid), className: 'mage' as const, level: 15 };
+      const warAtk = adventurerStats({ ...warrior, equipment: { weapon: gs } }).atk
+        - adventurerStats(warrior).atk;
+      const mageAtk = adventurerStats({ ...mage, equipment: { weapon: gs } }).atk
+        - adventurerStats(mage).atk;
+      expect(warAtk).toBeGreaterThan(mageAtk);
+    }
+  });
+
+  it('item prefixes modify stats deterministically', () => {
+    // Same rng stream → identical item (name + all stats).
+    const a = generateEquipment(1, 3, roll([0.1, 0.2, 0.3, 0.4, 0.5]));
+    const b = generateEquipment(1, 3, roll([0.1, 0.2, 0.3, 0.4, 0.5]));
+    expect(b).toEqual(a);
+  });
+
+  it('epic items carry bonus attributes; equipping applies them', () => {
+    let item = generateEquipment(77, 6, mid);
+    // Coerce to an attribute-bearing epic for a deterministic assertion.
+    item = { ...item, attrs: { str: 5 }, hp: 20 };
+    let s = withAdventurer(guildState());
+    const id = s.adventurers[0].id;
+    const beforeStr = effectiveAttributes(s.adventurers[0]).str;
+    const beforeHp = maxHp(s.adventurers[0]);
+    s = { ...s, inventory: [item] };
+    s = equipItem(s, id, 77);
+    const adv = s.adventurers.find((a) => a.id === id)!;
+    expect(effectiveAttributes(adv).str).toBe(beforeStr + 5);
+    expect(maxHp(adv)).toBe(beforeHp + 20);
+  });
+});
+
 describe('patrol & quests', () => {
   it('zones unlock in order via quest clears', () => {
     const s = guildState();
@@ -108,10 +176,16 @@ describe('patrol & quests', () => {
     expect(s.inventory.length).toBeGreaterThan(0); // alwaysWin also hits drop rolls
   });
 
-  it('a lost fight injures and unassigns the adventurer', () => {
+  it('a single lost fight only damages; injury comes when HP runs out', () => {
     let s = withAdventurer(guildState());
     s = assignAdventurer(s, s.adventurers[0].id, 'forest-edge', 'patrol');
+    // One failed encounter: still assigned, wounded but not knocked out.
     s = tick(s, ENCOUNTER_INTERVAL, 0, alwaysLose);
+    expect(s.adventurers[0].assignment).not.toBeNull();
+    expect(s.adventurers[0].hp).toBeLessThan(maxHp(s.adventurers[0]));
+    expect(s.adventurers[0].injuredUntil).toBe(0);
+    // Enough failures drain HP and knock them out.
+    s = tick(s, ENCOUNTER_INTERVAL * 10, 0, alwaysLose);
     expect(s.adventurers[0].assignment).toBeNull();
     expect(s.adventurers[0].injuredUntil).toBeGreaterThan(s.runTimeSeconds);
   });
@@ -129,8 +203,8 @@ describe('patrol & quests', () => {
   it('recall clears the assignment and lastAssignment', () => {
     let s = withAdventurer(guildState());
     s = assignAdventurer(s, s.adventurers[0].id, 'forest-edge', 'patrol');
-    // get injured so lastAssignment is set
-    s = tick(s, ENCOUNTER_INTERVAL, 0, alwaysLose);
+    // knock out so lastAssignment is set
+    s = tick(s, ENCOUNTER_INTERVAL * 10, 0, alwaysLose);
     expect(s.adventurers[0].lastAssignment).not.toBeNull();
     // recall clears both
     s = recallAdventurer(s, s.adventurers[0].id);
@@ -141,8 +215,8 @@ describe('patrol & quests', () => {
   it('injury saves lastAssignment for re-engagement on recovery', () => {
     let s = withAdventurer(guildState());
     s = assignAdventurer(s, s.adventurers[0].id, 'forest-edge', 'patrol');
-    // patrol fails → injured, lastAssignment set
-    s = tick(s, ENCOUNTER_INTERVAL, 0, alwaysLose);
+    // patrol drains HP → knocked out, lastAssignment set
+    s = tick(s, ENCOUNTER_INTERVAL * 10, 0, alwaysLose);
     expect(s.adventurers[0].assignment).toBeNull();
     expect(s.adventurers[0].lastAssignment).not.toBeNull();
     expect(s.adventurers[0].lastAssignment!.locationId).toBe('forest-edge');
@@ -152,8 +226,8 @@ describe('patrol & quests', () => {
   it('recovers and auto-reassigns to the same location and mode', () => {
     let s = withAdventurer(guildState());
     s = assignAdventurer(s, s.adventurers[0].id, 'forest-edge', 'patrol');
-    // injury (tier 1 → 180s)
-    s = tick(s, ENCOUNTER_INTERVAL, 0, alwaysLose);
+    // knocked out (tier 1 injury → 180s)
+    s = tick(s, ENCOUNTER_INTERVAL * 10, 0, alwaysLose);
     expect(s.adventurers[0].assignment).toBeNull();
     expect(s.adventurers[0].injuredUntil).toBeGreaterThan(s.runTimeSeconds);
     // tick past the injury duration
@@ -169,8 +243,8 @@ describe('patrol & quests', () => {
   it('manual assignment clears lastAssignment', () => {
     let s = withAdventurer(guildState());
     s = assignAdventurer(s, s.adventurers[0].id, 'forest-edge', 'patrol');
-    // get injured, then recover
-    s = tick(s, ENCOUNTER_INTERVAL, 0, alwaysLose);
+    // get knocked out, then recover
+    s = tick(s, ENCOUNTER_INTERVAL * 10, 0, alwaysLose);
     s = tick(s, 200, 0, alwaysWin);
     // auto-reassigned to forest-edge; now recall and manually re-assign to same zone
     s = recallAdventurer(s, s.adventurers[0].id);
@@ -185,13 +259,13 @@ describe('patrol & quests', () => {
   it('quest failure saves lastAssignment and auto-reassigns after recovery', () => {
     let s = withAdventurer(guildState());
     s = assignAdventurer(s, s.adventurers[0].id, 'forest-edge', 'quest');
-    // fail the quest (tier 1 → 180s injury)
-    s = tick(s, 61, 0, alwaysLose);
+    // Repeated quest failures drain HP; eventually a knockout (tier 1 → 180s).
+    s = tick(s, 200, 0, alwaysLose);
     expect(s.adventurers[0].assignment).toBeNull();
     expect(s.adventurers[0].lastAssignment).not.toBeNull();
     expect(s.adventurers[0].lastAssignment!.mode).toBe('quest');
-    // tick past recovery
-    s = tick(s, 200, 0, alwaysWin);
+    // tick past recovery, but not far enough to also finish the re-quest
+    s = tick(s, 110, 0, alwaysWin);
     // should re-quest (since lastAssignment.mode was 'quest')
     expect(s.adventurers[0].assignment).not.toBeNull();
     expect(s.adventurers[0].assignment!.mode).toBe('quest');
@@ -223,7 +297,7 @@ describe('activity log', () => {
   it('injuries write a line and record the recovery duration', () => {
     let s = withAdventurer(guildState());
     s = assignAdventurer(s, s.adventurers[0].id, 'forest-edge', 'patrol');
-    s = tick(s, ENCOUNTER_INTERVAL, 0, alwaysLose);
+    s = tick(s, ENCOUNTER_INTERVAL * 10, 0, alwaysLose);
     expect(s.activityLog.some((e) => e.kind === 'injury')).toBe(true);
     expect(s.adventurers[0].injuredDuration).toBeGreaterThan(0);
   });
@@ -320,13 +394,13 @@ describe('offline progression', () => {
   it('patroller who recovers during offline gets credit for encounters from recovery moment', () => {
     let s = withAdventurer(guildState());
     s = assignAdventurer(s, s.adventurers[0].id, 'forest-edge', 'patrol');
-    // Injure the adventurer (tier 1 → 180s injury)
-    s = tick(s, ENCOUNTER_INTERVAL, 0, alwaysLose);
+    // Knock out the adventurer (tier 1 → 180s injury)
+    s = tick(s, ENCOUNTER_INTERVAL * 10, 0, alwaysLose);
     const injuredUntil = s.adventurers[0].injuredUntil;
     expect(injuredUntil).toBeGreaterThan(s.runTimeSeconds);
-    // Now simulate an offline tick where the adventurer recovers partway through.
-    // Set runTimeSeconds so the injury recovers mid-way: advance 280s (heals at 180, so 100s of work left)
-    const offlineDuration = 280;
+    // Now simulate an offline tick where the adventurer recovers partway through
+    // and then patrols the remaining time.
+    const offlineDuration = 400;
     s = tick(s, offlineDuration, 0, alwaysWin);
     // The adventurer should have been auto-reassigned from their injuredUntil moment (t=200)
     // and processed encounters from t=200 to t=280 (80 seconds → 4 encounters at 20s intervals)

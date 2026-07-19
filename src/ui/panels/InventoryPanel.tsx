@@ -4,6 +4,7 @@ import { equipItem, sellItem, sellItems, unequipItem } from '../../game/guild';
 import type { EquipSlot, Equipment, Rarity } from '../../game/types';
 import { useFormat } from '../../hooks/useFormat';
 import { useGameState, useGameStore } from '../../hooks/useGame';
+import { itemIcon, itemStatParts, itemTypeLabel } from '../itemDisplay';
 
 const SLOT_ICON: Record<EquipSlot, string> = {
   weapon: '⚔️',
@@ -199,10 +200,11 @@ export function InventoryPanel() {
             </div>
             <div className="equip-detail-stats">
               <span className="equip-detail-slot">
-                {SLOT_ICON[selected.slot]} {selected.slot}
+                {itemIcon(selected)} {itemTypeLabel(selected)}
               </span>
-              <span>⚔ {selected.atk} attack</span>
-              <span>🛡 {selected.def} defense</span>
+              {itemStatParts(selected).map((part) => (
+                <span key={part}>{part}</span>
+              ))}
             </div>
             <div className="equip-detail-actions">
               <select
@@ -235,7 +237,7 @@ export function InventoryPanel() {
                 className={`equip-grid-item item-${item.rarity}${selected?.id === item.id ? ' selected' : ''}`}
                 onClick={() => setSelected(item)}
               >
-                <span className="equip-grid-slot">{SLOT_ICON[item.slot]}</span>
+                <span className="equip-grid-slot">{itemIcon(item)}</span>
                 <span className="equip-grid-name">{item.name}</span>
               </button>
             ))}

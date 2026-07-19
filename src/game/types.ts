@@ -25,13 +25,66 @@ export type AdventurerClass = 'warrior' | 'ranger' | 'mage';
 export type EquipSlot = 'weapon' | 'armor' | 'trinket';
 export type Rarity = 'common' | 'rare' | 'epic';
 
+/** RPG attributes. LCK boosts material/equipment/shard find chances. */
+export type AttributeId = 'str' | 'dex' | 'int' | 'con' | 'res' | 'lck';
+export type Attributes = Record<AttributeId, number>;
+
+export interface AttributeDef {
+  id: AttributeId;
+  name: string;
+  abbr: string;
+}
+
+/**
+ * Equipment subtype (sword, greatsword, bow, plate, robe, ring, ...).
+ * Weapons declare a `scaling` attribute — their atk is multiplied by how
+ * well the wielder's stat and class fit the weapon.
+ */
+export interface EquipTypeDef {
+  id: string;
+  slot: EquipSlot;
+  /** Base name variants for generated items */
+  names: string[];
+  icon: string;
+  /** Weapons only: the attribute this weapon's damage scales with */
+  scaling?: AttributeId;
+  /** Share of the stat budget that goes to atk (rest goes to def) */
+  atkShare: number;
+  /** Multiplier on the overall stat budget */
+  budgetMult: number;
+  /** Attributes this type may roll as rarity bonuses */
+  bonusAttrs: AttributeId[];
+  /** Whether this type may roll bonus max HP */
+  bonusHp?: boolean;
+}
+
+/** Deterministic name prefix: same prefix always modifies stats the same way. */
+export interface ItemPrefixDef {
+  id: string;
+  name: string;
+  /** Relative roll weight */
+  weight: number;
+  atkMult?: number;
+  defMult?: number;
+  /** Bonus max HP per location tier */
+  hpPerTier?: number;
+  /** Attribute points granted, scaled by tier: value * (1 + floor(tier / 2)) */
+  attrs?: Partial<Attributes>;
+}
+
 export interface Equipment {
   id: number;
   slot: EquipSlot;
+  /** EquipTypeDef id (sword, plate, ring, ...) */
+  typeId: string;
   name: string;
   rarity: Rarity;
   atk: number;
   def: number;
+  /** Bonus max HP */
+  hp: number;
+  /** Bonus attributes */
+  attrs: Partial<Attributes>;
 }
 
 export type AssignmentMode = 'patrol' | 'quest' | 'expedition';
@@ -51,6 +104,13 @@ export interface Adventurer {
   className: AdventurerClass;
   level: number;
   xp: number;
+  /**
+   * Level-1 attribute values (class base + hire variance). Effective
+   * attributes are derived: this + class growth * (level - 1) + gear.
+   */
+  attributes: Attributes;
+  /** Current HP. Reaching 0 knocks the adventurer out (injury, as before). */
+  hp: number;
   equipment: Partial<Record<EquipSlot, Equipment>>;
   assignment: Assignment | null;
   /** runTimeSeconds until which this adventurer is recovering; 0 = healthy */

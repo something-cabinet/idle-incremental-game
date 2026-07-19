@@ -1,6 +1,11 @@
 import type {
   AdventurerClass,
+  AttributeDef,
+  AttributeId,
+  Attributes,
+  EquipTypeDef,
   GuildUpgradeDef,
+  ItemPrefixDef,
   JobDef,
   LocationDef,
   MaterialDef,
@@ -31,7 +36,7 @@ export const HOMETOWN_DEADLINE_DAY = 100;
 export const OFFLINE_CAP_HOURS = 8;
 
 export const AUTOSAVE_INTERVAL_MS = 10_000;
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 
 // ---------------------------------------------------------------------------
 // Act 1 — town income (low numbers by design)
@@ -127,14 +132,96 @@ export const HIRE_BASE_COST = 500;
 export const HIRE_COST_GROWTH = 2.2;
 export const BASE_ROSTER_CAP = 2; // + guild-hall level, max 8
 
+// ---------------------------------------------------------------------------
+// Attributes & classes
+// ---------------------------------------------------------------------------
+
+export const ATTRIBUTES: AttributeDef[] = [
+  { id: 'str', name: 'Strength', abbr: 'STR' },
+  { id: 'dex', name: 'Dexterity', abbr: 'DEX' },
+  { id: 'int', name: 'Intellect', abbr: 'INT' },
+  { id: 'con', name: 'Constitution', abbr: 'CON' },
+  { id: 'res', name: 'Resilience', abbr: 'RES' },
+  { id: 'lck', name: 'Luck', abbr: 'LCK' },
+];
+
 export const CLASS_DEFS: Record<
   AdventurerClass,
-  { atk: number; def: number; atkGrowth: number; defGrowth: number }
+  {
+    /** Governing offense attribute (drives base attack) */
+    primary: AttributeId;
+    /** Attribute values at level 1 (hire variance applied on top) */
+    base: Attributes;
+    /** Attribute gain per level */
+    growth: Attributes;
+    /** Damage multiplier per weapon type — off-class weapons are weak */
+    weaponProficiency: Record<string, number>;
+  }
 > = {
-  warrior: { atk: 8, def: 8, atkGrowth: 3, defGrowth: 3 },
-  ranger: { atk: 12, def: 4, atkGrowth: 4, defGrowth: 2 },
-  mage: { atk: 14, def: 2, atkGrowth: 5, defGrowth: 1 },
+  warrior: {
+    primary: 'str',
+    base: { str: 8, dex: 4, int: 2, con: 8, res: 6, lck: 3 },
+    growth: { str: 2.2, dex: 0.8, int: 0.3, con: 1.8, res: 1.2, lck: 0.4 },
+    weaponProficiency: {
+      sword: 1.1, greatsword: 1.2, axe: 1.1, mace: 1.1, dagger: 0.8,
+      bow: 0.5, crossbow: 0.5, wand: 0.35, staff: 0.35,
+    },
+  },
+  ranger: {
+    primary: 'dex',
+    base: { str: 4, dex: 9, int: 3, con: 6, res: 4, lck: 5 },
+    growth: { str: 0.7, dex: 2.4, int: 0.5, con: 1.2, res: 0.8, lck: 0.9 },
+    weaponProficiency: {
+      sword: 0.9, greatsword: 0.5, axe: 0.7, mace: 0.6, dagger: 1.1,
+      bow: 1.2, crossbow: 1.15, wand: 0.6, staff: 0.5,
+    },
+  },
+  mage: {
+    primary: 'int',
+    base: { str: 2, dex: 4, int: 10, con: 4, res: 6, lck: 4 },
+    growth: { str: 0.3, dex: 0.7, int: 2.6, con: 0.8, res: 1.5, lck: 0.6 },
+    weaponProficiency: {
+      sword: 0.5, greatsword: 0.35, axe: 0.4, mace: 0.5, dagger: 0.7,
+      bow: 0.4, crossbow: 0.45, wand: 1.15, staff: 1.2,
+    },
+  },
 };
+
+/** Hire-time variance: each attribute rolls base ± this. */
+export const HIRE_ATTR_VARIANCE = 1;
+
+// ---- HP / damage / regen ----
+
+export const HP_BASE = 20;
+export const HP_PER_CON = 5;
+/** Base attack contributed per point of the class's primary attribute. */
+export const ATK_PER_PRIMARY = 2;
+/** Defense contributed per point of CON and RES. */
+export const DEF_PER_CON = 0.7;
+export const DEF_PER_RES = 0.7;
+/**
+ * Weapon damage scaling from its governing attribute:
+ * mult = WEAPON_SCALE_BASE + stat / WEAPON_SCALE_DIV, capped.
+ */
+export const WEAPON_SCALE_BASE = 0.4;
+export const WEAPON_SCALE_DIV = 50;
+export const WEAPON_SCALE_MAX = 2.5;
+
+/** Raw damage taken per location tier on a failed patrol encounter. */
+export const DAMAGE_PER_TIER = 12;
+/** A failed quest hits harder than a patrol scuffle. */
+export const QUEST_DAMAGE_MULT = 2.5;
+/** RES mitigation: damage * K / (K + res). */
+export const RES_MITIGATION_K = 40;
+
+/** Passive HP regen per second, as a fraction of max HP. */
+export const REGEN_FRACTION_ACTIVE = 0.004; // while assigned
+export const REGEN_FRACTION_IDLE = 0.012; // resting at the guild hall
+/** Infirmary: +this much regen/recovery speed per level (also speeds injuries). */
+export const INFIRMARY_HEAL_BONUS = 0.2;
+
+/** LCK: +this much find chance (materials/equipment/shards) per point. */
+export const LCK_FIND_PER_POINT = 0.01;
 
 /** XP needed to go from `level` to `level+1`. */
 export function xpToNext(level: number): number {
@@ -291,6 +378,81 @@ export const RARITY_WEIGHTS: [Rarity, number][] = [
 ];
 export const RARITY_MULT: Record<Rarity, number> = { common: 1, rare: 1.6, epic: 2.5 };
 export const RARITY_SELL_GOLD: Record<Rarity, number> = { common: 25, rare: 100, epic: 400 };
+
+/** Number of bonus attributes rolled from the type's pool, by rarity. */
+export const RARITY_BONUS_ATTRS: Record<Rarity, number> = { common: 0, rare: 1, epic: 2 };
+/** Bonus attribute points per roll: 1 + floor(tier / 2). */
+export const BONUS_ATTR_TIER_DIV = 2;
+/** Bonus max HP per tier on hp-capable types (rare = 1x, epic = 2x). */
+export const HP_BONUS_PER_TIER = 4;
+
+// ---------------------------------------------------------------------------
+// Equipment types & name prefixes
+// ---------------------------------------------------------------------------
+
+export const EQUIP_TYPES: EquipTypeDef[] = [
+  // ---- Weapons: atk-heavy, damage scales with the governing attribute ----
+  { id: 'sword', slot: 'weapon', names: ['Sword', 'Blade', 'Saber'], icon: '🗡️',
+    scaling: 'str', atkShare: 0.8, budgetMult: 1.0, bonusAttrs: ['str', 'dex'] },
+  { id: 'greatsword', slot: 'weapon', names: ['Greatsword', 'Claymore', 'Zweihander'], icon: '⚔️',
+    scaling: 'str', atkShare: 0.9, budgetMult: 1.2, bonusAttrs: ['str', 'con'] },
+  { id: 'axe', slot: 'weapon', names: ['Axe', 'War Axe', 'Cleaver'], icon: '🪓',
+    scaling: 'str', atkShare: 0.85, budgetMult: 1.1, bonusAttrs: ['str', 'con'] },
+  { id: 'mace', slot: 'weapon', names: ['Mace', 'Warhammer', 'Morningstar'], icon: '🔨',
+    scaling: 'str', atkShare: 0.75, budgetMult: 1.05, bonusAttrs: ['str', 'res'] },
+  { id: 'dagger', slot: 'weapon', names: ['Dagger', 'Dirk', 'Stiletto'], icon: '🔪',
+    scaling: 'dex', atkShare: 0.85, budgetMult: 0.9, bonusAttrs: ['dex', 'lck'] },
+  { id: 'bow', slot: 'weapon', names: ['Bow', 'Longbow', 'Recurve Bow'], icon: '🏹',
+    scaling: 'dex', atkShare: 0.9, budgetMult: 1.05, bonusAttrs: ['dex', 'lck'] },
+  { id: 'crossbow', slot: 'weapon', names: ['Crossbow', 'Arbalest', 'Repeater'], icon: '🎯',
+    scaling: 'dex', atkShare: 0.9, budgetMult: 1.15, bonusAttrs: ['dex', 'str'] },
+  { id: 'wand', slot: 'weapon', names: ['Wand', 'Scepter', 'Rod'], icon: '🪄',
+    scaling: 'int', atkShare: 0.85, budgetMult: 0.95, bonusAttrs: ['int', 'lck'] },
+  { id: 'staff', slot: 'weapon', names: ['Staff', 'Warstaff', 'Greatstaff'], icon: '🦯',
+    scaling: 'int', atkShare: 0.9, budgetMult: 1.15, bonusAttrs: ['int', 'res'] },
+  // ---- Armor: def-heavy ----
+  { id: 'plate', slot: 'armor', names: ['Plate Armor', 'Breastplate', 'Full Plate'], icon: '🛡️',
+    atkShare: 0.1, budgetMult: 1.25, bonusAttrs: ['con', 'str'], bonusHp: true },
+  { id: 'mail', slot: 'armor', names: ['Chainmail', 'Hauberk', 'Scale Mail'], icon: '⛓️',
+    atkShare: 0.15, budgetMult: 1.1, bonusAttrs: ['con', 'res'], bonusHp: true },
+  { id: 'leather', slot: 'armor', names: ['Leather Armor', 'Brigandine', 'Jerkin'], icon: '🥋',
+    atkShare: 0.2, budgetMult: 1.0, bonusAttrs: ['dex', 'con'], bonusHp: true },
+  { id: 'cloak', slot: 'armor', names: ['Cloak', 'Mantle', 'Shroud'], icon: '🧥',
+    atkShare: 0.25, budgetMult: 0.85, bonusAttrs: ['dex', 'lck'], bonusHp: true },
+  { id: 'robe', slot: 'armor', names: ['Robe', 'Vestment', 'Raiment'], icon: '👘',
+    atkShare: 0.2, budgetMult: 0.9, bonusAttrs: ['int', 'res'], bonusHp: true },
+  // ---- Trinkets: balanced, lean on stat/HP bonuses ----
+  { id: 'ring', slot: 'trinket', names: ['Ring', 'Signet', 'Band'], icon: '💍',
+    atkShare: 0.5, budgetMult: 0.7, bonusAttrs: ['dex', 'lck'], bonusHp: true },
+  { id: 'amulet', slot: 'trinket', names: ['Amulet', 'Pendant', 'Locket'], icon: '📿',
+    atkShare: 0.4, budgetMult: 0.7, bonusAttrs: ['int', 'res'], bonusHp: true },
+  { id: 'charm', slot: 'trinket', names: ['Charm', 'Fetish', 'Keepsake'], icon: '🧿',
+    atkShare: 0.5, budgetMult: 0.7, bonusAttrs: ['lck', 'int'], bonusHp: true },
+  { id: 'idol', slot: 'trinket', names: ['Idol', 'Totem', 'Effigy'], icon: '🗿',
+    atkShare: 0.45, budgetMult: 0.7, bonusAttrs: ['con', 'str'], bonusHp: true },
+];
+
+/**
+ * Prefixes modify item stats deterministically — a "Sharp" anything always
+ * means +25% atk. attrs grant points scaled by tier (see generateEquipment).
+ */
+export const ITEM_PREFIXES: ItemPrefixDef[] = [
+  { id: 'worn', name: 'Worn', weight: 10, atkMult: 0.85, defMult: 0.85 },
+  { id: 'plain', name: 'Plain', weight: 20 },
+  { id: 'sharp', name: 'Sharp', weight: 10, atkMult: 1.25 },
+  { id: 'sturdy', name: 'Sturdy', weight: 10, defMult: 1.3 },
+  { id: 'brutal', name: 'Brutal', weight: 6, atkMult: 1.4, defMult: 0.85 },
+  { id: 'guardian', name: 'Guardian', weight: 6, defMult: 1.4, hpPerTier: 4 },
+  { id: 'vital', name: 'Vital', weight: 8, hpPerTier: 6 },
+  { id: 'mighty', name: 'Mighty', weight: 7, attrs: { str: 1 } },
+  { id: 'nimble', name: 'Nimble', weight: 7, attrs: { dex: 1 } },
+  { id: 'arcane', name: 'Arcane', weight: 7, attrs: { int: 1 } },
+  { id: 'stalwart', name: 'Stalwart', weight: 7, attrs: { con: 1 } },
+  { id: 'warding', name: 'Warding', weight: 7, attrs: { res: 1 } },
+  { id: 'lucky', name: 'Lucky', weight: 5, attrs: { lck: 1 } },
+  { id: 'masterwork', name: 'Masterwork', weight: 3, atkMult: 1.2, defMult: 1.2 },
+  { id: 'ancient', name: 'Ancient', weight: 2, atkMult: 1.15, defMult: 1.15, hpPerTier: 4, attrs: { lck: 1 } },
+];
 
 // ---------------------------------------------------------------------------
 // Perks (Time Shard shop — persists across timelines)

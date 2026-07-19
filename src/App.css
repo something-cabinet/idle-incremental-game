@@ -429,6 +429,59 @@ button.row:disabled {
   background: var(--green);
 }
 
+.progress-fill.hp {
+  background: linear-gradient(90deg, #d0473b, #ff8b7a);
+}
+
+/* ---- Attributes ---- */
+.attr-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+}
+
+.attr-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 2px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.attr-cell.primary {
+  border-color: var(--accent);
+  background: rgba(255, 215, 94, 0.08);
+}
+
+.attr-abbr {
+  font-size: 0.62rem;
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
+}
+
+.attr-cell.primary .attr-abbr {
+  color: var(--accent);
+}
+
+.attr-value {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.attr-hint {
+  font-size: 0.72rem;
+  margin-top: 2px;
+}
+
+@media (max-width: 420px) {
+  .attr-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
 .progress-time {
   font-size: 0.7rem;
   color: var(--text-dim);
