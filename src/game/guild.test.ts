@@ -17,8 +17,10 @@ import {
   EXALTED_PREFIXES,
   GENERAL_IDS,
   ITEM_PREFIXES,
+  LOCATIONS,
+  tierXp,
 } from './config';
-import { tick } from './engine';
+import { successChance, tick } from './engine';
 import {
   assignAdventurer,
   autoEquipBest,
@@ -240,6 +242,58 @@ function mulberry32(seed: number) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+
+describe('difficulty & reward scaling', () => {
+  it('location power increases every tier, and boss tiers exceed all zone tiers', () => {
+    const byTier = [...LOCATIONS].sort((a, b) => a.tier - b.tier);
+    for (let i = 1; i < byTier.length; i++) {
+      expect(byTier[i].power).toBeGreaterThan(byTier[i - 1].power);
+    }
+    const zones = byTier.filter((l) => l.kind === 'zone');
+    const bosses = byTier.filter((l) => l.kind === 'boss');
+    expect(Math.min(...bosses.map((b) => b.power))).toBeGreaterThan(
+      Math.max(...zones.map((z) => z.power)),
+    );
+  });
+
+  it('tierXp grows geometrically, well past flat perTier*tier scaling at high tiers', () => {
+    const perTier = 100;
+    const linearTier6 = perTier * 6; // the old formula, for comparison
+    expect(tierXp(perTier, 1)).toBe(perTier); // tier 1 unchanged
+    expect(tierXp(perTier, 6)).toBeGreaterThan(linearTier6);
+    // monotonically increasing per tier
+    for (let t = 2; t <= 10; t++) {
+      expect(tierXp(perTier, t)).toBeGreaterThan(tierXp(perTier, t - 1));
+    }
+  });
+
+  it('a fresh unequipped adventurer no longer trivializes mid/high zones by level alone', () => {
+    const frontierPass = LOCATIONS.find((l) => l.id === 'frontier-pass')!;
+    const forestEdge = LOCATIONS.find((l) => l.id === 'forest-edge')!;
+    const fresh = generateAdventurer(1, mid);
+    const freshPower = adventurerPower(guildState(), fresh);
+    // Still very capable at the starting zone...
+    expect(successChance(freshPower, forestEdge.power)).toBeGreaterThan(0.5);
+    // ...but nowhere near capped at the last pre-Act-3 zone.
+    expect(successChance(freshPower, frontierPass.power)).toBeLessThan(0.3);
+
+    // Leveling alone helps, but a well-leveled *and* geared adventurer clears
+    // it reliably — the combination is what the curve is meant to require.
+    const leveled = { ...fresh, level: 25 };
+    const leveledPower = adventurerPower(guildState(), leveled);
+    expect(successChance(leveledPower, frontierPass.power)).toBeGreaterThan(
+      successChance(freshPower, frontierPass.power),
+    );
+    const geared = {
+      ...leveled,
+      equipment: { weapon: generateEquipment(999, 6, mid) },
+    };
+    const gearedPower = adventurerPower(guildState(), geared);
+    expect(successChance(gearedPower, frontierPass.power)).toBeGreaterThan(
+      successChance(leveledPower, frontierPass.power),
+    );
+  });
+});
 
 describe('patrol & quests', () => {
   it('zones unlock in order via quest clears', () => {

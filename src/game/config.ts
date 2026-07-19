@@ -241,6 +241,17 @@ export function xpToNext(level: number): number {
   return Math.floor(50 * Math.pow(level, 1.5));
 }
 
+/**
+ * XP rewards grow geometrically per location tier (unlike gold, which stays
+ * linear — see docs/game-design.md discussion on gold's town/guild balance).
+ * This keeps pushing into harder zones meaningfully more rewarding than
+ * farming an old, safe one at capped success chance.
+ */
+export const XP_TIER_RATIO = 1.6;
+export function tierXp(perTier: number, tier: number): number {
+  return perTier * Math.pow(XP_TIER_RATIO, tier - 1);
+}
+
 export const ADVENTURER_FIRST_NAMES = [
   'Ash', 'Bryn', 'Corin', 'Dara', 'Edda', 'Fenn', 'Garet', 'Hild',
   'Ivo', 'Jora', 'Kell', 'Lina', 'Merek', 'Nyssa', 'Orin', 'Petra',
@@ -261,35 +272,42 @@ export const MATERIALS: MaterialDef[] = [
 /**
  * Zones unlock in order: a zone opens once the previous zone's quest has been
  * cleared. Clearing the last zone's quest triggers Act 3.
+ *
+ * Power curve: tiers 1-6 grow ~1.75x per tier (vs the old ~1.6x), and boss
+ * tiers 7-10 grow ~1.6x with a steeper final jump for the demon king. This
+ * is tuned so a naked, average-attribute adventurer's raw stat growth alone
+ * (~6.5 power/level) no longer outpaces zone difficulty — reaching a zone's
+ * ~95% success cap now takes both a meaningfully higher level *and* gear on
+ * top, instead of leveling alone trivializing every zone.
  */
 export const LOCATIONS: LocationDef[] = [
   {
-    id: 'forest-edge', name: 'Forest Edge', kind: 'zone', tier: 1, power: 16,
+    id: 'forest-edge', name: 'Forest Edge', kind: 'zone', tier: 1, power: 20,
     materialId: 'beast-pelt', questDuration: 60, shardChance: 0.005,
     description: 'Wolves and worse in the treeline.',
   },
   {
-    id: 'river-crossing', name: 'River Crossing', kind: 'zone', tier: 2, power: 30,
+    id: 'river-crossing', name: 'River Crossing', kind: 'zone', tier: 2, power: 35,
     materialId: 'beast-pelt', questDuration: 180, shardChance: 0.005,
     description: 'Bandits favor the ford.',
   },
   {
-    id: 'old-mines', name: 'Old Mines', kind: 'zone', tier: 3, power: 50,
+    id: 'old-mines', name: 'Old Mines', kind: 'zone', tier: 3, power: 61,
     materialId: 'iron-ore', questDuration: 300, shardChance: 0.006,
     description: 'Abandoned shafts, occupied tunnels.',
   },
   {
-    id: 'haunted-marsh', name: 'Haunted Marsh', kind: 'zone', tier: 4, power: 85,
+    id: 'haunted-marsh', name: 'Haunted Marsh', kind: 'zone', tier: 4, power: 107,
     materialId: 'spirit-essence', questDuration: 480, shardChance: 0.008,
     description: 'The dead here are restless.',
   },
   {
-    id: 'sunken-ruins', name: 'Sunken Ruins', kind: 'zone', tier: 5, power: 140,
+    id: 'sunken-ruins', name: 'Sunken Ruins', kind: 'zone', tier: 5, power: 187,
     materialId: 'spirit-essence', questDuration: 660, shardChance: 0.009,
     description: 'Something ancient still guards the depths.',
   },
   {
-    id: 'frontier-pass', name: 'Frontier Pass', kind: 'zone', tier: 6, power: 230,
+    id: 'frontier-pass', name: 'Frontier Pass', kind: 'zone', tier: 6, power: 328,
     materialId: 'demon-ash', questDuration: 900, shardChance: 0.01,
     description: 'The road home. Something burned through here.',
   },
@@ -301,17 +319,17 @@ export const LOCATIONS: LocationDef[] = [
   },
   {
     id: 'general-vex', name: "General Vex's Spire", kind: 'boss', tier: 8,
-    power: 750, materialId: 'demon-ash', questDuration: 720, shardChance: 0.02,
+    power: 800, materialId: 'demon-ash', questDuration: 720, shardChance: 0.02,
     bossShardReward: 20, description: 'The legion’s sorcerer.',
   },
   {
     id: 'general-thane', name: "General Thane's Bastion", kind: 'boss', tier: 9,
-    power: 1000, materialId: 'demon-ash', questDuration: 840, shardChance: 0.02,
+    power: 1_280, materialId: 'demon-ash', questDuration: 840, shardChance: 0.02,
     bossShardReward: 25, description: 'The legion’s shield.',
   },
   {
     id: 'demon-king', name: 'The Demon King’s Citadel', kind: 'boss', tier: 10,
-    power: 1300, materialId: 'demon-ash', questDuration: 1200, shardChance: 0.02,
+    power: 2_240, materialId: 'demon-ash', questDuration: 1200, shardChance: 0.02,
     bossShardReward: 60, description: 'Where it all ends. Or begins.',
   },
 ];

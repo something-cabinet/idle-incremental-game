@@ -24,6 +24,7 @@ import {
   RES_MITIGATION_K,
   SUCCESS_CHANCE_MAX,
   SUCCESS_CHANCE_MIN,
+  tierXp,
 } from './config';
 import { locationDef } from './guild';
 import { productionPerSecond } from './logic';
@@ -206,7 +207,7 @@ function processAdventurer(
     }
 
     loot.gold += PATROL.goldPerTier * loc.tier;
-    const xp = xpWithTraining(state, PATROL.xpPerTier * loc.tier);
+    const xp = xpWithTraining(state, tierXp(PATROL.xpPerTier, loc.tier));
     loot.xp += xp;
     current = gainXp(current, xp);
     if (rng() < PATROL.materialChance * luckMult) {
@@ -287,7 +288,7 @@ function resolveQuest(
   }
   state.locationsCleared[loc.id] = true;
 
-  const xp = xpWithTraining(state, QUEST.xpPerTier * loc.tier);
+  const xp = xpWithTraining(state, tierXp(QUEST.xpPerTier, loc.tier));
   loot.xp = xp;
   const leveled = gainXp(adv, xp);
   pushLog(state, 'quest', endedAt,
@@ -309,7 +310,7 @@ function resolveExpedition(state: GameState, healSpeedMult: number, rng: Rng): v
   const members = state.adventurers.filter((a) => exp.memberIds.includes(a.id));
   const combined = members.reduce((sum, a) => sum + adventurerPower(state, a), 0);
   const success = rng() < successChance(combined, loc.power);
-  const xp = xpWithTraining(state, QUEST.xpPerTier * loc.tier);
+  const xp = xpWithTraining(state, tierXp(QUEST.xpPerTier, loc.tier));
 
   state.adventurers = state.adventurers.map((a) => {
     if (!exp.memberIds.includes(a.id)) return a;
