@@ -8,6 +8,8 @@ import {
   HIRE_COST_GROWTH,
   LOCATIONS,
   RARITY_SELL_GOLD,
+  REROLL_BASE_COST,
+  REROLL_COST_GROWTH,
 } from './config';
 import { computeModifiers } from './perks';
 import type { Adventurer, EquipSlot, GameState, LocationDef, Rng } from './types';
@@ -29,6 +31,43 @@ export function hireCost(state: GameState): number {
   );
 }
 
+export function rerollCost(state: GameState): number {
+  const costMult = computeModifiers(state).costMult;
+  return Math.ceil(
+    REROLL_BASE_COST * Math.pow(REROLL_COST_GROWTH, state.adventurers.length) * costMult,
+  );
+}
+
+/** Refill recruit candidates to 3, optionally costing gold (for rerolls). */
+function generateCandidates(state: GameState, rng: Rng): Adventurer[] {
+  const candidates: Adventurer[] = [];
+  for (let i = 0; i < 3; i++) {
+    candidates.push(generateAdventurer(state.nextEntityId + i, rng));
+  }
+  return candidates;
+}
+
+export function refreshRecruits(state: GameState, rng: Rng = Math.random): GameState {
+  return {
+    ...state,
+    recruitCandidates: generateCandidates(state, rng),
+    nextEntityId: state.nextEntityId + 3,
+  };
+}
+
+export function rerollRecruits(state: GameState, rng: Rng = Math.random): GameState {
+  if (state.act < 2) return state;
+  const cost = rerollCost(state);
+  if (state.gold < cost) return state;
+  return {
+    ...state,
+    gold: state.gold - cost,
+    recruitCandidates: generateCandidates(state, rng),
+    nextEntityId: state.nextEntityId + 3,
+  };
+}
+
+/** Direct hire (skips the recruit picker). Used by tests and auto-refill. */
 export function hireAdventurer(state: GameState, rng: Rng = Math.random): GameState {
   if (state.act < 2) return state;
   if (state.adventurers.length >= rosterCap(state)) return state;
@@ -40,6 +79,21 @@ export function hireAdventurer(state: GameState, rng: Rng = Math.random): GameSt
     gold: state.gold - cost,
     nextEntityId: state.nextEntityId + 1,
     adventurers: [...state.adventurers, adv],
+  };
+}
+
+export function hireCandidate(state: GameState, candidateId: number): GameState {
+  if (state.act < 2) return state;
+  if (state.adventurers.length >= rosterCap(state)) return state;
+  const cost = hireCost(state);
+  if (state.gold < cost) return state;
+  const candidate = state.recruitCandidates.find((c) => c.id === candidateId);
+  if (!candidate) return state;
+  return {
+    ...state,
+    gold: state.gold - cost,
+    adventurers: [...state.adventurers, candidate],
+    recruitCandidates: state.recruitCandidates.filter((c) => c.id !== candidateId),
   };
 }
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   adventurerStats,
   effectiveAttributes,
@@ -20,10 +20,13 @@ import {
   canBuyGuildUpgrade,
   equipItem,
   guildUpgradeCost,
-  hireAdventurer,
+  hireCandidate,
   hireCost,
   locationDef,
   recallAdventurer,
+  refreshRecruits,
+  rerollCost,
+  rerollRecruits,
   rosterCap,
   unequipItem,
 } from '../../game/guild';
@@ -80,8 +83,18 @@ function AdventurersSection({ onOpen }: { onOpen: (id: number) => void }) {
   const store = useGameStore();
   const state = useGameState();
   const fmt = useFormat();
-  const canHire =
-    state.adventurers.length < rosterCap(state) && state.gold >= hireCost(state);
+
+  // Auto-refresh recruits when entering act 2 with empty candidates
+  useEffect(() => {
+    if (state.act >= 2 && state.recruitCandidates.length === 0) {
+      store.dispatch((s) => refreshRecruits(s));
+    }
+  }, [state.act, state.recruitCandidates.length, store]);
+
+  const rosterFull = state.adventurers.length >= rosterCap(state);
+  const canAffordHire = state.gold >= hireCost(state);
+  const canAffordReroll = state.gold >= rerollCost(state);
+  const candidates = state.recruitCandidates;
 
   return (
     <section className="rows">
@@ -91,21 +104,50 @@ function AdventurersSection({ onOpen }: { onOpen: (id: number) => void }) {
       {state.adventurers.map((adv) => (
         <AdventurerCard key={adv.id} adv={adv} onOpen={() => onOpen(adv.id)} />
       ))}
-      <button
-        className={`row ${canHire ? '' : 'unaffordable'}`}
-        disabled={!canHire}
-        onClick={() => store.dispatch((s) => hireAdventurer(s))}
-      >
-        <div className="row-info">
-          <span className="row-name">Hire Adventurer</span>
-          <span className="row-desc">
-            {state.adventurers.length >= rosterCap(state)
-              ? 'Roster full — upgrade the Guild Hall.'
-              : 'A new blade for the guild.'}
-          </span>
-        </div>
-        <div className="row-cost">{fmt(hireCost(state))} 🪙</div>
-      </button>
+
+      {candidates.length > 0 && !rosterFull && (
+        <>
+          <h4 className="section-title">Recruit Candidates</h4>
+          {candidates.map((c) => {
+            const { atk, def } = adventurerStats(c);
+            const hpMax = maxHp(c);
+            const affordable = canAffordHire;
+            return (
+              <button
+                key={c.id}
+                className={`row ${affordable ? '' : 'unaffordable'}`}
+                disabled={!affordable}
+                onClick={() => store.dispatch((s) => hireCandidate(s, c.id))}
+              >
+                <div className="row-info">
+                  <span className="row-name">
+                    {c.name} <span className="row-sub">Lv {c.level} {c.className}</span>
+                  </span>
+                  <span className="row-desc">
+                    ⚔ {atk} · 🛡 {def} · ❤ {hpMax}
+                  </span>
+                </div>
+                <div className="row-cost">{fmt(hireCost(state))} 🪙</div>
+              </button>
+            );
+          })}
+          <button
+            className={`row ${canAffordReroll ? '' : 'unaffordable'}`}
+            disabled={!canAffordReroll}
+            onClick={() => store.dispatch((s) => rerollRecruits(s))}
+          >
+            <div className="row-info">
+              <span className="row-name">Reroll Candidates</span>
+              <span className="row-desc">New choices for a fresh set of recruits.</span>
+            </div>
+            <div className="row-cost">{fmt(rerollCost(state))} 🪙</div>
+          </button>
+        </>
+      )}
+
+      {rosterFull && (
+        <div className="row locked">Roster full — upgrade the Guild Hall.</div>
+      )}
     </section>
   );
 }

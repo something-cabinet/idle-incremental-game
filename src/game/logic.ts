@@ -30,6 +30,7 @@ export function createInitialState(now = Date.now()): GameState {
     materials: {},
     townSkills: {},
     adventurers: [],
+    recruitCandidates: [],
     inventory: [],
     guildUpgrades: {},
     expedition: null,

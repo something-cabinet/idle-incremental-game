@@ -295,6 +295,8 @@ export interface GameState {
 
   // Guild
   adventurers: Adventurer[];
+  /** 3 adventurer candidates currently shown for recruitment (empty if not yet generated) */
+  recruitCandidates: Adventurer[];
   inventory: Equipment[]; // unequipped items
   guildUpgrades: Record<string, number>;
   expedition: Expedition | null;

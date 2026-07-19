@@ -132,6 +132,10 @@ export const HIRE_BASE_COST = 500;
 export const HIRE_COST_GROWTH = 2.2;
 export const BASE_ROSTER_CAP = 2; // + guild-hall level, max 8
 
+/** Rerolling recruit candidates: cost grows with current adventurer count. */
+export const REROLL_BASE_COST = 100;
+export const REROLL_COST_GROWTH = 2.2;
+
 // ---------------------------------------------------------------------------
 // Attributes & classes
 // ---------------------------------------------------------------------------
