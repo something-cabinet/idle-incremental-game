@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   adventurerStats,
   effectiveAttributes,
+  equipDelta,
   isInjured,
   maxHp,
 } from '../../game/adventurers';
@@ -16,6 +17,7 @@ import {
 } from '../../game/config';
 import { formatDuration } from '../../game/format';
 import {
+  autoEquipBest,
   buyGuildUpgrade,
   canBuyGuildUpgrade,
   equipItem,
@@ -383,7 +385,16 @@ function AdventurerDetail({ adv, onClose }: { adv: Adventurer; onClose: () => vo
           attack — match their weapon to it.
         </p>
 
-        <h3 className="section-title">Equipment</h3>
+        <div className="section-title-row">
+          <h3 className="section-title">Equipment</h3>
+          <button
+            className="small-button"
+            disabled={state.inventory.length === 0}
+            onClick={() => store.dispatch((s) => autoEquipBest(s, adv.id))}
+          >
+            ✨ Auto-equip
+          </button>
+        </div>
         <div className="rows">
           {(['weapon', 'armor', 'trinket'] as EquipSlot[]).map((slot) => {
             const item = adv.equipment[slot];
@@ -438,6 +449,7 @@ function AdventurerDetail({ adv, onClose }: { adv: Adventurer; onClose: () => vo
                           <span className="row-desc">
                             {cand.rarity} · {itemStatParts(cand).join(' · ')}
                           </span>
+                          <EquipDeltaChips delta={equipDelta(adv, cand)} />
                         </button>
                       ))
                     )}
@@ -457,6 +469,27 @@ const SLOT_FALLBACK_ICON: Record<EquipSlot, string> = {
   armor: '🛡️',
   trinket: '💍',
 };
+
+/** Green/red ▲▼ chips showing how a candidate item changes atk/def/HP. */
+function EquipDeltaChips({ delta }: { delta: ReturnType<typeof equipDelta> }) {
+  const parts: { label: string; value: number }[] = [
+    { label: '⚔', value: delta.atk },
+    { label: '🛡', value: delta.def },
+    { label: '❤', value: delta.hp },
+  ].filter((p) => p.value !== 0);
+  if (parts.length === 0) {
+    return <span className="equip-delta-row"><span className="equip-delta same">no change</span></span>;
+  }
+  return (
+    <span className="equip-delta-row">
+      {parts.map((p) => (
+        <span key={p.label} className={`equip-delta ${p.value > 0 ? 'up' : 'down'}`}>
+          {p.label} {p.value > 0 ? '▲' : '▼'}{Math.abs(p.value)}
+        </span>
+      ))}
+    </span>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Activity log

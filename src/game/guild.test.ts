@@ -3,6 +3,7 @@ import {
   adventurerPower,
   adventurerStats,
   effectiveAttributes,
+  equipDelta,
   equipTypeDef,
   generateAdventurer,
   generateEquipment,
@@ -12,6 +13,7 @@ import { DEMON_KING_ID, ENCOUNTER_INTERVAL, GENERAL_IDS } from './config';
 import { tick } from './engine';
 import {
   assignAdventurer,
+  autoEquipBest,
   buyGuildUpgrade,
   equipItem,
   hireAdventurer,
@@ -73,6 +75,39 @@ describe('equipment', () => {
     s = equipItem(s, s.adventurers[0].id, 99);
     expect(s.inventory).toHaveLength(0);
     expect(adventurerPower(s, s.adventurers[0])).toBeGreaterThan(before);
+  });
+
+  it('equipDelta reports the stat change vs the current slot item', () => {
+    let s = withAdventurer(guildState());
+    const adv = s.adventurers[0];
+    const weak = { ...generateEquipment(1, 1, mid), slot: 'armor' as const, atk: 0, def: 2, hp: 0, attrs: {} };
+    const strong = { ...generateEquipment(2, 1, mid), slot: 'armor' as const, atk: 0, def: 10, hp: 0, attrs: {} };
+    s = { ...s, inventory: [weak, strong] };
+    // Empty slot: delta equals the item's own contribution.
+    expect(equipDelta(adv, strong).def).toBe(10);
+    // With the weak armor equipped, swapping to strong nets the difference.
+    s = equipItem(s, adv.id, 1);
+    const equipped = s.adventurers[0];
+    expect(equipDelta(equipped, strong).def).toBe(8);
+  });
+
+  it('autoEquipBest equips the strongest item per slot, only when it beats current', () => {
+    let s = withAdventurer(guildState());
+    const advId = s.adventurers[0].id;
+    const items = [
+      { ...generateEquipment(1, 1, mid), slot: 'armor' as const, atk: 0, def: 3, hp: 0, attrs: {} },
+      { ...generateEquipment(2, 1, mid), slot: 'armor' as const, atk: 0, def: 12, hp: 0, attrs: {} },
+      { ...generateEquipment(3, 1, mid), slot: 'trinket' as const, atk: 1, def: 1, hp: 0, attrs: {} },
+    ];
+    s = { ...s, inventory: items };
+    s = autoEquipBest(s, advId);
+    const adv = s.adventurers.find((a) => a.id === advId)!;
+    expect(adv.equipment.armor?.id).toBe(2); // picked the def-12, not def-3
+    expect(adv.equipment.trinket?.id).toBe(3);
+    // The rejected armor is back in inventory; nothing was lost.
+    expect(s.inventory.some((i) => i.id === 1)).toBe(true);
+    // Running again is a no-op (current gear already best).
+    expect(autoEquipBest(s, advId)).toBe(s);
   });
 
   it('selling an item grants gold', () => {

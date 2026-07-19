@@ -214,6 +214,35 @@ export function adventurerPower(state: GameState, adv: Adventurer): number {
   return (atk + def) * computeModifiers(state).powerMult;
 }
 
+/** Stats this adventurer would have with `item` occupying its slot. */
+export function statsWithItem(adv: Adventurer, item: Equipment): {
+  atk: number;
+  def: number;
+  maxHp: number;
+} {
+  return adventurerStats({
+    ...adv,
+    equipment: { ...adv.equipment, [item.slot]: item },
+  });
+}
+
+/**
+ * Stat change from equipping `item` into its slot, vs whatever is there now
+ * (weapon scaling and any replaced item are accounted for). Positive = gain.
+ */
+export function equipDelta(
+  adv: Adventurer,
+  item: Equipment,
+): { atk: number; def: number; hp: number } {
+  const before = adventurerStats(adv);
+  const after = statsWithItem(adv, item);
+  return {
+    atk: after.atk - before.atk,
+    def: after.def - before.def,
+    hp: after.maxHp - before.maxHp,
+  };
+}
+
 /** Find-chance multiplier from LCK (materials, equipment, shards). */
 export function luckFindMult(adv: Adventurer): number {
   return 1 + effectiveAttributes(adv).lck * LCK_FIND_PER_POINT;

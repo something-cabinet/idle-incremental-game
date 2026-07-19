@@ -692,10 +692,6 @@ button.row:disabled {
   border-color: var(--epic);
 }
 
-.equipped-slot + .equipped-slot::before {
-  content: ' · ';
-}
-
 .link-button {
   background: none;
   border: none;
@@ -966,6 +962,65 @@ button.row:disabled {
 
 .equip-picker-item.item-epic {
   background: rgba(192, 126, 255, 0.12);
+}
+
+/* Section header with an action button on the right (e.g. Auto-equip). */
+.section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* Stat-change chips shown under a candidate item in the equip picker. */
+.equip-delta-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 3px;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.equip-delta {
+  font-weight: 600;
+}
+
+.equip-delta.up {
+  color: var(--green);
+}
+
+.equip-delta.down {
+  color: var(--red);
+}
+
+.equip-delta.same {
+  color: var(--text-dim);
+  font-weight: 400;
+}
+
+.equip-detail-hint {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+
+/* Read-only equipped overview in the Items tab. */
+.equipped-slots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+
+.equipped-slot.empty {
+  color: var(--text-dim);
+}
+
+.equipped-slot.rarity-rare {
+  color: var(--rare);
+}
+
+.equipped-slot.rarity-epic {
+  color: var(--epic);
 }
 
 @media (max-width: 480px) {

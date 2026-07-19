@@ -1,4 +1,4 @@
-import { generateAdventurer, isInjured } from './adventurers';
+import { adventurerStats, generateAdventurer, isInjured, statsWithItem } from './adventurers';
 import {
   BASE_ROSTER_CAP,
   DEMON_KING_ID,
@@ -174,6 +174,38 @@ export function equipItem(state: GameState, advId: number, itemId: number): Game
     ...a,
     equipment: { ...a.equipment, [item.slot]: item },
   }));
+}
+
+const EQUIP_SLOTS: EquipSlot[] = ['weapon', 'armor', 'trinket'];
+
+/** Ranking used by auto-equip: overall combat value, HP lightly weighted. */
+function equipScore(stats: { atk: number; def: number; maxHp: number }): number {
+  return stats.atk + stats.def + stats.maxHp * 0.1;
+}
+
+/**
+ * Equip the best available inventory item in each slot for one adventurer,
+ * only swapping when it beats what's already equipped. Weapon scaling is
+ * respected via statsWithItem, so the "best" weapon is class/attribute-aware.
+ */
+export function autoEquipBest(state: GameState, advId: number): GameState {
+  let s = state;
+  for (const slot of EQUIP_SLOTS) {
+    const adv = s.adventurers.find((a) => a.id === advId);
+    if (!adv) break;
+    let bestId: number | null = null;
+    let bestScore = equipScore(adventurerStats(adv)); // current loadout
+    for (const cand of s.inventory) {
+      if (cand.slot !== slot) continue;
+      const score = equipScore(statsWithItem(adv, cand));
+      if (score > bestScore) {
+        bestScore = score;
+        bestId = cand.id;
+      }
+    }
+    if (bestId !== null) s = equipItem(s, advId, bestId);
+  }
+  return s;
 }
 
 export function unequipItem(state: GameState, advId: number, slot: EquipSlot): GameState {

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { MATERIALS, RARITY_SELL_GOLD } from '../../game/config';
-import { equipItem, sellItem, sellItems, unequipItem } from '../../game/guild';
+import { sellItem, sellItems } from '../../game/guild';
 import type { EquipSlot, Equipment, Rarity } from '../../game/types';
 import { useFormat } from '../../hooks/useFormat';
 import { useGameState, useGameStore } from '../../hooks/useGame';
@@ -53,7 +53,6 @@ export function InventoryPanel() {
   const store = useGameStore();
   const state = useGameState();
   const fmt = useFormat();
-  const [target, setTarget] = useState<number | ''>('');
   const [selected, setSelected] = useState<Equipment | null>(null);
   const [sortMode, setSortMode] = useState<SortMode>('newest');
   const [rarityFilter, setRarityFilter] = useState<Rarity | 'all'>('all');
@@ -69,13 +68,6 @@ export function InventoryPanel() {
     ),
     sortMode,
   );
-
-  const handleEquip = () => {
-    if (selected && target !== '') {
-      store.dispatch((s) => equipItem(s, target as number, selected.id));
-      setSelected(null);
-    }
-  };
 
   const handleSell = () => {
     if (selected) {
@@ -207,24 +199,12 @@ export function InventoryPanel() {
               ))}
             </div>
             <div className="equip-detail-actions">
-              <select
-                className="equip-target"
-                value={target}
-                onChange={(e) => setTarget(e.target.value === '' ? '' : Number(e.target.value))}
-              >
-                <option value="">Equip to whom?</option>
-                {state.adventurers.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
-              <button className="small-button" disabled={target === ''} onClick={handleEquip}>
-                Equip
-              </button>
-              <button className="small-button" onClick={handleSell}>
+              <button className="small-button danger" onClick={handleSell}>
                 Sell {RARITY_SELL_GOLD[selected.rarity]}🪙
               </button>
+              <span className="equip-detail-hint">
+                Equip from the Guild tab → tap an adventurer.
+              </span>
             </div>
           </div>
         )}
@@ -251,26 +231,23 @@ export function InventoryPanel() {
 
       <section className="rows">
         <h3 className="section-title">Equipped</h3>
+        {state.adventurers.length === 0 && (
+          <div className="row locked">No adventurers yet.</div>
+        )}
         {state.adventurers.map((adv) => (
           <div key={adv.id} className="row">
             <div className="row-info">
               <span className="row-name">{adv.name}</span>
-              <span className="row-desc">
+              <span className="row-desc equipped-slots">
                 {(['weapon', 'armor', 'trinket'] as EquipSlot[]).map((slot) => {
                   const item = adv.equipment[slot];
                   return (
-                    <span key={slot} className="equipped-slot">
-                      {item ? (
-                        <button
-                          className="link-button"
-                          onClick={() => store.dispatch((s) => unequipItem(s, adv.id, slot))}
-                          title="Unequip"
-                        >
-                          {item.name}
-                        </button>
-                      ) : (
-                        `no ${slot}`
-                      )}
+                    <span
+                      key={slot}
+                      className={`equipped-slot ${item ? `rarity-${item.rarity}` : 'empty'}`}
+                      title={item ? item.name : `No ${slot}`}
+                    >
+                      {item ? `${itemIcon(item)} ${item.name}` : `${SLOT_ICON[slot]} —`}
                     </span>
                   );
                 })}
