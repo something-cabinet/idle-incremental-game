@@ -13,6 +13,7 @@ import {
   QUEST_BATCH_TIME_BASE,
   QUEST_GOLD_BASE,
   QUEST_GOLD_EXP,
+  QUEST_GOLD_TIER_EXP,
   QUEST_MAX_BATCH,
   QUEST_MIN_BATCH,
   QUEST_REP_BASE,
@@ -22,6 +23,7 @@ import {
   REROLL_BASE_COST,
   REROLL_COST_GROWTH,
 } from './config';
+import { productionPerSecond } from './logic';
 import { computeModifiers } from './perks';
 import type {
   Adventurer,
@@ -412,14 +414,25 @@ export function unitDifficulty(target: QuestTargetDef): number {
   return target.difficulty * tier;
 }
 
+/**
+ * Gold-cost difficulty of one unit: difficulty × tier^QUEST_GOLD_TIER_EXP.
+ * Steeper than unitDifficulty's linear tier scaling — later, more dangerous
+ * zones cost disproportionately more gold to fund, not just proportionally
+ * more like time/materials do.
+ */
+export function goldUnitDifficulty(target: QuestTargetDef): number {
+  const tier = locationDef(target.locationId)?.tier ?? 1;
+  return target.difficulty * Math.pow(tier, QUEST_GOLD_TIER_EXP);
+}
+
 /** Seconds one adventurer takes to complete one batch (sublinear in batch size). */
 export function batchTimeSolo(batchSize: number, unitDiff: number): number {
   return QUEST_BATCH_TIME_BASE * unitDiff * Math.pow(batchSize, QUEST_TIME_EXP);
 }
 
 /** Gold paid out per completed batch (superlinear in batch size — a gold sink). */
-export function batchGold(batchSize: number, unitDiff: number): number {
-  return QUEST_GOLD_BASE * unitDiff * Math.pow(batchSize, QUEST_GOLD_EXP);
+export function batchGold(batchSize: number, goldUnitDiff: number): number {
+  return QUEST_GOLD_BASE * goldUnitDiff * Math.pow(batchSize, QUEST_GOLD_EXP);
 }
 
 /** Reputation earned per completed batch. */
@@ -431,32 +444,62 @@ export function clampBatchSize(batchSize: number): number {
   return Math.max(QUEST_MIN_BATCH, Math.min(QUEST_MAX_BATCH, Math.floor(batchSize)));
 }
 
+/** Total gold/sec every active quest on the board would cost right now. */
+export function totalQuestGoldPerSec(state: GameState): number {
+  const active = state.quests.length;
+  if (active === 0) return 0;
+  const advPerQuest = adventurerCount(state) / active;
+  return state.quests.reduce((sum, q) => {
+    const target = questTargetDef(q.targetId);
+    if (!target) return sum;
+    const batchesPerSec = advPerQuest / batchTimeSolo(q.batchSize, unitDifficulty(target));
+    return sum + batchGold(q.batchSize, goldUnitDifficulty(target)) * batchesPerSec;
+  }, 0);
+}
+
+/**
+ * Whether the guild can currently sustain its posted quest board. Mirrors the
+ * engine's per-tick gold gate (engine.ts processQuests) in its steady state:
+ * a positive bank is still draining it, not yet starved; once the bank hits
+ * zero, sustaining the board depends on town income alone.
+ */
+export function questBoardAffordable(state: GameState): boolean {
+  if (state.quests.length === 0) return true;
+  if (state.gold > 0) return true;
+  return productionPerSecond(state) >= totalQuestGoldPerSec(state);
+}
+
 export interface QuestRates {
   /** Adventurers currently assigned to this quest (pool split across quests). */
   adventurers: number;
   materialsPerSec: number;
   goldPerSec: number;
   reputationPerSec: number;
+  /** True when the board can't currently be sustained — all rates are 0. */
+  goldStarved: boolean;
 }
 
 /**
  * Live throughput of a quest given the current adventurer pool, which is split
- * evenly across all active quests. With no quests posted the split is moot.
+ * evenly across all active quests. Zeroed out when the board is gold-starved,
+ * matching the engine's hard gate — see questBoardAffordable.
  */
 export function questRates(state: GameState, quest: Quest): QuestRates {
   const target = questTargetDef(quest.targetId);
   const active = state.quests.length;
   if (!target || active === 0) {
-    return { adventurers: 0, materialsPerSec: 0, goldPerSec: 0, reputationPerSec: 0 };
+    return { adventurers: 0, materialsPerSec: 0, goldPerSec: 0, reputationPerSec: 0, goldStarved: false };
   }
   const advPerQuest = adventurerCount(state) / active;
   const diff = unitDifficulty(target);
   const batchesPerSec = advPerQuest / batchTimeSolo(quest.batchSize, diff);
+  const goldStarved = !questBoardAffordable(state);
   return {
     adventurers: advPerQuest,
-    materialsPerSec: quest.batchSize * batchesPerSec,
-    goldPerSec: batchGold(quest.batchSize, diff) * batchesPerSec,
-    reputationPerSec: batchReputation(quest.batchSize, diff) * batchesPerSec,
+    materialsPerSec: goldStarved ? 0 : quest.batchSize * batchesPerSec,
+    goldPerSec: goldStarved ? 0 : batchGold(quest.batchSize, goldUnitDifficulty(target)) * batchesPerSec,
+    reputationPerSec: goldStarved ? 0 : batchReputation(quest.batchSize, diff) * batchesPerSec,
+    goldStarved,
   };
 }
 

@@ -149,11 +149,17 @@ function QuestRow({ quest }: { quest: Quest }) {
         <span className="row-name">
           {target.name} <span className="row-sub">batch {quest.batchSize}</span>
         </span>
-        <span className="row-desc">
-          +{rate(rates.materialsPerSec)} {materialName(target.materialId)}/s ·{' '}
-          −{rate(rates.goldPerSec)} 🪙/s · +{rate(rates.reputationPerSec)} ★/s
-        </span>
-        <span className="row-good">{rates.adventurers.toFixed(1)} adventurers assigned</span>
+        {rates.goldStarved ? (
+          <span className="row-bad">⚠ Not enough gold — this quest is stalled.</span>
+        ) : (
+          <>
+            <span className="row-desc">
+              +{rate(rates.materialsPerSec)} {materialName(target.materialId)}/s ·{' '}
+              −{rate(rates.goldPerSec)} 🪙/s · +{rate(rates.reputationPerSec)} ★/s
+            </span>
+            <span className="row-good">{rates.adventurers.toFixed(1)} adventurers assigned</span>
+          </>
+        )}
       </div>
       <button
         className="small-button danger"

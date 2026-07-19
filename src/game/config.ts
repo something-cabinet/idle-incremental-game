@@ -385,14 +385,24 @@ export const QUEST_TARGETS: QuestTargetDef[] = [
 // Quest economy tuning
 // ---------------------------------------------------------------------------
 
-/** Batch time/gold/rep scale with unit difficulty = target.difficulty * tier. */
+/** Batch time/rep scale with unit difficulty = target.difficulty * tier. */
 export const QUEST_BATCH_TIME_BASE = 4; // solo seconds per batch at unitDiff 1, B 1
 export const QUEST_TIME_EXP = 0.7; // <1: bigger batches are more time-efficient per unit
-export const QUEST_GOLD_BASE = 1.5; // gold per batch at unitDiff 1, B 1
-export const QUEST_GOLD_EXP = 1.25; // >1: bigger batches cost more gold per unit (gold sink)
 export const QUEST_REP_BASE = 0.5; // reputation per batch at unitDiff 1, B 1
 export const QUEST_MIN_BATCH = 1;
 export const QUEST_MAX_BATCH = 50;
+
+/**
+ * Gold cost scales with target.difficulty * tier^QUEST_GOLD_TIER_EXP — a
+ * steeper-than-linear tier exponent, separate from the (linear-in-tier) time
+ * cost, so quests in later, more dangerous zones cost disproportionately more
+ * gold to fund (hazard pay), not just proportionally more like everything
+ * else. QUEST_GOLD_BASE sets the overall price level; QUEST_GOLD_EXP keeps
+ * bigger batches a gold sink (cost grows faster than the units requested).
+ */
+export const QUEST_GOLD_BASE = 6; // gold per batch at unitDiff 1, B 1
+export const QUEST_GOLD_EXP = 1.25; // >1: bigger batches cost more gold per unit
+export const QUEST_GOLD_TIER_EXP = 1.4; // >1: later zones cost more gold per unit than time alone implies
 
 /** The numerous town adventurers: a derived number driven by reputation. */
 export const ADVENTURER_BASE = 3;

@@ -30,10 +30,12 @@ import {
   buyGuildUpgrade,
   deleteQuest,
   equipItem,
+  goldUnitDifficulty,
   hireAdventurer,
   isBossUnlocked,
   isZoneUnlocked,
   postQuest,
+  questBoardAffordable,
   questRates,
   questTargetDef,
   rosterCap,
@@ -319,6 +321,24 @@ describe('quest board', () => {
     expect(bigGoldPerUnit).toBeGreaterThan(smallGoldPerUnit);
   });
 
+  it('later, more dangerous zones cost more gold per minute of quest work, not just per batch', () => {
+    // Same target shape (difficulty 1), same batch size, only the zone's tier
+    // differs. Gold scales with tier steeper than time does (goldUnitDifficulty
+    // vs unitDifficulty), so a fixed adventurer count earns less gold-efficiency
+    // per minute in a later zone than an earlier one.
+    const early = questTargetDef('gray-wolf')!; // forest-edge, tier 1
+    const late = questTargetDef('demon-scout')!; // frontier-pass, tier 6
+    const advPerQuest = 3;
+    const batch = 5;
+
+    function goldPerMinute(target: typeof early): number {
+      const batchesPerSec = advPerQuest / batchTimeSolo(batch, unitDifficulty(target));
+      return batchGold(batch, goldUnitDifficulty(target)) * batchesPerSec * 60;
+    }
+
+    expect(goldPerMinute(late)).toBeGreaterThan(goldPerMinute(early));
+  });
+
   it('the adventurer pool is split across active quests', () => {
     const one = postQuest(guildState(), 'gray-wolf', 5);
     const solo = questRates(one, one.quests[0]);
@@ -339,10 +359,29 @@ describe('quest board', () => {
     expect(s.materials['beast-pelt'] ?? 0).toBe(before['beast-pelt'] ?? 0);
   });
 
-  it('quest gold spend is throttled so gold never goes negative', () => {
+  it('a gold-starved board produces nothing rather than a diminished amount', () => {
     let s = { ...postQuest(guildState(), 'gray-wolf', 40), gold: 5 };
+    const before = { ...s.materials };
     s = tick(s, 300, 0);
-    expect(s.gold).toBeGreaterThanOrEqual(0);
+    // No town income (no jobs bought) and not enough banked gold → hard gate: zero output.
+    expect(s.gold).toBe(5);
+    expect(s.reputation).toBe(0);
+    expect(s.materials['beast-pelt'] ?? 0).toBe(before['beast-pelt'] ?? 0);
+  });
+
+  it('questRates reports zero output and goldStarved when the board is unaffordable', () => {
+    const s = { ...postQuest(guildState(), 'gray-wolf', 40), gold: 0 };
+    const rates = questRates(s, s.quests[0]);
+    expect(rates.goldStarved).toBe(true);
+    expect(rates.materialsPerSec).toBe(0);
+    expect(rates.goldPerSec).toBe(0);
+    expect(rates.reputationPerSec).toBe(0);
+  });
+
+  it('a positive bank is still considered affordable even with no town income', () => {
+    const s = postQuest(guildState(), 'gray-wolf', 5); // guildState() starts with 100_000 gold
+    expect(questBoardAffordable(s)).toBe(true);
+    expect(questRates(s, s.quests[0]).goldStarved).toBe(false);
   });
 
   it('offline catch-up runs the quest board over the credited time', () => {

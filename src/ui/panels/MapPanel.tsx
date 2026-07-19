@@ -118,11 +118,15 @@ function TargetRow({ target }: { target: QuestTargetDef }) {
         <span className="row-desc">
           {verb} → {materialName(target.materialId)}
         </span>
-        <span className="row-good">
-          +{rate(preview.materialsPerSec)} {materialName(target.materialId)}/s ·{' '}
-          <span className="row-bad">−{rate(preview.goldPerSec)} 🪙/s</span> · +
-          {rate(preview.reputationPerSec)} ★/s
-        </span>
+        {preview.goldStarved ? (
+          <span className="row-bad">⚠ Not enough gold to sustain this quest.</span>
+        ) : (
+          <span className="row-good">
+            +{rate(preview.materialsPerSec)} {materialName(target.materialId)}/s ·{' '}
+            <span className="row-bad">−{rate(preview.goldPerSec)} 🪙/s</span> · +
+            {rate(preview.reputationPerSec)} ★/s
+          </span>
+        )}
       </div>
       <div className="quest-post">
         <label className="batch-label">
@@ -159,10 +163,14 @@ function ActiveQuestRow({ quest }: { quest: Quest }) {
         <span className="row-name">
           {target.name} <span className="row-sub">batch {quest.batchSize}</span>
         </span>
-        <span className="row-desc">
-          +{rate(rates.materialsPerSec)} {materialName(target.materialId)}/s ·{' '}
-          −{rate(rates.goldPerSec)} 🪙/s · {rates.adventurers.toFixed(1)} adventurers
-        </span>
+        {rates.goldStarved ? (
+          <span className="row-bad">⚠ Not enough gold — this quest is stalled.</span>
+        ) : (
+          <span className="row-desc">
+            +{rate(rates.materialsPerSec)} {materialName(target.materialId)}/s ·{' '}
+            −{rate(rates.goldPerSec)} 🪙/s · {rates.adventurers.toFixed(1)} adventurers
+          </span>
+        )}
       </div>
       <button
         className="small-button danger"

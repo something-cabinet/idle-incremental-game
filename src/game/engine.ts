@@ -4,6 +4,7 @@ import {
   batchGold,
   batchReputation,
   batchTimeSolo,
+  goldUnitDifficulty,
   questTargetDef,
   unitDifficulty,
 } from './guild';
@@ -71,9 +72,11 @@ interface QuestOutput {
  * split evenly across all active quests; each quest converts gold into its
  * material plus reputation at a rate set by batch size and difficulty.
  *
- * Gold is a hard constraint: if the board would cost more than the player can
- * pay this tick (current gold + town income), every quest's output is scaled
- * down proportionally so gold never goes negative.
+ * Gold is a hard gate, not a dimmer: if the board would cost more than the
+ * player can pay this tick (current gold + town income), the whole board
+ * produces nothing — no materials, no gold spent, no reputation — rather than
+ * quietly running at a diminished rate. This mirrors questRates()/UI, which
+ * shows 0 output and a "not enough gold" warning under the same condition.
  */
 function processQuests(state: GameState, dtSeconds: number, townGold: number): QuestOutput {
   const out: QuestOutput = { materials: {}, goldSpent: 0, reputation: 0 };
@@ -91,7 +94,7 @@ function processQuests(state: GameState, dtSeconds: number, townGold: number): Q
       return {
         materialId: target.materialId,
         materialPerSec: q.batchSize * batchesPerSec,
-        goldPerSec: batchGold(q.batchSize, diff) * batchesPerSec,
+        goldPerSec: batchGold(q.batchSize, goldUnitDifficulty(target)) * batchesPerSec,
         repPerSec: batchReputation(q.batchSize, diff) * batchesPerSec,
       };
     })
@@ -99,13 +102,12 @@ function processQuests(state: GameState, dtSeconds: number, townGold: number): Q
 
   const goldNeeded = rows.reduce((sum, r) => sum + r.goldPerSec * dtSeconds, 0);
   const available = state.gold + townGold;
-  const scale = goldNeeded > 0 ? Math.min(1, available / goldNeeded) : 1;
+  if (goldNeeded > 0 && available < goldNeeded) return out; // gold-starved: zero output
 
   for (const r of rows) {
-    out.materials[r.materialId] =
-      (out.materials[r.materialId] ?? 0) + r.materialPerSec * dtSeconds * scale;
-    out.goldSpent += r.goldPerSec * dtSeconds * scale;
-    out.reputation += r.repPerSec * dtSeconds * scale;
+    out.materials[r.materialId] = (out.materials[r.materialId] ?? 0) + r.materialPerSec * dtSeconds;
+    out.goldSpent += r.goldPerSec * dtSeconds;
+    out.reputation += r.repPerSec * dtSeconds;
   }
   return out;
 }
