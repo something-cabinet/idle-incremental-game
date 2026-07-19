@@ -8,8 +8,16 @@ import {
   generateAdventurer,
   generateEquipment,
   maxHp,
+  rollRarity,
 } from './adventurers';
-import { DEMON_KING_ID, ENCOUNTER_INTERVAL, GENERAL_IDS } from './config';
+import {
+  DEMON_KING_ID,
+  ENCOUNTER_INTERVAL,
+  EXALTED_MIN_TIER,
+  EXALTED_PREFIXES,
+  GENERAL_IDS,
+  ITEM_PREFIXES,
+} from './config';
 import { tick } from './engine';
 import {
   assignAdventurer,
@@ -189,7 +197,49 @@ describe('attributes, HP & equipment', () => {
     expect(effectiveAttributes(adv).str).toBe(beforeStr + 5);
     expect(maxHp(adv)).toBe(beforeHp + 20);
   });
+
+  it('exalted rarity only rolls at/above EXALTED_MIN_TIER', () => {
+    const highRoll = () => 0.999; // lands in the last weight slice
+    expect(rollRarity(EXALTED_MIN_TIER - 1, highRoll)).toBe('epic');
+    expect(rollRarity(EXALTED_MIN_TIER, highRoll)).toBe('exalted');
+  });
+
+  it('exalted items roll exclusively from EXALTED_PREFIXES, never mixing with normal prefixes', () => {
+    const exaltedNames = new Set(EXALTED_PREFIXES.map((p) => p.name));
+    const normalNames = new Set(ITEM_PREFIXES.map((p) => p.name));
+    let sawExalted = false;
+    let sawBelowGate = false;
+    const rng = mulberry32(42);
+    for (let i = 0; i < 3000; i++) {
+      const tier = (i % 2 === 0 ? EXALTED_MIN_TIER : 1); // alternate above/below the gate
+      const item = generateEquipment(i, tier, rng);
+      const prefixName = item.name.split(' ')[0];
+      if (item.rarity === 'exalted') {
+        sawExalted = true;
+        expect(tier).toBeGreaterThanOrEqual(EXALTED_MIN_TIER);
+        expect(exaltedNames.has(prefixName)).toBe(true);
+      } else {
+        expect(exaltedNames.has(prefixName)).toBe(false);
+        if (tier < EXALTED_MIN_TIER) sawBelowGate = true;
+      }
+    }
+    expect(sawExalted).toBe(true); // the gate isn't accidentally dead
+    expect(sawBelowGate).toBe(true);
+    expect(normalNames.size).toBeGreaterThan(0); // sanity: pools are distinct and non-empty
+  });
 });
+
+/** Deterministic PRNG for reproducible large-sample tests (no Math.random flakiness). */
+function mulberry32(seed: number) {
+  let a = seed;
+  return () => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
 describe('patrol & quests', () => {
   it('zones unlock in order via quest clears', () => {

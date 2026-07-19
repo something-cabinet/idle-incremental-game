@@ -405,11 +405,16 @@ export const RARITY_WEIGHTS: [Rarity, number][] = [
   ['rare', 0.25],
   ['epic', 0.05],
 ];
-export const RARITY_MULT: Record<Rarity, number> = { common: 1, rare: 1.6, epic: 2.5 };
-export const RARITY_SELL_GOLD: Record<Rarity, number> = { common: 25, rare: 100, epic: 400 };
+/** Zone tier at/above which drops get a shot at exalted (Sunken Ruins onward). */
+export const EXALTED_MIN_TIER = 5;
+/** Exalted's roll chance at/above EXALTED_MIN_TIER, carved out of epic's slice. */
+export const EXALTED_WEIGHT = 0.015;
+
+export const RARITY_MULT: Record<Rarity, number> = { common: 1, rare: 1.6, epic: 2.5, exalted: 4 };
+export const RARITY_SELL_GOLD: Record<Rarity, number> = { common: 25, rare: 100, epic: 400, exalted: 1_500 };
 
 /** Number of bonus attributes rolled from the type's pool, by rarity. */
-export const RARITY_BONUS_ATTRS: Record<Rarity, number> = { common: 0, rare: 1, epic: 2 };
+export const RARITY_BONUS_ATTRS: Record<Rarity, number> = { common: 0, rare: 1, epic: 2, exalted: 3 };
 /** Bonus attribute points per roll: 1 + floor(tier / 2). */
 export const BONUS_ATTR_TIER_DIV = 2;
 /** Bonus max HP per tier on hp-capable types (rare = 1x, epic = 2x). */
@@ -481,6 +486,20 @@ export const ITEM_PREFIXES: ItemPrefixDef[] = [
   { id: 'lucky', name: 'Lucky', weight: 5, attrs: { lck: 1 } },
   { id: 'masterwork', name: 'Masterwork', weight: 3, atkMult: 1.2, defMult: 1.2 },
   { id: 'ancient', name: 'Ancient', weight: 2, atkMult: 1.15, defMult: 1.15, hpPerTier: 4, attrs: { lck: 1 } },
+];
+
+/**
+ * Exclusive to exalted-rarity drops — never rolled on common/rare/epic items,
+ * and exalted items never roll from ITEM_PREFIXES. Each grants a richer
+ * multi-attribute spread than any normal prefix can.
+ */
+export const EXALTED_PREFIXES: ItemPrefixDef[] = [
+  { id: 'godslayers', name: "Godslayer's", weight: 10, atkMult: 1.5, attrs: { str: 1, dex: 1 } },
+  { id: 'worldenders', name: "World-Ender's", weight: 10, atkMult: 1.6, defMult: 0.9, attrs: { str: 2 } },
+  { id: 'saints', name: "Saint's", weight: 10, defMult: 1.5, hpPerTier: 8, attrs: { con: 1, res: 1 } },
+  { id: 'archmages', name: "Archmage's", weight: 10, atkMult: 1.3, attrs: { int: 2, lck: 1 } },
+  { id: 'immortals', name: "Immortal's", weight: 10, defMult: 1.3, hpPerTier: 12, attrs: { con: 2 } },
+  { id: 'fated', name: 'Fated', weight: 10, atkMult: 1.2, defMult: 1.2, attrs: { lck: 2 } },
 ];
 
 // ---------------------------------------------------------------------------

@@ -28,7 +28,7 @@ const SORT_LABEL: Record<SortMode, string> = {
   def: 'Defense',
 };
 
-const RARITY_ORDER: Record<Rarity, number> = { common: 0, rare: 1, epic: 2 };
+const RARITY_ORDER: Record<Rarity, number> = { common: 0, rare: 1, epic: 2, exalted: 3 };
 
 function sortInventory(items: Equipment[], mode: SortMode): Equipment[] {
   const sorted = [...items];
@@ -149,7 +149,7 @@ export function InventoryPanel() {
                 <div className="equip-menu-backdrop" onClick={() => setOpenMenu(null)} />
                 <div className="equip-menu">
                   <div className="equip-menu-group">Rarity</div>
-                  {(['all', 'common', 'rare', 'epic'] as const).map((r) => (
+                  {(['all', 'common', 'rare', 'epic', 'exalted'] as const).map((r) => (
                     <button
                       key={r}
                       className={`equip-menu-option${rarityFilter === r ? ' active' : ''}`}

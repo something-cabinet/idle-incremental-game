@@ -27,7 +27,7 @@ export interface JobDef {
 
 export type AdventurerClass = 'warrior' | 'ranger' | 'mage';
 export type EquipSlot = 'weapon' | 'armor' | 'trinket';
-export type Rarity = 'common' | 'rare' | 'epic';
+export type Rarity = 'common' | 'rare' | 'epic' | 'exalted';
 
 /** RPG attributes. LCK boosts material/equipment/shard find chances. */
 export type AttributeId = 'str' | 'dex' | 'int' | 'con' | 'res' | 'lck';

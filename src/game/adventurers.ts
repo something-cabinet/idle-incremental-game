@@ -8,6 +8,9 @@ import {
   DEF_PER_CON,
   DEF_PER_RES,
   EQUIP_TYPES,
+  EXALTED_MIN_TIER,
+  EXALTED_PREFIXES,
+  EXALTED_WEIGHT,
   HIRE_ATTR_VARIANCE,
   HP_BASE,
   HP_BONUS_PER_TIER,
@@ -45,9 +48,24 @@ function pick<T>(items: T[], rng: Rng): T {
   return items[Math.floor(rng() * items.length)];
 }
 
-export function rollRarity(rng: Rng): Rarity {
+/**
+ * Below EXALTED_MIN_TIER, rarity odds are exactly RARITY_WEIGHTS (unchanged).
+ * At/above it, exalted gets a small shot carved out of epic's slice, so low
+ * and mid-tier drop rates for common/rare/epic are untouched either way.
+ */
+export function rollRarity(tier: number, rng: Rng): Rarity {
+  const weights: [Rarity, number][] =
+    tier >= EXALTED_MIN_TIER
+      ? [
+          ...RARITY_WEIGHTS.map(
+            ([rarity, weight]): [Rarity, number] =>
+              rarity === 'epic' ? [rarity, weight - EXALTED_WEIGHT] : [rarity, weight],
+          ),
+          ['exalted', EXALTED_WEIGHT],
+        ]
+      : RARITY_WEIGHTS;
   let roll = rng();
-  for (const [rarity, weight] of RARITY_WEIGHTS) {
+  for (const [rarity, weight] of weights) {
     roll -= weight;
     if (roll <= 0) return rarity;
   }
@@ -62,14 +80,17 @@ export function equipTypeDef(typeId: string): EquipTypeDef | undefined {
   return EQUIP_TYPES.find((t) => t.id === typeId);
 }
 
-function rollPrefix(rng: Rng) {
-  const total = ITEM_PREFIXES.reduce((sum, p) => sum + p.weight, 0);
+/** Exalted items roll exclusively from EXALTED_PREFIXES; everything else
+ *  rolls from the normal pool — the two never mix. */
+function rollPrefix(rarity: Rarity, rng: Rng) {
+  const pool = rarity === 'exalted' ? EXALTED_PREFIXES : ITEM_PREFIXES;
+  const total = pool.reduce((sum, p) => sum + p.weight, 0);
   let roll = rng() * total;
-  for (const prefix of ITEM_PREFIXES) {
+  for (const prefix of pool) {
     roll -= prefix.weight;
     if (roll <= 0) return prefix;
   }
-  return ITEM_PREFIXES[0];
+  return pool[0];
 }
 
 /** Attribute points granted per bonus/prefix unit at a given tier. */
@@ -81,8 +102,8 @@ function attrPointsForTier(tier: number): number {
 export function generateEquipment(id: number, tier: number, rng: Rng): Equipment {
   const slot = pick(SLOTS, rng);
   const type = pick(EQUIP_TYPES.filter((t) => t.slot === slot), rng);
-  const rarity = rollRarity(rng);
-  const prefix = rollPrefix(rng);
+  const rarity = rollRarity(tier, rng);
+  const prefix = rollPrefix(rarity, rng);
   const mult = RARITY_MULT[rarity];
   const budget = (4 + tier * 4) * mult * type.budgetMult * (0.8 + rng() * 0.4);
 
@@ -106,7 +127,8 @@ export function generateEquipment(id: number, tier: number, rng: Rng): Equipment
     attrs[attr] = (attrs[attr] ?? 0) + attrPointsForTier(tier);
   }
   if (type.bonusHp && rarity !== 'common') {
-    hp += HP_BONUS_PER_TIER * tier * (rarity === 'epic' ? 2 : 1);
+    const hpTierMult = rarity === 'exalted' ? 3 : rarity === 'epic' ? 2 : 1;
+    hp += HP_BONUS_PER_TIER * tier * hpTierMult;
   }
 
   return {
