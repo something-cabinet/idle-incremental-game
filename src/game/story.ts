@@ -62,7 +62,8 @@ export function checkStoryTriggers(state: GameState): GameState {
     s = queue(s, 'a1-standing');
   }
 
-  if (s.act >= 2 && s.adventurers.length >= 1) {
+  // The first posted quest earns reputation → the town's adventurers show up.
+  if (s.act >= 2 && s.reputation >= 1) {
     s = queue(s, 'a2-first-adventurer');
   }
 

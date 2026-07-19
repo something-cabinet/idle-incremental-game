@@ -29,6 +29,8 @@ export function createInitialState(now = Date.now()): GameState {
     workers: 0,
     materials: {},
     townSkills: {},
+    reputation: 0,
+    quests: [],
     adventurers: [],
     recruitCandidates: [],
     inventory: [],
@@ -67,6 +69,10 @@ export function migrateSave(data: SaveData, now = Date.now()): GameState {
     townSkills: { ...(s.townSkills ?? {}) },
     activityLog: s.activityLog ?? [],
     settings: { ...base.settings, ...(s.settings ?? {}) },
+    // v6 introduced the reputation/quest-board economy (mercenaries went
+    // dormant). Older saves simply start with no reputation and no posted quests.
+    reputation: s.reputation ?? 0,
+    quests: s.quests ?? [],
     // v5 introduced the attribute/HP combat model and typed equipment. Old
     // items can't map to the new equipment types, so pre-v5 inventory and
     // equipped gear are dropped; adventurers gain fresh attributes + HP.

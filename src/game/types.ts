@@ -143,6 +143,37 @@ export interface LocationDef {
   kind: 'zone' | 'boss';
   /** Shards awarded when a boss is defeated */
   bossShardReward?: number;
+  /** Reputation required before this zone can be quested (zones only). */
+  repRequired?: number;
+}
+
+/**
+ * A quest target inside a location. Monsters carry their own loot (loot is
+ * tied to the monster, not the location); gatherables are tied to the location.
+ * Both are things the guild can post a bounty on.
+ */
+export type QuestTargetKind = 'monster' | 'gatherable';
+
+export interface QuestTargetDef {
+  id: string;
+  locationId: string;
+  kind: QuestTargetKind;
+  name: string;
+  /** Material yielded per unit killed/collected. */
+  materialId: string;
+  /** Per-unit difficulty multiplier (scales quest time, gold cost, reputation). */
+  difficulty: number;
+}
+
+/**
+ * A standing quest posted to the guild board. The numerous town adventurers
+ * fulfil it continuously (materials/sec in, gold/sec out) until the player
+ * deletes it. `batchSize` tunes the time/gold efficiency curve.
+ */
+export interface Quest {
+  id: number;
+  targetId: string;
+  batchSize: number;
 }
 
 export interface MaterialDef {
@@ -293,7 +324,15 @@ export interface GameState {
   materials: Record<string, number>;
   townSkills: Record<string, number>;
 
-  // Guild
+  // Guild reputation: earned by completing posted quests. Grows the numerous
+  // town-adventurer pool (see adventurerCount) and gates zone unlocks.
+  reputation: number;
+  /** Standing quests posted to the guild board. */
+  quests: Quest[];
+
+  // Guild — the managed Mercenary roster (stats/gear/expeditions). Currently
+  // DORMANT: no hiring/equipment UI and the engine no longer processes it.
+  // Kept in state so the system can be developed later (see docs/game-design.md).
   adventurers: Adventurer[];
   /** 3 adventurer candidates currently shown for recruitment (empty if not yet generated) */
   recruitCandidates: Adventurer[];

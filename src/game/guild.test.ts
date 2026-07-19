@@ -11,8 +11,9 @@ import {
   rollRarity,
 } from './adventurers';
 import {
+  ADVENTURER_BASE,
+  ADVENTURER_MAX,
   DEMON_KING_ID,
-  ENCOUNTER_INTERVAL,
   EXALTED_MIN_TIER,
   EXALTED_PREFIXES,
   GENERAL_IDS,
@@ -20,28 +21,31 @@ import {
   LOCATIONS,
   tierXp,
 } from './config';
-import { successChance, tick } from './engine';
+import { applyOfflineProgress, tick } from './engine';
 import {
-  assignAdventurer,
+  adventurerCount,
   autoEquipBest,
+  batchGold,
+  batchTimeSolo,
   buyGuildUpgrade,
+  deleteQuest,
   equipItem,
   hireAdventurer,
   isBossUnlocked,
   isZoneUnlocked,
-  launchExpedition,
-  recallAdventurer,
+  postQuest,
+  questRates,
+  questTargetDef,
   rosterCap,
   sellItem,
   sellItems,
+  unitDifficulty,
 } from './guild';
 import { createInitialState } from './logic';
 import { buyPerk } from './perks';
 import { canTimeTravel, timeTravel } from './prestige';
 import type { GameState } from './types';
 
-const alwaysWin = () => 0.01; // low roll → success, but also triggers drops
-const alwaysLose = () => 0.999;
 const mid = () => 0.5;
 
 function guildState(): GameState {
@@ -267,187 +271,86 @@ describe('difficulty & reward scaling', () => {
     }
   });
 
-  it('a fresh unequipped adventurer no longer trivializes mid/high zones by level alone', () => {
-    const frontierPass = LOCATIONS.find((l) => l.id === 'frontier-pass')!;
-    const forestEdge = LOCATIONS.find((l) => l.id === 'forest-edge')!;
-    const fresh = generateAdventurer(1, mid);
-    const freshPower = adventurerPower(guildState(), fresh);
-    // Still very capable at the starting zone...
-    expect(successChance(freshPower, forestEdge.power)).toBeGreaterThan(0.5);
-    // ...but nowhere near capped at the last pre-Act-3 zone.
-    expect(successChance(freshPower, frontierPass.power)).toBeLessThan(0.3);
-
-    // Leveling alone helps, but a well-leveled *and* geared adventurer clears
-    // it reliably — the combination is what the curve is meant to require.
-    const leveled = { ...fresh, level: 25 };
-    const leveledPower = adventurerPower(guildState(), leveled);
-    expect(successChance(leveledPower, frontierPass.power)).toBeGreaterThan(
-      successChance(freshPower, frontierPass.power),
-    );
-    const geared = {
-      ...leveled,
-      equipment: { weapon: generateEquipment(999, 6, mid) },
-    };
-    const gearedPower = adventurerPower(guildState(), geared);
-    expect(successChance(gearedPower, frontierPass.power)).toBeGreaterThan(
-      successChance(leveledPower, frontierPass.power),
-    );
-  });
 });
 
-describe('patrol & quests', () => {
-  it('zones unlock in order via quest clears', () => {
+describe('quest board', () => {
+  it('zones unlock as reputation crosses each threshold', () => {
     const s = guildState();
-    expect(isZoneUnlocked(s, 'forest-edge')).toBe(true);
+    expect(isZoneUnlocked(s, 'forest-edge')).toBe(true); // repRequired 0
     expect(isZoneUnlocked(s, 'river-crossing')).toBe(false);
-    const cleared = { ...s, locationsCleared: { 'forest-edge': true } };
-    expect(isZoneUnlocked(cleared, 'river-crossing')).toBe(true);
-    expect(isZoneUnlocked(cleared, 'old-mines')).toBe(false);
+    const famous = { ...s, reputation: 100 };
+    expect(isZoneUnlocked(famous, 'river-crossing')).toBe(true); // needs 25
+    expect(isZoneUnlocked(famous, 'old-mines')).toBe(true); // needs 90
+    expect(isZoneUnlocked(famous, 'haunted-marsh')).toBe(false); // needs 250
   });
 
-  it('patrolling earns gold and xp per encounter', () => {
-    let s = withAdventurer(guildState());
-    s = assignAdventurer(s, s.adventurers[0].id, 'forest-edge', 'patrol');
+  it('the adventurer pool grows with reputation and is soft-capped', () => {
+    expect(adventurerCount({ ...guildState(), reputation: 0 })).toBe(ADVENTURER_BASE);
+    const few = adventurerCount({ ...guildState(), reputation: 100 });
+    const many = adventurerCount({ ...guildState(), reputation: 10_000 });
+    expect(many).toBeGreaterThan(few);
+    expect(adventurerCount({ ...guildState(), reputation: 1e12 })).toBe(ADVENTURER_MAX);
+  });
+
+  it('posting a quest requires an unlocked zone', () => {
+    let s = guildState();
+    s = postQuest(s, 'gray-wolf', 5); // forest-edge, unlocked
+    expect(s.quests).toHaveLength(1);
+    s = postQuest(s, 'bog-wraith', 5); // haunted-marsh, locked at rep 0
+    expect(s.quests).toHaveLength(1);
+  });
+
+  it('a running quest converts gold into its material plus reputation', () => {
+    let s = postQuest(guildState(), 'gray-wolf', 5);
     const goldBefore = s.gold;
-    s = tick(s, ENCOUNTER_INTERVAL * 5, 0, alwaysWin);
-    expect(s.gold).toBeGreaterThan(goldBefore);
-    expect(s.adventurers[0].xp + s.adventurers[0].level).toBeGreaterThan(1);
-    expect(s.inventory.length).toBeGreaterThan(0); // alwaysWin also hits drop rolls
+    s = tick(s, 60, 0);
+    expect(s.materials['beast-pelt'] ?? 0).toBeGreaterThan(0);
+    expect(s.reputation).toBeGreaterThan(0);
+    expect(s.gold).toBeLessThan(goldBefore); // town has no jobs here → net gold spent
   });
 
-  it('a single lost fight only damages; injury comes when HP runs out', () => {
-    let s = withAdventurer(guildState());
-    s = assignAdventurer(s, s.adventurers[0].id, 'forest-edge', 'patrol');
-    // One failed encounter: still assigned, wounded but not knocked out.
-    s = tick(s, ENCOUNTER_INTERVAL, 0, alwaysLose);
-    expect(s.adventurers[0].assignment).not.toBeNull();
-    expect(s.adventurers[0].hp).toBeLessThan(maxHp(s.adventurers[0]));
-    expect(s.adventurers[0].injuredUntil).toBe(0);
-    // Enough failures drain HP and knock them out.
-    s = tick(s, ENCOUNTER_INTERVAL * 10, 0, alwaysLose);
-    expect(s.adventurers[0].assignment).toBeNull();
-    expect(s.adventurers[0].injuredUntil).toBeGreaterThan(s.runTimeSeconds);
+  it('bigger batches are more time-efficient per unit but cost more gold per unit', () => {
+    const diff = unitDifficulty(questTargetDef('gray-wolf')!);
+    const smallTimePerUnit = batchTimeSolo(1, diff) / 1;
+    const bigTimePerUnit = batchTimeSolo(20, diff) / 20;
+    expect(bigTimePerUnit).toBeLessThan(smallTimePerUnit);
+    const smallGoldPerUnit = batchGold(1, diff) / 1;
+    const bigGoldPerUnit = batchGold(20, diff) / 20;
+    expect(bigGoldPerUnit).toBeGreaterThan(smallGoldPerUnit);
   });
 
-  it('a successful quest clears the zone and auto-switches to patrol', () => {
-    let s = withAdventurer(guildState());
-    s = assignAdventurer(s, s.adventurers[0].id, 'forest-edge', 'quest');
-    expect(s.adventurers[0].assignment?.mode).toBe('quest');
-    s = tick(s, 700, 0, alwaysWin); // quest duration 60
-    expect(s.locationsCleared['forest-edge']).toBe(true);
-    expect(s.adventurers[0].assignment?.mode).toBe('patrol');
-    expect(s.inventory.length).toBeGreaterThan(0); // guaranteed quest equipment
+  it('the adventurer pool is split across active quests', () => {
+    const one = postQuest(guildState(), 'gray-wolf', 5);
+    const solo = questRates(one, one.quests[0]);
+    const two = postQuest(one, 'wild-boar', 5);
+    const shared = questRates(two, two.quests[0]);
+    // Same quest now shares the pool with another → fewer adventurers, less output.
+    expect(shared.adventurers).toBeLessThan(solo.adventurers);
+    expect(shared.materialsPerSec).toBeLessThan(solo.materialsPerSec);
   });
 
-  it('recall clears the assignment and lastAssignment', () => {
-    let s = withAdventurer(guildState());
-    s = assignAdventurer(s, s.adventurers[0].id, 'forest-edge', 'patrol');
-    // knock out so lastAssignment is set
-    s = tick(s, ENCOUNTER_INTERVAL * 10, 0, alwaysLose);
-    expect(s.adventurers[0].lastAssignment).not.toBeNull();
-    // recall clears both
-    s = recallAdventurer(s, s.adventurers[0].id);
-    expect(s.adventurers[0].assignment).toBeNull();
-    expect(s.adventurers[0].lastAssignment).toBeNull();
+  it('deleting a quest stops its production', () => {
+    let s = postQuest(guildState(), 'gray-wolf', 5);
+    const id = s.quests[0].id;
+    s = deleteQuest(s, id);
+    expect(s.quests).toHaveLength(0);
+    const before = { ...s.materials };
+    s = tick(s, 60, 0);
+    expect(s.materials['beast-pelt'] ?? 0).toBe(before['beast-pelt'] ?? 0);
   });
 
-  it('injury saves lastAssignment for re-engagement on recovery', () => {
-    let s = withAdventurer(guildState());
-    s = assignAdventurer(s, s.adventurers[0].id, 'forest-edge', 'patrol');
-    // patrol drains HP → knocked out, lastAssignment set
-    s = tick(s, ENCOUNTER_INTERVAL * 10, 0, alwaysLose);
-    expect(s.adventurers[0].assignment).toBeNull();
-    expect(s.adventurers[0].lastAssignment).not.toBeNull();
-    expect(s.adventurers[0].lastAssignment!.locationId).toBe('forest-edge');
-    expect(s.adventurers[0].lastAssignment!.mode).toBe('patrol');
+  it('quest gold spend is throttled so gold never goes negative', () => {
+    let s = { ...postQuest(guildState(), 'gray-wolf', 40), gold: 5 };
+    s = tick(s, 300, 0);
+    expect(s.gold).toBeGreaterThanOrEqual(0);
   });
 
-  it('recovers and auto-reassigns to the same location and mode', () => {
-    let s = withAdventurer(guildState());
-    s = assignAdventurer(s, s.adventurers[0].id, 'forest-edge', 'patrol');
-    // knocked out (tier 1 injury → 180s)
-    s = tick(s, ENCOUNTER_INTERVAL * 10, 0, alwaysLose);
-    expect(s.adventurers[0].assignment).toBeNull();
-    expect(s.adventurers[0].injuredUntil).toBeGreaterThan(s.runTimeSeconds);
-    // tick past the injury duration
-    s = tick(s, 200, 0, alwaysWin);
-    // should now be re-assigned and patrolling
-    expect(s.adventurers[0].assignment).not.toBeNull();
-    expect(s.adventurers[0].assignment!.locationId).toBe('forest-edge');
-    expect(s.adventurers[0].assignment!.mode).toBe('patrol');
-    // lastAssignment should be cleared after re-assignment
-    expect(s.adventurers[0].lastAssignment).toBeNull();
-  });
-
-  it('manual assignment clears lastAssignment', () => {
-    let s = withAdventurer(guildState());
-    s = assignAdventurer(s, s.adventurers[0].id, 'forest-edge', 'patrol');
-    // get knocked out, then recover
-    s = tick(s, ENCOUNTER_INTERVAL * 10, 0, alwaysLose);
-    s = tick(s, 200, 0, alwaysWin);
-    // auto-reassigned to forest-edge; now recall and manually re-assign to same zone
-    s = recallAdventurer(s, s.adventurers[0].id);
-    s = assignAdventurer(s, s.adventurers[0].id, 'forest-edge', 'quest');
-    expect(s.adventurers[0].assignment).not.toBeNull();
-    expect(s.adventurers[0].assignment!.locationId).toBe('forest-edge');
-    expect(s.adventurers[0].assignment!.mode).toBe('quest');
-    // manual assignment cleared lastAssignment
-    expect(s.adventurers[0].lastAssignment).toBeNull();
-  });
-
-  it('quest failure saves lastAssignment and auto-reassigns after recovery', () => {
-    let s = withAdventurer(guildState());
-    s = assignAdventurer(s, s.adventurers[0].id, 'forest-edge', 'quest');
-    // Repeated quest failures drain HP; eventually a knockout (tier 1 → 180s).
-    s = tick(s, 200, 0, alwaysLose);
-    expect(s.adventurers[0].assignment).toBeNull();
-    expect(s.adventurers[0].lastAssignment).not.toBeNull();
-    expect(s.adventurers[0].lastAssignment!.mode).toBe('quest');
-    // tick past recovery, but not far enough to also finish the re-quest
-    s = tick(s, 110, 0, alwaysWin);
-    // should re-quest (since lastAssignment.mode was 'quest')
-    expect(s.adventurers[0].assignment).not.toBeNull();
-    expect(s.adventurers[0].assignment!.mode).toBe('quest');
-    expect(s.adventurers[0].assignment!.locationId).toBe('forest-edge');
-  });
-});
-
-describe('activity log', () => {
-  it('a resolved quest writes a loot line', () => {
-    let s = withAdventurer(guildState());
-    s = assignAdventurer(s, s.adventurers[0].id, 'forest-edge', 'quest');
-    s = tick(s, 61, 0, alwaysWin);
-    const quest = s.activityLog.find((e) => e.kind === 'quest');
-    expect(quest).toBeDefined();
-    expect(quest!.text).toContain('Forest Edge');
-    expect(quest!.text).toContain('gold');
-    expect(quest!.text).toContain('XP');
-  });
-
-  it('patrol rewards in one tick group into a single line (offline-style)', () => {
-    let s = withAdventurer(guildState());
-    s = assignAdventurer(s, s.adventurers[0].id, 'forest-edge', 'patrol');
-    s = tick(s, ENCOUNTER_INTERVAL * 50, 0, alwaysWin); // 50 encounters, one tick
-    const patrols = s.activityLog.filter((e) => e.kind === 'patrol');
-    expect(patrols).toHaveLength(1);
-    expect(patrols[0].text).toContain('Forest Edge');
-  });
-
-  it('injuries write a line and record the recovery duration', () => {
-    let s = withAdventurer(guildState());
-    s = assignAdventurer(s, s.adventurers[0].id, 'forest-edge', 'patrol');
-    s = tick(s, ENCOUNTER_INTERVAL * 10, 0, alwaysLose);
-    expect(s.activityLog.some((e) => e.kind === 'injury')).toBe(true);
-    expect(s.adventurers[0].injuredDuration).toBeGreaterThan(0);
-  });
-
-  it('the log is capped', () => {
-    let s = withAdventurer(guildState());
-    s = assignAdventurer(s, s.adventurers[0].id, 'forest-edge', 'patrol');
-    for (let i = 0; i < 100; i++) {
-      s = tick(s, ENCOUNTER_INTERVAL, i * ENCOUNTER_INTERVAL * 1000, alwaysWin);
-    }
-    expect(s.activityLog.length).toBeLessThanOrEqual(60);
+  it('offline catch-up runs the quest board over the credited time', () => {
+    const s = postQuest({ ...guildState(), lastUpdate: 0 }, 'gray-wolf', 5);
+    const result = applyOfflineProgress(s, 120_000); // 120s later
+    expect(result.offlineSeconds).toBeCloseTo(120, 0);
+    expect(result.materialsGained['beast-pelt'] ?? 0).toBeGreaterThan(0);
+    expect(result.state.reputation).toBeGreaterThan(0);
   });
 });
 
@@ -473,25 +376,6 @@ describe('expeditions & prestige', () => {
       bossesDefeated: Object.fromEntries(GENERAL_IDS.map((id) => [id, true])),
     };
     expect(isBossUnlocked(allGenerals, DEMON_KING_ID)).toBe(true);
-  });
-
-  it('a won expedition defeats the boss and awards shards', () => {
-    let s = act3State();
-    s = launchExpedition(s, GENERAL_IDS[0]);
-    expect(s.expedition).not.toBeNull();
-    s = tick(s, 2000, 0, alwaysWin);
-    expect(s.expedition).toBeNull();
-    expect(s.bossesDefeated[GENERAL_IDS[0]]).toBe(true);
-    expect(s.timeShards).toBeGreaterThanOrEqual(15);
-    expect(s.adventurers[0].assignment).toBeNull();
-  });
-
-  it('a lost expedition injures the party', () => {
-    let s = act3State();
-    s = launchExpedition(s, GENERAL_IDS[0]);
-    s = tick(s, 2000, 0, alwaysLose);
-    expect(s.bossesDefeated[GENERAL_IDS[0]]).toBeUndefined();
-    expect(s.adventurers[0].injuredUntil).toBeGreaterThan(0);
   });
 
   it('time travel requires the demon king dead, keeps shards & perks', () => {
@@ -526,64 +410,5 @@ describe('expeditions & prestige', () => {
     const a30 = { ...a1, level: 30 };
     const s = createInitialState(0);
     expect(adventurerPower(s, a30)).toBeGreaterThan(adventurerPower(s, a1));
-  });
-});
-
-describe('offline progression', () => {
-  it('patroller who recovers during offline gets credit for encounters from recovery moment', () => {
-    let s = withAdventurer(guildState());
-    s = assignAdventurer(s, s.adventurers[0].id, 'forest-edge', 'patrol');
-    // Knock out the adventurer (tier 1 → 180s injury)
-    s = tick(s, ENCOUNTER_INTERVAL * 10, 0, alwaysLose);
-    const injuredUntil = s.adventurers[0].injuredUntil;
-    expect(injuredUntil).toBeGreaterThan(s.runTimeSeconds);
-    // Now simulate an offline tick where the adventurer recovers partway through
-    // and then patrols the remaining time.
-    const offlineDuration = 400;
-    s = tick(s, offlineDuration, 0, alwaysWin);
-    // The adventurer should have been auto-reassigned from their injuredUntil moment (t=200)
-    // and processed encounters from t=200 to t=280 (80 seconds → 4 encounters at 20s intervals)
-    expect(s.adventurers[0].assignment).not.toBeNull();
-    expect(s.adventurers[0].assignment!.mode).toBe('patrol');
-    // Should have earned gold from patrols during the offline period
-    const patrolLogs = s.activityLog.filter((e) => e.kind === 'patrol');
-    expect(patrolLogs.length).toBeGreaterThanOrEqual(1);
-    // Gold should be at least from the online tick + offline work (after recovery)
-    // Online encounter (injury happened): 5 gold
-    // Offline work after recovery: ~4 encounters * 5 gold = 20 gold
-    expect(s.gold).toBeGreaterThanOrEqual(25);
-  });
-
-  it('quest-capable adventurer who recovers during offline resolves quest for full reward', () => {
-    let s = withAdventurer(guildState());
-    s = assignAdventurer(s, s.adventurers[0].id, 'forest-edge', 'quest');
-    // Injure during quest (tier 1 → 180s)
-    s = tick(s, 5, 0, alwaysLose);
-    // Advance offline: wait 400s total — 180s to heal + 60s quest duration + 160s patrol time
-    // The quest started at t=5, so at recovery (t=185) the quest is set to end at t=245.
-    // Since we go to t=405, the quest resolves at t=245 and then patrols happen from t=245 to t=405.
-    const offlineDuration = 400;
-    s = tick(s, offlineDuration, 0, alwaysWin);
-    // Should have completed the quest (cleared the zone)
-    expect(s.locationsCleared['forest-edge']).toBe(true);
-    // Should have gold from quest reward + patrols
-    const questLog = s.activityLog.find((e) => e.kind === 'quest');
-    expect(questLog).toBeDefined();
-    const questText = questLog!.text;
-    expect(questText).toContain('150 gold'); // QUEST.goldPerTier * 1
-  });
-
-  it('adventurer who never gets injured still works through entire offline period', () => {
-    let s = withAdventurer(guildState());
-    s = assignAdventurer(s, s.adventurers[0].id, 'forest-edge', 'patrol');
-    const goldBefore = s.totalGoldEarned;
-    // Process 500 seconds of offline work (guaranteed success)
-    s = tick(s, 500, 0, alwaysWin);
-    // 500s / 20s per encounter = 25 encounters
-    // Each encounter: 5 gold → 125 gold
-    expect(s.totalGoldEarned - goldBefore).toBeGreaterThanOrEqual(100);
-    // All patrols should be logged as a single grouped line
-    const patrolLogs = s.activityLog.filter((e) => e.kind === 'patrol');
-    expect(patrolLogs.length).toBe(1);
   });
 });

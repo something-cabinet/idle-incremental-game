@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { applyOfflineProgress } from './game/engine';
+import { MATERIALS } from './game/config';
 import {
   createInitialState,
   currentDay,
@@ -113,6 +114,9 @@ function Header() {
       </div>
       <div className="header-sub">
         <span className="eps">{fmt(productionPerSecond(state))} /sec</span>
+        {state.act >= 2 && (
+          <span className="rep-counter">★ {fmt(Math.floor(state.reputation))}</span>
+        )}
         <span className="day-counter">Day {currentDay(state)}</span>
         {(state.timeShards > 0 || state.prestigeCount > 0) && (
           <span className="shard-counter">⏳ {fmt(state.timeShards)}</span>
@@ -123,13 +127,7 @@ function Header() {
 }
 
 function materialName(id: string): string {
-  const names: Record<string, string> = {
-    'beast-pelt': 'Beast Pelt',
-    'iron-ore': 'Iron Ore',
-    'spirit-essence': 'Spirit Essence',
-    'demon-ash': 'Demon Ash',
-  };
-  return names[id] ?? id;
+  return MATERIALS.find((m) => m.id === id)?.name ?? id;
 }
 
 function OfflineToast({
@@ -152,7 +150,7 @@ function OfflineToast({
       earned <strong>{fmt(report.gold)}</strong> gold
       {materialEntries.length > 0 && (
         <>
-          , <strong>{materialEntries.map(([id, n]) => `${n} ${materialName(id)}`).join(', ')}</strong>
+          , <strong>{materialEntries.map(([id, n]) => `${Math.floor(n)} ${materialName(id)}`).join(', ')}</strong>
         </>
       )}
       {report.equipment > 0 && (

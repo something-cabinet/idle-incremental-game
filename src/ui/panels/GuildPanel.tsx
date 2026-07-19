@@ -1,47 +1,34 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { GUILD_UPGRADES, MATERIALS } from '../../game/config';
 import {
-  adventurerStats,
-  effectiveAttributes,
-  equipDelta,
-  isInjured,
-  maxHp,
-} from '../../game/adventurers';
-import {
-  ATTRIBUTES,
-  CLASS_DEFS,
-  DAY_LENGTH_SECONDS,
-  ENCOUNTER_INTERVAL,
-  GUILD_UPGRADES,
-  MATERIALS,
-  xpToNext,
-} from '../../game/config';
-import { formatDuration } from '../../game/format';
-import {
-  autoEquipBest,
+  adventurerCount,
   buyGuildUpgrade,
   canBuyGuildUpgrade,
-  equipItem,
+  deleteQuest,
   guildUpgradeCost,
-  hireCandidate,
-  hireCost,
-  locationDef,
-  recallAdventurer,
-  refreshRecruits,
-  rerollCost,
-  rerollRecruits,
-  rosterCap,
-  unequipItem,
+  questRates,
+  questTargetDef,
+  zones,
 } from '../../game/guild';
-import type { Adventurer, EquipSlot, GameState, LogEntry } from '../../game/types';
+import type { Quest } from '../../game/types';
 import { useFormat } from '../../hooks/useFormat';
 import { useGameState, useGameStore } from '../../hooks/useGame';
-import { itemIcon, itemStatParts, itemTypeLabel } from '../itemDisplay';
+
+type Section = 'adventurers' | 'quests' | 'upgrades';
+
+function materialName(id: string): string {
+  return MATERIALS.find((m) => m.id === id)?.name ?? id;
+}
+
+function rate(n: number): string {
+  if (n === 0) return '0';
+  if (n < 10) return n.toFixed(2);
+  if (n < 100) return n.toFixed(1);
+  return Math.round(n).toLocaleString();
+}
 
 export function GuildPanel() {
-  const state = useGameState();
-  const [section, setSection] = useState<'adventurers' | 'upgrades' | 'logs'>('adventurers');
-  const [detailId, setDetailId] = useState<number | null>(null);
-  const detail = state.adventurers.find((a) => a.id === detailId);
+  const [section, setSection] = useState<Section>('adventurers');
 
   return (
     <div className="panel">
@@ -53,109 +40,133 @@ export function GuildPanel() {
           Adventurers
         </button>
         <button
+          className={`subtab ${section === 'quests' ? 'active' : ''}`}
+          onClick={() => setSection('quests')}
+        >
+          Quests
+        </button>
+        <button
           className={`subtab ${section === 'upgrades' ? 'active' : ''}`}
           onClick={() => setSection('upgrades')}
         >
           Upgrades
         </button>
-        <button
-          className={`subtab ${section === 'logs' ? 'active' : ''}`}
-          onClick={() => setSection('logs')}
-        >
-          Logs
-        </button>
       </div>
 
-      {section === 'adventurers' && (
-        <AdventurersSection onOpen={(id) => setDetailId(id)} />
-      )}
+      {section === 'adventurers' && <AdventurersSection />}
+      {section === 'quests' && <QuestsSection />}
       {section === 'upgrades' && <UpgradesSection />}
-      {section === 'logs' && <ActivityLog />}
-
-      {detail && <AdventurerDetail adv={detail} onClose={() => setDetailId(null)} />}
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Adventurers section
+// Adventurers — the numerous town pool, driven by reputation
 // ---------------------------------------------------------------------------
 
-function AdventurersSection({ onOpen }: { onOpen: (id: number) => void }) {
-  const store = useGameStore();
+function AdventurersSection() {
   const state = useGameState();
   const fmt = useFormat();
+  const count = adventurerCount(state);
 
-  // Auto-refresh recruits when entering act 2 with empty candidates
-  useEffect(() => {
-    if (state.act >= 2 && state.recruitCandidates.length === 0) {
-      store.dispatch((s) => refreshRecruits(s));
-    }
-  }, [state.act, state.recruitCandidates.length, store]);
-
-  const rosterFull = state.adventurers.length >= rosterCap(state);
-  const canAffordHire = state.gold >= hireCost(state);
-  const canAffordReroll = state.gold >= rerollCost(state);
-  const candidates = state.recruitCandidates;
+  // Next zone still locked behind a reputation threshold, if any.
+  const nextZone = zones().find((z) => state.reputation < (z.repRequired ?? 0));
 
   return (
     <section className="rows">
-      <h3 className="section-title">
-        Adventurers ({state.adventurers.length}/{rosterCap(state)})
-      </h3>
-      {state.adventurers.map((adv) => (
-        <AdventurerCard key={adv.id} adv={adv} onOpen={() => onOpen(adv.id)} />
-      ))}
+      <h3 className="section-title">The Guild’s Adventurers</h3>
 
-      {candidates.length > 0 && !rosterFull && (
-        <>
-          <h4 className="section-title">Recruit Candidates</h4>
-          {candidates.map((c) => {
-            const { atk, def } = adventurerStats(c);
-            const hpMax = maxHp(c);
-            const affordable = canAffordHire;
-            return (
-              <button
-                key={c.id}
-                className={`row ${affordable ? '' : 'unaffordable'}`}
-                disabled={!affordable}
-                onClick={() => store.dispatch((s) => hireCandidate(s, c.id))}
-              >
-                <div className="row-info">
-                  <span className="row-name">
-                    {c.name} <span className="row-sub">Lv {c.level} {c.className}</span>
-                  </span>
-                  <span className="row-desc">
-                    ⚔ {atk} · 🛡 {def} · ❤ {hpMax}
-                  </span>
-                </div>
-                <div className="row-cost">{fmt(hireCost(state))} 🪙</div>
-              </button>
-            );
-          })}
-          <button
-            className={`row ${canAffordReroll ? '' : 'unaffordable'}`}
-            disabled={!canAffordReroll}
-            onClick={() => store.dispatch((s) => rerollRecruits(s))}
-          >
-            <div className="row-info">
-              <span className="row-name">Reroll Candidates</span>
-              <span className="row-desc">New choices for a fresh set of recruits.</span>
-            </div>
-            <div className="row-cost">{fmt(rerollCost(state))} 🪙</div>
-          </button>
-        </>
+      <div className="detail-stats">
+        <div className="stat">
+          <span className="stat-value">{count}</span>
+          <span className="stat-label">Adventurers</span>
+        </div>
+        <div className="stat">
+          <span className="stat-value">★ {fmt(Math.floor(state.reputation))}</span>
+          <span className="stat-label">Reputation</span>
+        </div>
+        <div className="stat">
+          <span className="stat-value">{state.quests.length}</span>
+          <span className="stat-label">Active Quests</span>
+        </div>
+      </div>
+
+      <p className="detail-sub">
+        These adventurers come and go, taking whatever bounties the guild posts. As
+        your <strong>reputation</strong> grows, more of them turn up — and they split
+        their effort across every quest on the board.
+      </p>
+
+      {nextZone ? (
+        <div className="row locked">
+          🔒 {nextZone.name} unlocks at ★ {fmt(nextZone.repRequired ?? 0)} reputation
+          ({fmt(Math.max(0, Math.ceil((nextZone.repRequired ?? 0) - state.reputation)))} to go)
+        </div>
+      ) : (
+        <div className="row item-common">All wilds unlocked.</div>
       )}
 
-      {rosterFull && (
-        <div className="row locked">Roster full — upgrade the Guild Hall.</div>
-      )}
+      <p className="detail-sub">
+        Guild <strong>Mercenaries</strong> — a hand-picked few you equip and command
+        directly — will be recruited here in a later chapter.
+      </p>
     </section>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Upgrades section
+// Quests — every standing bounty on the board
+// ---------------------------------------------------------------------------
+
+function QuestsSection() {
+  const state = useGameState();
+
+  return (
+    <section className="rows">
+      <h3 className="section-title">Running Quests ({state.quests.length})</h3>
+      {state.quests.length === 0 && (
+        <div className="row locked">
+          No quests posted. Open the Map tab and post a bounty on a monster or gatherable.
+        </div>
+      )}
+      {state.quests.map((q) => (
+        <QuestRow key={q.id} quest={q} />
+      ))}
+    </section>
+  );
+}
+
+function QuestRow({ quest }: { quest: Quest }) {
+  const store = useGameStore();
+  const state = useGameState();
+  const target = questTargetDef(quest.targetId);
+  const rates = questRates(state, quest);
+  if (!target) return null;
+
+  return (
+    <div className="row item-common">
+      <div className="row-info">
+        <span className="row-name">
+          {target.name} <span className="row-sub">batch {quest.batchSize}</span>
+        </span>
+        <span className="row-desc">
+          +{rate(rates.materialsPerSec)} {materialName(target.materialId)}/s ·{' '}
+          −{rate(rates.goldPerSec)} 🪙/s · +{rate(rates.reputationPerSec)} ★/s
+        </span>
+        <span className="row-good">{rates.adventurers.toFixed(1)} adventurers assigned</span>
+      </div>
+      <button
+        className="small-button danger"
+        onClick={() => store.dispatch((s) => deleteQuest(s, quest.id))}
+      >
+        Delete
+      </button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Upgrades
 // ---------------------------------------------------------------------------
 
 function UpgradesSection() {
@@ -185,12 +196,14 @@ function UpgradesSection() {
               <span className="row-desc">{def.description}</span>
             </div>
             <div className="row-cost">
-              {maxed ? 'Max' : (
+              {maxed ? (
+                'Max'
+              ) : (
                 <>
                   {fmt(cost.gold)} 🪙
                   {Object.entries(cost.materials).map(([id, n]) => (
                     <span key={id} className="mat-cost">
-                      {n} {MATERIALS.find((m) => m.id === id)?.name ?? id}
+                      {n} {materialName(id)}
                     </span>
                   ))}
                 </>
@@ -199,331 +212,6 @@ function UpgradesSection() {
           </button>
         );
       })}
-    </section>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Adventurer cards
-// ---------------------------------------------------------------------------
-
-function xpPercent(adv: Adventurer): number {
-  return Math.floor((adv.xp / xpToNext(adv.level)) * 100);
-}
-
-/** Current timed activity: progress fraction, seconds left, and a label. */
-function activityProgress(
-  state: GameState,
-  adv: Adventurer,
-): { label: string; fraction: number; secondsLeft: number } | null {
-  const now = state.runTimeSeconds;
-  if (isInjured(adv, now)) {
-    const left = adv.injuredUntil - now;
-    const total = adv.injuredDuration || left;
-    return { label: 'recovered', fraction: 1 - left / total, secondsLeft: left };
-  }
-  if (!adv.assignment) return null;
-  if (adv.assignment.mode === 'quest') {
-    const endsAt = adv.assignment.questEndsAt ?? now;
-    const total = locationDef(adv.assignment.locationId)?.questDuration ?? 1;
-    const left = Math.max(0, endsAt - now);
-    return { label: 'quest done', fraction: 1 - left / total, secondsLeft: left };
-  }
-  if (adv.assignment.mode === 'patrol') {
-    const elapsed = now - adv.assignment.lastEncounterAt;
-    const left = Math.max(0, ENCOUNTER_INTERVAL - elapsed);
-    return { label: 'next drop', fraction: elapsed / ENCOUNTER_INTERVAL, secondsLeft: left };
-  }
-  return null; // expeditions show party-wide status on the Map tab
-}
-
-function AdventurerCard({ adv, onOpen }: { adv: Adventurer; onOpen: () => void }) {
-  const store = useGameStore();
-  const state = useGameState();
-  const { atk, def } = adventurerStats(adv);
-  const injured = isInjured(adv, state.runTimeSeconds);
-  const hpMax = maxHp(adv);
-  const hpNow = injured ? 0 : Math.round(adv.hp);
-  const hpPct = injured ? 0 : Math.min(100, Math.max(0, (adv.hp / hpMax) * 100));
-  const status = injured
-    ? '🩹 Recovering'
-    : adv.assignment
-      ? assignmentLabel(adv)
-      : 'Idle at the guild hall';
-  const progress = activityProgress(state, adv);
-
-  return (
-    <div
-      className={`adventurer-card clickable ${injured ? 'injured' : ''}`}
-      onClick={onOpen}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => e.key === 'Enter' && onOpen()}
-    >
-      <div className="row-info">
-        <span className="row-name">
-          {adv.name}{' '}
-          <span className="row-sub">
-            Lv {adv.level} ({xpPercent(adv)}%) {adv.className}
-          </span>
-        </span>
-        <span className="row-desc">⚔ {atk} · 🛡 {def} · ❤ {hpNow}/{hpMax}</span>
-        <div className="progress-line">
-          <div className="progress-track">
-            <div className="progress-fill hp" style={{ width: `${hpPct}%` }} />
-          </div>
-        </div>
-        <span className={injured ? 'row-bad' : 'row-good'}>{status}</span>
-        {progress && (
-          <div className="progress-line">
-            <div className="progress-track">
-              <div
-                className="progress-fill"
-                style={{ width: `${Math.min(100, Math.max(0, progress.fraction * 100))}%` }}
-              />
-            </div>
-            <span className="progress-time">
-              {formatDuration(progress.secondsLeft)} to {progress.label}
-            </span>
-          </div>
-        )}
-      </div>
-      {adv.assignment && adv.assignment.mode !== 'expedition' && (
-        <button
-          className="small-button"
-          onClick={(e) => {
-            e.stopPropagation();
-            store.dispatch((s) => recallAdventurer(s, adv.id));
-          }}
-        >
-          Recall
-        </button>
-      )}
-    </div>
-  );
-}
-
-function assignmentLabel(adv: Adventurer): string {
-  const loc = locationDef(adv.assignment!.locationId);
-  const name = loc?.name ?? '???';
-  switch (adv.assignment!.mode) {
-    case 'quest':
-      return `📜 On quest — ${name}`;
-    case 'expedition':
-      return `⚔ On expedition — ${name}`;
-    default:
-      return `🐾 Patrolling — ${name}`;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Detail popup
-// ---------------------------------------------------------------------------
-
-function AdventurerDetail({ adv, onClose }: { adv: Adventurer; onClose: () => void }) {
-  const store = useGameStore();
-  const state = useGameState();
-  const { atk, def } = adventurerStats(adv);
-  const attrs = effectiveAttributes(adv);
-  const primary = CLASS_DEFS[adv.className].primary;
-  const injured = isInjured(adv, state.runTimeSeconds);
-  const hpMax = maxHp(adv);
-  const hpNow = injured ? 0 : Math.round(adv.hp);
-  const status = injured
-    ? `🩹 Recovering — ${formatDuration(adv.injuredUntil - state.runTimeSeconds)} left`
-    : adv.assignment
-      ? assignmentLabel(adv)
-      : 'Idle at the guild hall';
-  const [pickerSlot, setPickerSlot] = useState<EquipSlot | null>(null);
-
-  return (
-    <div className="story-overlay" onClick={onClose}>
-      <div className="story-modal detail-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="detail-header">
-          <h2 className="story-title">{adv.name}</h2>
-          <button className="small-button" onClick={onClose}>✕</button>
-        </div>
-        <p className="detail-sub">
-          Level {adv.level} {adv.className} · {status}
-        </p>
-
-        <div className="progress-line">
-          <div className="progress-track">
-            <div className="progress-fill xp" style={{ width: `${xpPercent(adv)}%` }} />
-          </div>
-          <span className="progress-time">
-            {adv.xp}/{xpToNext(adv.level)} XP
-          </span>
-        </div>
-
-        <div className="detail-stats">
-          <div className="stat">
-            <span className="stat-value">⚔ {atk}</span>
-            <span className="stat-label">Attack</span>
-          </div>
-          <div className="stat">
-            <span className="stat-value">🛡 {def}</span>
-            <span className="stat-label">Defense</span>
-          </div>
-          <div className="stat">
-            <span className="stat-value">❤ {hpNow}/{hpMax}</span>
-            <span className="stat-label">Health</span>
-          </div>
-        </div>
-
-        <h3 className="section-title">Attributes</h3>
-        <div className="attr-grid">
-          {ATTRIBUTES.map((a) => (
-            <div key={a.id} className={`attr-cell ${a.id === primary ? 'primary' : ''}`}>
-              <span className="attr-abbr">{a.abbr}</span>
-              <span className="attr-value">{attrs[a.id]}</span>
-            </div>
-          ))}
-        </div>
-        <p className="detail-sub attr-hint">
-          {CLASS_DEFS[adv.className].primary.toUpperCase()} drives this {adv.className}'s
-          attack — match their weapon to it.
-        </p>
-
-        <div className="section-title-row">
-          <h3 className="section-title">Equipment</h3>
-          <button
-            className="small-button"
-            disabled={state.inventory.length === 0}
-            onClick={() => store.dispatch((s) => autoEquipBest(s, adv.id))}
-          >
-            ✨ Auto-equip
-          </button>
-        </div>
-        <div className="rows">
-          {(['weapon', 'armor', 'trinket'] as EquipSlot[]).map((slot) => {
-            const item = adv.equipment[slot];
-            const candidates = state.inventory.filter((i) => i.slot === slot);
-            return (
-              <div key={slot}>
-                <div className={`row ${item ? `item-${item.rarity}` : 'locked'}`}>
-                  <div className="row-info">
-                    <span className="row-name">
-                      {item ? `${itemIcon(item)} ${item.name}` : `${SLOT_FALLBACK_ICON[slot]} No ${slot}`}
-                    </span>
-                    {item && (
-                      <span className="row-desc">
-                        {item.rarity} {itemTypeLabel(item)} · {itemStatParts(item).join(' · ')}
-                      </span>
-                    )}
-                  </div>
-                  <div className="equip-detail-actions">
-                    <button
-                      className="small-button"
-                      disabled={candidates.length === 0}
-                      onClick={() => setPickerSlot(pickerSlot === slot ? null : slot)}
-                    >
-                      {item ? 'Change' : 'Equip'}
-                      {candidates.length > 0 ? ` (${candidates.length})` : ''}
-                    </button>
-                    {item && (
-                      <button
-                        className="small-button"
-                        onClick={() => store.dispatch((s) => unequipItem(s, adv.id, slot))}
-                      >
-                        Unequip
-                      </button>
-                    )}
-                  </div>
-                </div>
-                {pickerSlot === slot && (
-                  <div className="equip-picker">
-                    {candidates.length === 0 ? (
-                      <div className="row locked">No {slot} in inventory.</div>
-                    ) : (
-                      candidates.map((cand) => (
-                        <button
-                          key={cand.id}
-                          className={`equip-picker-item item-${cand.rarity}`}
-                          onClick={() => {
-                            store.dispatch((s) => equipItem(s, adv.id, cand.id));
-                            setPickerSlot(null);
-                          }}
-                        >
-                          <span className="row-name">{itemIcon(cand)} {cand.name}</span>
-                          <span className="row-desc">
-                            {cand.rarity} · {itemStatParts(cand).join(' · ')}
-                          </span>
-                          <EquipDeltaChips delta={equipDelta(adv, cand)} />
-                        </button>
-                      ))
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-const SLOT_FALLBACK_ICON: Record<EquipSlot, string> = {
-  weapon: '⚔️',
-  armor: '🛡️',
-  trinket: '💍',
-};
-
-/** Green/red ▲▼ chips showing how a candidate item changes atk/def/HP. */
-function EquipDeltaChips({ delta }: { delta: ReturnType<typeof equipDelta> }) {
-  const parts: { label: string; value: number }[] = [
-    { label: '⚔', value: delta.atk },
-    { label: '🛡', value: delta.def },
-    { label: '❤', value: delta.hp },
-  ].filter((p) => p.value !== 0);
-  if (parts.length === 0) {
-    return <span className="equip-delta-row"><span className="equip-delta same">no change</span></span>;
-  }
-  return (
-    <span className="equip-delta-row">
-      {parts.map((p) => (
-        <span key={p.label} className={`equip-delta ${p.value > 0 ? 'up' : 'down'}`}>
-          {p.label} {p.value > 0 ? '▲' : '▼'}{Math.abs(p.value)}
-        </span>
-      ))}
-    </span>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Activity log
-// ---------------------------------------------------------------------------
-
-const LOG_ICONS: Record<LogEntry['kind'], string> = {
-  quest: '📜',
-  patrol: '🐾',
-  injury: '🩹',
-  expedition: '⚔',
-};
-
-function ActivityLog() {
-  const state = useGameState();
-  const entries = [...state.activityLog].reverse();
-
-  return (
-    <section className="rows">
-      <h3 className="section-title">Activity Log</h3>
-      {entries.length === 0 && (
-        <div className="row locked">Quest and patrol reports will appear here.</div>
-      )}
-      <div className="activity-log">
-        {entries.map((e) => (
-          <div key={e.id} className={`log-entry log-${e.kind}`}>
-            <span className="log-day">
-              Day {Math.floor(e.at / DAY_LENGTH_SECONDS) + 1}
-            </span>
-            <span className="log-text">
-              {LOG_ICONS[e.kind]} {e.text}
-            </span>
-          </div>
-        ))}
-      </div>
     </section>
   );
 }

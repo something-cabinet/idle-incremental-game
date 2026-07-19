@@ -1,5 +1,8 @@
 import { adventurerStats, generateAdventurer, isInjured, statsWithItem } from './adventurers';
 import {
+  ADVENTURER_BASE,
+  ADVENTURER_MAX,
+  ADVENTURER_REP_SCALE,
   BASE_ROSTER_CAP,
   DEMON_KING_ID,
   GENERAL_IDS,
@@ -7,12 +10,28 @@ import {
   HIRE_BASE_COST,
   HIRE_COST_GROWTH,
   LOCATIONS,
+  QUEST_BATCH_TIME_BASE,
+  QUEST_GOLD_BASE,
+  QUEST_GOLD_EXP,
+  QUEST_MAX_BATCH,
+  QUEST_MIN_BATCH,
+  QUEST_REP_BASE,
+  QUEST_TARGETS,
+  QUEST_TIME_EXP,
   RARITY_SELL_GOLD,
   REROLL_BASE_COST,
   REROLL_COST_GROWTH,
 } from './config';
 import { computeModifiers } from './perks';
-import type { Adventurer, EquipSlot, GameState, LocationDef, Rng } from './types';
+import type {
+  Adventurer,
+  EquipSlot,
+  GameState,
+  LocationDef,
+  Quest,
+  QuestTargetDef,
+  Rng,
+} from './types';
 
 /** Guild management actions: hiring, upgrades, gear, assignments, expeditions. */
 
@@ -263,13 +282,11 @@ export function bosses(): LocationDef[] {
   return LOCATIONS.filter((l) => l.kind === 'boss');
 }
 
-/** Zones unlock in order: each opens once the previous zone's quest is cleared. */
+/** Zones unlock once the guild's reputation reaches the zone's threshold. */
 export function isZoneUnlocked(state: GameState, locationId: string): boolean {
-  const zoneList = zones();
-  const index = zoneList.findIndex((z) => z.id === locationId);
-  if (index < 0) return false;
-  if (index === 0) return true;
-  return !!state.locationsCleared[zoneList[index - 1].id];
+  const loc = locationDef(locationId);
+  if (!loc || loc.kind !== 'zone') return false;
+  return state.reputation >= (loc.repRequired ?? 0);
 }
 
 /** Generals unlock in act 3; the demon king needs all generals defeated. */
@@ -365,4 +382,114 @@ export function launchExpedition(state: GameState, locationId: string): GameStat
         : a,
     ),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Quest board — standing bounties fulfilled by the numerous town adventurers
+// ---------------------------------------------------------------------------
+
+export function questTargetDef(id: string): QuestTargetDef | undefined {
+  return QUEST_TARGETS.find((t) => t.id === id);
+}
+
+export function targetsForLocation(locationId: string): QuestTargetDef[] {
+  return QUEST_TARGETS.filter((t) => t.locationId === locationId);
+}
+
+/**
+ * The numerous town adventurers: a single derived number, not managed entities.
+ * Grows with the guild's reputation (few at first → hundreds over a long game),
+ * softly capped so a small town never fields an army overnight.
+ */
+export function adventurerCount(state: GameState): number {
+  const grown = ADVENTURER_BASE + Math.sqrt(Math.max(0, state.reputation) / ADVENTURER_REP_SCALE);
+  return Math.min(ADVENTURER_MAX, Math.floor(grown));
+}
+
+/** Difficulty of one unit of a target = its per-unit difficulty × location tier. */
+export function unitDifficulty(target: QuestTargetDef): number {
+  const tier = locationDef(target.locationId)?.tier ?? 1;
+  return target.difficulty * tier;
+}
+
+/** Seconds one adventurer takes to complete one batch (sublinear in batch size). */
+export function batchTimeSolo(batchSize: number, unitDiff: number): number {
+  return QUEST_BATCH_TIME_BASE * unitDiff * Math.pow(batchSize, QUEST_TIME_EXP);
+}
+
+/** Gold paid out per completed batch (superlinear in batch size — a gold sink). */
+export function batchGold(batchSize: number, unitDiff: number): number {
+  return QUEST_GOLD_BASE * unitDiff * Math.pow(batchSize, QUEST_GOLD_EXP);
+}
+
+/** Reputation earned per completed batch. */
+export function batchReputation(batchSize: number, unitDiff: number): number {
+  return QUEST_REP_BASE * unitDiff * batchSize;
+}
+
+export function clampBatchSize(batchSize: number): number {
+  return Math.max(QUEST_MIN_BATCH, Math.min(QUEST_MAX_BATCH, Math.floor(batchSize)));
+}
+
+export interface QuestRates {
+  /** Adventurers currently assigned to this quest (pool split across quests). */
+  adventurers: number;
+  materialsPerSec: number;
+  goldPerSec: number;
+  reputationPerSec: number;
+}
+
+/**
+ * Live throughput of a quest given the current adventurer pool, which is split
+ * evenly across all active quests. With no quests posted the split is moot.
+ */
+export function questRates(state: GameState, quest: Quest): QuestRates {
+  const target = questTargetDef(quest.targetId);
+  const active = state.quests.length;
+  if (!target || active === 0) {
+    return { adventurers: 0, materialsPerSec: 0, goldPerSec: 0, reputationPerSec: 0 };
+  }
+  const advPerQuest = adventurerCount(state) / active;
+  const diff = unitDifficulty(target);
+  const batchesPerSec = advPerQuest / batchTimeSolo(quest.batchSize, diff);
+  return {
+    adventurers: advPerQuest,
+    materialsPerSec: quest.batchSize * batchesPerSec,
+    goldPerSec: batchGold(quest.batchSize, diff) * batchesPerSec,
+    reputationPerSec: batchReputation(quest.batchSize, diff) * batchesPerSec,
+  };
+}
+
+/**
+ * Projected rates for a quest that isn't posted yet, as if it were added to the
+ * board now (the extra quest dilutes the adventurer split). Drives the map's
+ * "post quest" preview.
+ */
+export function previewQuestRates(
+  state: GameState,
+  targetId: string,
+  batchSize: number,
+): QuestRates {
+  const preview: Quest = { id: -1, targetId, batchSize: clampBatchSize(batchSize) };
+  return questRates({ ...state, quests: [...state.quests, preview] }, preview);
+}
+
+export function postQuest(state: GameState, targetId: string, batchSize: number): GameState {
+  const target = questTargetDef(targetId);
+  if (!target) return state;
+  if (!isZoneUnlocked(state, target.locationId)) return state;
+  const quest: Quest = {
+    id: state.nextEntityId,
+    targetId,
+    batchSize: clampBatchSize(batchSize),
+  };
+  return {
+    ...state,
+    quests: [...state.quests, quest],
+    nextEntityId: state.nextEntityId + 1,
+  };
+}
+
+export function deleteQuest(state: GameState, questId: number): GameState {
+  return { ...state, quests: state.quests.filter((q) => q.id !== questId) };
 }

@@ -10,6 +10,7 @@ import type {
   LocationDef,
   MaterialDef,
   PerkDef,
+  QuestTargetDef,
   Rarity,
   Settings,
   StoryBeatDef,
@@ -45,7 +46,7 @@ export const AUTOSAVE_INTERVAL_MS = 10_000;
  * interval firing on schedule — see useGameLoop's visibility listeners.
  */
 export const BACKGROUND_CATCHUP_GAP_MS = 3_000;
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
 
 // ---------------------------------------------------------------------------
 // Act 1 — town income (low numbers by design)
@@ -267,6 +268,11 @@ export const MATERIALS: MaterialDef[] = [
   { id: 'iron-ore', name: 'Iron Ore' },
   { id: 'spirit-essence', name: 'Spirit Essence' },
   { id: 'demon-ash', name: 'Demon Ash' },
+  { id: 'raw-meat', name: 'Raw Meat' },
+  { id: 'herbs', name: 'Wild Herbs' },
+  { id: 'timber', name: 'Timber' },
+  { id: 'silk', name: 'Spider Silk' },
+  { id: 'crystal', name: 'Crystal Shard' },
 ];
 
 /**
@@ -283,32 +289,32 @@ export const MATERIALS: MaterialDef[] = [
 export const LOCATIONS: LocationDef[] = [
   {
     id: 'forest-edge', name: 'Forest Edge', kind: 'zone', tier: 1, power: 20,
-    materialId: 'beast-pelt', questDuration: 60, shardChance: 0.005,
+    materialId: 'beast-pelt', questDuration: 60, shardChance: 0.005, repRequired: 0,
     description: 'Wolves and worse in the treeline.',
   },
   {
     id: 'river-crossing', name: 'River Crossing', kind: 'zone', tier: 2, power: 35,
-    materialId: 'beast-pelt', questDuration: 180, shardChance: 0.005,
+    materialId: 'beast-pelt', questDuration: 180, shardChance: 0.005, repRequired: 25,
     description: 'Bandits favor the ford.',
   },
   {
     id: 'old-mines', name: 'Old Mines', kind: 'zone', tier: 3, power: 61,
-    materialId: 'iron-ore', questDuration: 300, shardChance: 0.006,
+    materialId: 'iron-ore', questDuration: 300, shardChance: 0.006, repRequired: 90,
     description: 'Abandoned shafts, occupied tunnels.',
   },
   {
     id: 'haunted-marsh', name: 'Haunted Marsh', kind: 'zone', tier: 4, power: 107,
-    materialId: 'spirit-essence', questDuration: 480, shardChance: 0.008,
+    materialId: 'spirit-essence', questDuration: 480, shardChance: 0.008, repRequired: 250,
     description: 'The dead here are restless.',
   },
   {
     id: 'sunken-ruins', name: 'Sunken Ruins', kind: 'zone', tier: 5, power: 187,
-    materialId: 'spirit-essence', questDuration: 660, shardChance: 0.009,
+    materialId: 'spirit-essence', questDuration: 660, shardChance: 0.009, repRequired: 650,
     description: 'Something ancient still guards the depths.',
   },
   {
     id: 'frontier-pass', name: 'Frontier Pass', kind: 'zone', tier: 6, power: 328,
-    materialId: 'demon-ash', questDuration: 900, shardChance: 0.01,
+    materialId: 'demon-ash', questDuration: 900, shardChance: 0.01, repRequired: 1600,
     description: 'The road home. Something burned through here.',
   },
   // ---- Act 3 expedition targets ----
@@ -336,6 +342,63 @@ export const LOCATIONS: LocationDef[] = [
 
 export const GENERAL_IDS = ['general-marrow', 'general-vex', 'general-thane'];
 export const DEMON_KING_ID = 'demon-king';
+
+// ---------------------------------------------------------------------------
+// Quest targets — monsters (loot tied to the monster) and gatherables (tied to
+// the location) that the guild can post bounties on. Placeholder content.
+// ---------------------------------------------------------------------------
+
+export const QUEST_TARGETS: QuestTargetDef[] = [
+  // Forest Edge (tier 1)
+  { id: 'gray-wolf', locationId: 'forest-edge', kind: 'monster', name: 'Gray Wolf', materialId: 'beast-pelt', difficulty: 1 },
+  { id: 'wild-boar', locationId: 'forest-edge', kind: 'monster', name: 'Wild Boar', materialId: 'raw-meat', difficulty: 1.2 },
+  { id: 'forest-herbs', locationId: 'forest-edge', kind: 'gatherable', name: 'Forest Herbs', materialId: 'herbs', difficulty: 0.8 },
+  { id: 'deadfall', locationId: 'forest-edge', kind: 'gatherable', name: 'Deadfall Timber', materialId: 'timber', difficulty: 0.7 },
+  // River Crossing (tier 2)
+  { id: 'river-bandit', locationId: 'river-crossing', kind: 'monster', name: 'River Bandit', materialId: 'iron-ore', difficulty: 1.3 },
+  { id: 'giant-frog', locationId: 'river-crossing', kind: 'monster', name: 'Giant Frog', materialId: 'raw-meat', difficulty: 1 },
+  { id: 'river-reeds', locationId: 'river-crossing', kind: 'gatherable', name: 'River Reeds', materialId: 'timber', difficulty: 0.9 },
+  { id: 'riverbank-herbs', locationId: 'river-crossing', kind: 'gatherable', name: 'Riverbank Herbs', materialId: 'herbs', difficulty: 1 },
+  // Old Mines (tier 3)
+  { id: 'cave-spider', locationId: 'old-mines', kind: 'monster', name: 'Cave Spider', materialId: 'silk', difficulty: 1.1 },
+  { id: 'kobold', locationId: 'old-mines', kind: 'monster', name: 'Kobold Digger', materialId: 'iron-ore', difficulty: 1.3 },
+  { id: 'iron-vein', locationId: 'old-mines', kind: 'gatherable', name: 'Iron Vein', materialId: 'iron-ore', difficulty: 1 },
+  { id: 'raw-gemstone', locationId: 'old-mines', kind: 'gatherable', name: 'Raw Gemstone', materialId: 'crystal', difficulty: 1.4 },
+  // Haunted Marsh (tier 4)
+  { id: 'bog-wraith', locationId: 'haunted-marsh', kind: 'monster', name: 'Bog Wraith', materialId: 'spirit-essence', difficulty: 1.3 },
+  { id: 'giant-leech', locationId: 'haunted-marsh', kind: 'monster', name: 'Giant Leech', materialId: 'raw-meat', difficulty: 1 },
+  { id: 'witch-herbs', locationId: 'haunted-marsh', kind: 'gatherable', name: "Witch's Herbs", materialId: 'herbs', difficulty: 1.2 },
+  { id: 'marsh-crystal', locationId: 'haunted-marsh', kind: 'gatherable', name: 'Marsh Crystal', materialId: 'crystal', difficulty: 1.3 },
+  // Sunken Ruins (tier 5)
+  { id: 'drowned-guardian', locationId: 'sunken-ruins', kind: 'monster', name: 'Drowned Guardian', materialId: 'spirit-essence', difficulty: 1.4 },
+  { id: 'ruin-crawler', locationId: 'sunken-ruins', kind: 'monster', name: 'Ruin Crawler', materialId: 'silk', difficulty: 1.2 },
+  { id: 'ancient-relic', locationId: 'sunken-ruins', kind: 'gatherable', name: 'Ancient Relic', materialId: 'crystal', difficulty: 1.6 },
+  { id: 'sunken-timber', locationId: 'sunken-ruins', kind: 'gatherable', name: 'Sunken Timber', materialId: 'timber', difficulty: 1 },
+  // Frontier Pass (tier 6)
+  { id: 'demon-scout', locationId: 'frontier-pass', kind: 'monster', name: 'Demon Scout', materialId: 'demon-ash', difficulty: 1.5 },
+  { id: 'hellhound', locationId: 'frontier-pass', kind: 'monster', name: 'Hellhound', materialId: 'beast-pelt', difficulty: 1.3 },
+  { id: 'scorched-ore', locationId: 'frontier-pass', kind: 'gatherable', name: 'Scorched Ore', materialId: 'iron-ore', difficulty: 1.4 },
+  { id: 'ember-crystal', locationId: 'frontier-pass', kind: 'gatherable', name: 'Ember Crystal', materialId: 'crystal', difficulty: 1.6 },
+];
+
+// ---------------------------------------------------------------------------
+// Quest economy tuning
+// ---------------------------------------------------------------------------
+
+/** Batch time/gold/rep scale with unit difficulty = target.difficulty * tier. */
+export const QUEST_BATCH_TIME_BASE = 4; // solo seconds per batch at unitDiff 1, B 1
+export const QUEST_TIME_EXP = 0.7; // <1: bigger batches are more time-efficient per unit
+export const QUEST_GOLD_BASE = 1.5; // gold per batch at unitDiff 1, B 1
+export const QUEST_GOLD_EXP = 1.25; // >1: bigger batches cost more gold per unit (gold sink)
+export const QUEST_REP_BASE = 0.5; // reputation per batch at unitDiff 1, B 1
+export const QUEST_MIN_BATCH = 1;
+export const QUEST_MAX_BATCH = 50;
+
+/** The numerous town adventurers: a derived number driven by reputation. */
+export const ADVENTURER_BASE = 3;
+/** count = ADVENTURER_BASE + sqrt(reputation / ADVENTURER_REP_SCALE), soft-capped. */
+export const ADVENTURER_REP_SCALE = 1;
+export const ADVENTURER_MAX = 500;
 
 export const GUILD_UPGRADES: GuildUpgradeDef[] = [
   {
