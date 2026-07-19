@@ -36,6 +36,15 @@ export const HOMETOWN_DEADLINE_DAY = 100;
 export const OFFLINE_CAP_HOURS = 8;
 
 export const AUTOSAVE_INTERVAL_MS = 10_000;
+/**
+ * If wall-clock time drifts this far ahead of the last processed tick, treat
+ * it as "the tab was backgrounded/suspended" and route the gap through
+ * applyOfflineProgress (capped, respects the offline-progress setting)
+ * instead of the live loop's small per-tick clamp. Mobile browsers routinely
+ * throttle or fully pause background tabs, so this can't rely on the
+ * interval firing on schedule — see useGameLoop's visibility listeners.
+ */
+export const BACKGROUND_CATCHUP_GAP_MS = 3_000;
 export const SAVE_VERSION = 5;
 
 // ---------------------------------------------------------------------------

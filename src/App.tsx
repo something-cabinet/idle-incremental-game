@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { applyOfflineProgress } from './game/engine';
 import {
   createInitialState,
@@ -8,7 +8,7 @@ import {
 } from './game/logic';
 import { GameStore } from './game/store';
 import { formatDuration } from './game/format';
-import { GameContext, useGameLoop, useGameState } from './hooks/useGame';
+import { GameContext, useGameLoop, useGameState, type OfflineCatchupResult } from './hooks/useGame';
 import { useFormat } from './hooks/useFormat';
 import { localStorageAdapter } from './platform/storage';
 import { playClick, playNotify } from './ui/sfx';
@@ -30,19 +30,23 @@ interface OfflineReport {
   equipment: number;
 }
 
+/** Only worth surfacing as a "welcome back" toast past this length of absence. */
+const OFFLINE_REPORT_THRESHOLD_SECONDS = 60;
+
+function toOfflineReport(result: OfflineCatchupResult): OfflineReport | null {
+  const { offlineSeconds, goldEarned, shardsFound, materialsGained, equipmentGained } = result;
+  return offlineSeconds > OFFLINE_REPORT_THRESHOLD_SECONDS &&
+    (goldEarned > 0 || Object.keys(materialsGained).length > 0 || equipmentGained > 0)
+    ? { seconds: offlineSeconds, gold: goldEarned, shards: shardsFound, materials: materialsGained, equipment: equipmentGained }
+    : null;
+}
+
 function initGame(): { store: GameStore; offline: OfflineReport | null } {
   const saved = localStorageAdapter.load();
   if (!saved) return { store: new GameStore(createInitialState()), offline: null };
   const migrated = migrateSave(saved);
-  const { state, offlineSeconds, goldEarned, shardsFound, materialsGained, equipmentGained } =
-    applyOfflineProgress(migrated);
-  return {
-    store: new GameStore(state),
-    offline:
-      offlineSeconds > 60 && (goldEarned > 0 || Object.keys(materialsGained).length > 0 || equipmentGained > 0)
-        ? { seconds: offlineSeconds, gold: goldEarned, shards: shardsFound, materials: materialsGained, equipment: equipmentGained }
-        : null,
-  };
+  const result = applyOfflineProgress(migrated);
+  return { store: new GameStore(result.state), offline: toOfflineReport(result) };
 }
 
 export default function App() {
@@ -50,7 +54,15 @@ export default function App() {
   const [offlineReport, setOfflineReport] = useState(init.offline);
   const [tab, setTab] = useState<TabId>('town');
 
-  useGameLoop(init.store);
+  // Backgrounded tabs don't remount the app, so a long absence (tab switch,
+  // minimized browser, mobile suspension) needs the same "welcome back"
+  // treatment at runtime that a fresh page load gets.
+  const handleOfflineCatchup = useCallback((result: OfflineCatchupResult) => {
+    const report = toOfflineReport(result);
+    if (report) setOfflineReport(report);
+  }, []);
+
+  useGameLoop(init.store, handleOfflineCatchup);
   useClickSfx(init.store);
 
   return (
