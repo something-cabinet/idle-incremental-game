@@ -402,11 +402,6 @@ export function targetsForLocation(locationId: string): QuestTargetDef[] {
   return QUEST_TARGETS.filter((t) => t.locationId === locationId);
 }
 
-/** Every target across every zone the guild currently has unlocked. */
-export function availableTargets(state: GameState): QuestTargetDef[] {
-  return QUEST_TARGETS.filter((t) => isZoneUnlocked(state, t.locationId));
-}
-
 /**
  * The numerous town adventurers: a single derived number, not managed entities.
  * Grows with the guild's reputation (few at first → hundreds over a long game),
@@ -688,7 +683,10 @@ function previewQuest(
 /**
  * Post a quest bundling one or more requirements ("5 Gray Wolves AND 3
  * Forest Herbs") — they must ALL be fulfilled together before the batch pays
- * out. Every requirement's zone must already be unlocked.
+ * out. Every requirement must belong to the same (already-unlocked) zone;
+ * cross-zone quests are rejected outright — mixing zones would need every
+ * downstream calculation (unlock checks, tier-based difficulty) to reason
+ * about a set of zones instead of one, for no real gameplay benefit.
  */
 export function postQuest(
   state: GameState,
@@ -698,10 +696,11 @@ export function postQuest(
 ): GameState {
   const trimmed = requirements.slice(0, QUEST_MAX_REQUIREMENTS);
   if (trimmed.length === 0) return state;
-  for (const req of trimmed) {
-    const target = questTargetDef(req.targetId);
-    if (!target || !isZoneUnlocked(state, target.locationId)) return state;
-  }
+  const targets = trimmed.map((req) => questTargetDef(req.targetId));
+  if (targets.some((t) => !t)) return state;
+  const locationId = targets[0]!.locationId;
+  if (targets.some((t) => t!.locationId !== locationId)) return state; // no cross-zone quests
+  if (!isZoneUnlocked(state, locationId)) return state;
   const quest: Quest = { ...previewQuest(trimmed, maxAdventurers, repeatCount), id: state.nextEntityId };
   return {
     ...state,

@@ -30,28 +30,18 @@ function rate(n: number): string {
 }
 
 export function MapPanel() {
-  const [dialogOpen, setDialogOpen] = useState(false);
-
   return (
     <div className="panel">
       <section className="rows">
-        <div className="section-title-row">
-          <h3 className="section-title">Wilds</h3>
-          <button className="small-button" onClick={() => setDialogOpen(true)}>
-            + Post Quest
-          </button>
-        </div>
+        <h3 className="section-title">Wilds</h3>
         <p className="detail-sub">
-          Browse the monsters and gatherables the guild knows about, then post a
-          quest requesting whichever of them you need — see Guild → Quests to
-          manage what's running.
+          Browse each zone's monsters and gatherables, then post a quest there for
+          whichever of them you need — see Guild → Quests to manage what's running.
         </p>
         {zones().map((zone) => (
           <ZoneCard key={zone.id} zone={zone} />
         ))}
       </section>
-
-      {dialogOpen && <QuestCreationDialog onClose={() => setDialogOpen(false)} />}
     </div>
   );
 }
@@ -59,6 +49,7 @@ export function MapPanel() {
 function ZoneCard({ zone }: { zone: LocationDef }) {
   const state = useGameState();
   const [open, setOpen] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
   const unlocked = isZoneUnlocked(state, zone.id);
 
   if (!unlocked) {
@@ -85,7 +76,12 @@ function ZoneCard({ zone }: { zone: LocationDef }) {
 
       {open && (
         <div className="zone-detail">
-          <h4 className="section-title">👹 Monsters</h4>
+          <div className="section-title-row">
+            <h4 className="section-title">👹 Monsters</h4>
+            <button className="small-button" onClick={() => setDialogOpen(true)}>
+              + Post Quest
+            </button>
+          </div>
           {monsters.map((t) => (
             <TargetCatalogRow key={t.id} target={t} />
           ))}
@@ -95,6 +91,8 @@ function ZoneCard({ zone }: { zone: LocationDef }) {
           ))}
         </div>
       )}
+
+      {dialogOpen && <QuestCreationDialog zone={zone} onClose={() => setDialogOpen(false)} />}
     </div>
   );
 }
@@ -114,12 +112,15 @@ function TargetCatalogRow({ target }: { target: QuestTargetDef }) {
 }
 
 // ---------------------------------------------------------------------------
-// Quest creation dialog — pick multiple monsters/gatherables required together
+// Quest creation dialog — pick multiple monsters/gatherables from THIS zone,
+// required together. Quests can't span zones: mixing them would make every
+// downstream calculation (unlocks, tier-based difficulty) reason about a set
+// of zones instead of one, for no real gameplay benefit.
 // ---------------------------------------------------------------------------
 
 const DEFAULT_AMOUNT = 5;
 
-function QuestCreationDialog({ onClose }: { onClose: () => void }) {
+function QuestCreationDialog({ zone, onClose }: { zone: LocationDef; onClose: () => void }) {
   const store = useGameStore();
   const state = useGameState();
   const [checked, setChecked] = useState<Record<string, boolean>>({});
@@ -130,7 +131,7 @@ function QuestCreationDialog({ onClose }: { onClose: () => void }) {
   const [maxAdv, setMaxAdv] = useState(QUEST_DEFAULT_MAX_ADVENTURERS);
   const [repeats, setRepeats] = useState(0); // 0 = unlimited
 
-  const unlockedZones = zones().filter((z) => isZoneUnlocked(state, z.id));
+  const targets = targetsForLocation(zone.id);
   const selectedIds = Object.keys(checked).filter((id) => checked[id]);
   const atCap = selectedIds.length >= QUEST_MAX_REQUIREMENTS;
 
@@ -162,7 +163,7 @@ function QuestCreationDialog({ onClose }: { onClose: () => void }) {
     <div className="story-overlay" onClick={onClose}>
       <div className="story-modal detail-modal" onClick={(e) => e.stopPropagation()}>
         <div className="detail-header">
-          <h2 className="story-title">Post a Quest</h2>
+          <h2 className="story-title">Post a Quest — {zone.name}</h2>
           <button className="small-button" onClick={onClose}>✕</button>
         </div>
         <p className="detail-sub">
@@ -171,46 +172,41 @@ function QuestCreationDialog({ onClose }: { onClose: () => void }) {
         </p>
 
         <div className="rows">
-          {unlockedZones.map((zone) => (
-            <div key={zone.id}>
-              <h4 className="section-title">{zone.name}</h4>
-              {targetsForLocation(zone.id).map((target) => {
-                const isSelected = !!checked[target.id];
-                const checkboxDisabled = !isSelected && atCap;
-                return (
-                  <div
-                    key={target.id}
-                    className={`row quest-checklist-row ${checkboxDisabled ? 'disabled' : ''}`}
-                    onClick={() => !checkboxDisabled && toggle(target.id)}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      disabled={checkboxDisabled}
-                      readOnly
-                    />
-                    <div className="row-info">
-                      <span className="row-name">{target.name}</span>
-                      <span className="row-desc">
-                        {target.kind === 'monster' ? 'Kill' : 'Collect'} → {materialName(target.materialId)}
-                      </span>
-                    </div>
-                    <label className="field-label" onClick={(e) => e.stopPropagation()}>
-                      amount
-                      <input
-                        type="number"
-                        min={1}
-                        max={50}
-                        disabled={!isSelected}
-                        value={amounts[target.id] ?? DEFAULT_AMOUNT}
-                        onChange={(e) => setAmount(target.id, Number(e.target.value) || 1)}
-                      />
-                    </label>
-                  </div>
-                );
-              })}
-            </div>
-          ))}
+          {targets.map((target) => {
+            const isSelected = !!checked[target.id];
+            const checkboxDisabled = !isSelected && atCap;
+            return (
+              <div
+                key={target.id}
+                className={`row quest-checklist-row ${checkboxDisabled ? 'disabled' : ''}`}
+                onClick={() => !checkboxDisabled && toggle(target.id)}
+              >
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  disabled={checkboxDisabled}
+                  readOnly
+                />
+                <div className="row-info">
+                  <span className="row-name">{target.name}</span>
+                  <span className="row-desc">
+                    {target.kind === 'monster' ? 'Kill' : 'Collect'} → {materialName(target.materialId)}
+                  </span>
+                </div>
+                <label className="field-label" onClick={(e) => e.stopPropagation()}>
+                  amount
+                  <input
+                    type="number"
+                    min={1}
+                    max={50}
+                    disabled={!isSelected}
+                    value={amounts[target.id] ?? DEFAULT_AMOUNT}
+                    onChange={(e) => setAmount(target.id, Number(e.target.value) || 1)}
+                  />
+                </label>
+              </div>
+            );
+          })}
         </div>
 
         <h3 className="section-title">Settings</h3>

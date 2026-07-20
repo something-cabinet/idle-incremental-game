@@ -580,6 +580,20 @@ describe('quest worker allocation, repeats & caps', () => {
     );
     expect(result).toBe(s); // rejected outright, no partial quest posted
   });
+
+  it('a quest is rejected if its requirements span more than one zone, even when both are unlocked', () => {
+    const s = { ...guildState(), reputation: 100 }; // both forest-edge and river-crossing unlocked
+    const result = postQuest(
+      s,
+      [
+        { targetId: 'gray-wolf', batchSize: 5 }, // forest-edge
+        { targetId: 'river-bandit', batchSize: 5 }, // river-crossing
+      ],
+      ADVENTURER_MAX,
+      0,
+    );
+    expect(result).toBe(s); // no cross-zone quests, regardless of unlock state
+  });
 });
 
 describe('expeditions & prestige', () => {
