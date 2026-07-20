@@ -14,7 +14,7 @@ const TABS: TabDef[] = [
   { id: 'town', label: 'Town', icon: '🏘' },
   { id: 'guild', label: 'Guild', icon: '🛡' },
   { id: 'map', label: 'Map', icon: '🗺' },
-  { id: 'inventory', label: 'Materials', icon: '🎒' },
+  { id: 'inventory', label: 'Inventory', icon: '🎒' },
   { id: 'crafting', label: 'Crafting', icon: '🔨' },
   { id: 'timeline', label: 'Timeline', icon: '⏳' },
   { id: 'settings', label: 'Settings', icon: '⚙' },
