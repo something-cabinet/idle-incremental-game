@@ -15,6 +15,8 @@ import {
   questRates,
   questTargetDef,
   refreshRecruits,
+  rerollCost,
+  rerollRecruits,
   rosterCap,
   totalQuestGoldPerSec,
   zones,
@@ -39,6 +41,12 @@ const CLASS_LABEL: Record<AdventurerClass, string> = {
   warrior: 'Warrior',
   ranger: 'Ranger',
   mage: 'Mage',
+};
+
+const CLASS_DESCRIPTION: Record<AdventurerClass, string> = {
+  warrior: 'Front-line brawler — high STR/CON, soaks damage',
+  ranger: 'Agile skirmisher — high DEX/LCK, balanced offense',
+  mage: 'Spellcaster — high INT, fragile but powerful',
 };
 
 function rate(n: number): string {
@@ -189,10 +197,17 @@ function RecruitDialog({ onClose }: { onClose: () => void }) {
   const selected = candidates.find((c) => c.id === selectedId) ?? null;
   const cost = hireCost(state);
   const canAfford = state.gold >= cost;
+  const rerollPrice = rerollCost(state);
+  const canAffordReroll = state.gold >= rerollPrice;
 
   function handleRecruit(id: number) {
     store.dispatch((s) => hireCandidate(s, id));
     onClose();
+  }
+
+  function handleReroll() {
+    store.dispatch((s) => rerollRecruits(s));
+    setSelectedId(null);
   }
 
   return (
@@ -208,17 +223,26 @@ function RecruitDialog({ onClose }: { onClose: () => void }) {
             <p className="detail-sub">Pick one of these three adventurers to recruit.</p>
             <div className="rows">
               {candidates.map((c) => (
-                <button key={c.id} className="row" onClick={() => setSelectedId(c.id)}>
+                <button key={c.id} className="row candidate-row" onClick={() => setSelectedId(c.id)}>
                   <div className="row-info">
                     <span className="row-name">
                       {CLASS_ICON[c.className]} {c.name}
                     </span>
-                    <span className="row-desc">{CLASS_LABEL[c.className]}</span>
+                    <span className="row-desc">
+                      {CLASS_LABEL[c.className]} — {CLASS_DESCRIPTION[c.className]}
+                    </span>
+                    <span className="row-sub">{compactStats(c)}</span>
                   </div>
-                  <span className="row-cost">{compactStats(c)}</span>
                 </button>
               ))}
             </div>
+            <button
+              className="small-button"
+              disabled={!canAffordReroll}
+              onClick={handleReroll}
+            >
+              🎲 Reroll for {Math.floor(rerollPrice).toLocaleString()} 🪙
+            </button>
           </>
         ) : (
           <>
@@ -247,6 +271,7 @@ function compactStats(adv: Adventurer): string {
 
 function ChampionDetail({ adv }: { adv: Adventurer }) {
   const stats = adventurerStats(adv);
+  const barMax = Math.max(1, ...ATTRIBUTES.map((a) => adv.attributes[a.id]));
   return (
     <div className="rows">
       <h3 className="section-title">{adv.name}</h3>
@@ -266,10 +291,18 @@ function ChampionDetail({ adv }: { adv: Adventurer }) {
           <span className="stat-value">{stats.maxHp}</span>
           <span className="stat-label">Max HP</span>
         </div>
+      </div>
+      <div className="stat-bars">
         {ATTRIBUTES.map((a) => (
-          <div className="stat" key={a.id}>
-            <span className="stat-value">{adv.attributes[a.id]}</span>
-            <span className="stat-label">{a.abbr}</span>
+          <div className="stat-bar-row" key={a.id}>
+            <span className="stat-bar-label">{a.abbr}</span>
+            <div className="stat-bar-track">
+              <div
+                className="stat-bar-fill"
+                style={{ width: `${(adv.attributes[a.id] / barMax) * 100}%` }}
+              />
+            </div>
+            <span className="stat-bar-value">{adv.attributes[a.id]}</span>
           </div>
         ))}
       </div>
