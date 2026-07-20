@@ -1,12 +1,14 @@
 import { useState } from 'react';
-import { adventurerStats } from '../../game/adventurers';
-import { ATTRIBUTES, GUILD_UPGRADES, MATERIALS } from '../../game/config';
+import { adventurerStats, effectiveAttributes, equipDelta, maxHp } from '../../game/adventurers';
+import { ATTRIBUTES, GUILD_UPGRADES, MATERIALS, xpToNext } from '../../game/config';
 import { formatDuration } from '../../game/format';
 import {
   adventurerCount,
+  autoEquipBest,
   buyGuildUpgrade,
   canBuyGuildUpgrade,
   deleteQuest,
+  equipItem,
   guildUpgradeCost,
   hireCandidate,
   hireCost,
@@ -19,11 +21,13 @@ import {
   rerollRecruits,
   rosterCap,
   totalQuestGoldPerSec,
+  unequipItem,
   zones,
 } from '../../game/guild';
-import type { Adventurer, AdventurerClass, Quest } from '../../game/types';
+import type { Adventurer, AdventurerClass, Attributes, EquipSlot, Quest } from '../../game/types';
 import { useFormat } from '../../hooks/useFormat';
 import { useGameState, useGameStore } from '../../hooks/useGame';
+import { itemIcon, itemStatParts, itemTypeLabel } from '../itemDisplay';
 
 type Section = 'adventurers' | 'quests' | 'upgrades';
 
@@ -48,6 +52,14 @@ const CLASS_DESCRIPTION: Record<AdventurerClass, string> = {
   ranger: 'Agile skirmisher — high DEX/LCK, balanced offense',
   mage: 'Spellcaster — high INT, fragile but powerful',
 };
+
+const SLOT_FALLBACK_ICON: Record<EquipSlot, string> = {
+  weapon: '⚔️',
+  armor: '🛡️',
+  trinket: '💍',
+};
+
+const EQUIP_SLOTS: EquipSlot[] = ['weapon', 'armor', 'trinket'];
 
 function rate(n: number): string {
   if (n === 0) return '0';
@@ -100,6 +112,8 @@ function AdventurersSection() {
   const count = adventurerCount(state);
   const cap = rosterCap(state);
   const [recruitOpen, setRecruitOpen] = useState(false);
+  const [detailId, setDetailId] = useState<number | null>(null);
+  const detail = state.adventurers.find((a) => a.id === detailId) ?? null;
 
   // Next zone still locked behind a reputation threshold, if any.
   const nextZone = zones().find((z) => state.reputation < (z.repRequired ?? 0));
@@ -151,7 +165,7 @@ function AdventurersSection() {
       </p>
       <div className="rows">
         {state.adventurers.map((adv) => (
-          <ChampionCard key={adv.id} adv={adv} />
+          <ChampionCard key={adv.id} adv={adv} onOpen={() => setDetailId(adv.id)} />
         ))}
         {Array.from({ length: Math.max(0, cap - state.adventurers.length) }, (_, i) => (
           <button key={i} className="empty-slot" onClick={openRecruit}>
@@ -161,14 +175,17 @@ function AdventurersSection() {
       </div>
 
       {recruitOpen && <RecruitDialog onClose={() => setRecruitOpen(false)} />}
+      {detail && <ChampionDetailModal adv={detail} onClose={() => setDetailId(null)} />}
     </section>
   );
 }
 
-function ChampionCard({ adv }: { adv: Adventurer }) {
+function ChampionCard({ adv, onOpen }: { adv: Adventurer; onOpen: () => void }) {
   const stats = adventurerStats(adv);
+  const hpMax = maxHp(adv);
+  const hpPct = Math.min(100, Math.max(0, (adv.hp / hpMax) * 100));
   return (
-    <div className="row item-common adventurer-card">
+    <button className="row candidate-row adventurer-card" onClick={onOpen}>
       <div className="row-info">
         <span className="row-name">
           {CLASS_ICON[adv.className]} {adv.name}
@@ -176,11 +193,16 @@ function ChampionCard({ adv }: { adv: Adventurer }) {
         <span className="row-desc">
           {CLASS_LABEL[adv.className]} · Lv {adv.level}
         </span>
+        <span className="row-sub">
+          ATK {stats.atk} · DEF {stats.def} · HP {Math.round(adv.hp)}/{hpMax}
+        </span>
+        <div className="progress-line">
+          <div className="progress-track">
+            <div className="progress-fill hp" style={{ width: `${hpPct}%` }} />
+          </div>
+        </div>
       </div>
-      <span className="row-cost">
-        ATK {stats.atk} · DEF {stats.def} · HP {stats.maxHp}
-      </span>
-    </div>
+    </button>
   );
 }
 
@@ -271,7 +293,6 @@ function compactStats(adv: Adventurer): string {
 
 function ChampionDetail({ adv }: { adv: Adventurer }) {
   const stats = adventurerStats(adv);
-  const barMax = Math.max(1, ...ATTRIBUTES.map((a) => adv.attributes[a.id]));
   return (
     <div className="rows">
       <h3 className="section-title">{adv.name}</h3>
@@ -292,21 +313,185 @@ function ChampionDetail({ adv }: { adv: Adventurer }) {
           <span className="stat-label">Max HP</span>
         </div>
       </div>
-      <div className="stat-bars">
-        {ATTRIBUTES.map((a) => (
-          <div className="stat-bar-row" key={a.id}>
-            <span className="stat-bar-label">{a.abbr}</span>
-            <div className="stat-bar-track">
-              <div
-                className="stat-bar-fill"
-                style={{ width: `${(adv.attributes[a.id] / barMax) * 100}%` }}
-              />
-            </div>
-            <span className="stat-bar-value">{adv.attributes[a.id]}</span>
+      <AttributeBars attributes={adv.attributes} />
+    </div>
+  );
+}
+
+/** One bar per attribute, scaled to the highest of the set shown. */
+function AttributeBars({ attributes }: { attributes: Attributes }) {
+  const barMax = Math.max(1, ...ATTRIBUTES.map((a) => attributes[a.id]));
+  return (
+    <div className="stat-bars">
+      {ATTRIBUTES.map((a) => (
+        <div className="stat-bar-row" key={a.id}>
+          <span className="stat-bar-label">{a.abbr}</span>
+          <div className="stat-bar-track">
+            <div
+              className="stat-bar-fill"
+              style={{ width: `${(attributes[a.id] / barMax) * 100}%` }}
+            />
           </div>
-        ))}
+          <span className="stat-bar-value">{attributes[a.id]}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Champion detail modal — full stats plus equipment slots (weapon/armor/
+// trinket), with a picker per slot showing candidates from the shared
+// inventory and their stat delta versus what's currently equipped.
+// ---------------------------------------------------------------------------
+
+function ChampionDetailModal({ adv, onClose }: { adv: Adventurer; onClose: () => void }) {
+  const store = useGameStore();
+  const state = useGameState();
+  const [pickerSlot, setPickerSlot] = useState<EquipSlot | null>(null);
+  const stats = adventurerStats(adv);
+  const attrs = effectiveAttributes(adv);
+  const hpMax = maxHp(adv);
+  const xpPct = Math.floor((adv.xp / xpToNext(adv.level)) * 100);
+
+  return (
+    <div className="story-overlay" onClick={onClose}>
+      <div className="story-modal detail-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="detail-header">
+          <h2 className="story-title">{adv.name}</h2>
+          <button className="small-button" onClick={onClose}>✕</button>
+        </div>
+        <p className="detail-sub">
+          {CLASS_ICON[adv.className]} Level {adv.level} {CLASS_LABEL[adv.className]}
+        </p>
+
+        <div className="progress-line">
+          <div className="progress-track">
+            <div className="progress-fill xp" style={{ width: `${xpPct}%` }} />
+          </div>
+          <span className="progress-time">
+            {adv.xp}/{xpToNext(adv.level)} XP
+          </span>
+        </div>
+
+        <div className="detail-stats">
+          <div className="stat">
+            <span className="stat-value">{stats.atk}</span>
+            <span className="stat-label">Attack</span>
+          </div>
+          <div className="stat">
+            <span className="stat-value">{stats.def}</span>
+            <span className="stat-label">Defense</span>
+          </div>
+          <div className="stat">
+            <span className="stat-value">{Math.round(adv.hp)}/{hpMax}</span>
+            <span className="stat-label">Health</span>
+          </div>
+        </div>
+
+        <AttributeBars attributes={attrs} />
+
+        <div className="section-title-row">
+          <h3 className="section-title">Equipment</h3>
+          <button
+            className="small-button"
+            disabled={state.inventory.length === 0}
+            onClick={() => store.dispatch((s) => autoEquipBest(s, adv.id))}
+          >
+            ✨ Auto-equip
+          </button>
+        </div>
+        <div className="rows">
+          {EQUIP_SLOTS.map((slot) => {
+            const item = adv.equipment[slot];
+            const candidates = state.inventory.filter((i) => i.slot === slot);
+            return (
+              <div key={slot}>
+                <div className={`row ${item ? `item-${item.rarity}` : 'locked'}`}>
+                  <div className="row-info">
+                    <span className="row-name">
+                      {item ? `${itemIcon(item)} ${item.name}` : `${SLOT_FALLBACK_ICON[slot]} No ${slot}`}
+                    </span>
+                    {item && (
+                      <span className="row-desc">
+                        {item.rarity} {itemTypeLabel(item)} · {itemStatParts(item).join(' · ')}
+                      </span>
+                    )}
+                  </div>
+                  <div className="equip-detail-actions">
+                    <button
+                      className="small-button"
+                      disabled={candidates.length === 0}
+                      onClick={() => setPickerSlot(pickerSlot === slot ? null : slot)}
+                    >
+                      {item ? 'Change' : 'Equip'}
+                      {candidates.length > 0 ? ` (${candidates.length})` : ''}
+                    </button>
+                    {item && (
+                      <button
+                        className="small-button"
+                        onClick={() => store.dispatch((s) => unequipItem(s, adv.id, slot))}
+                      >
+                        Unequip
+                      </button>
+                    )}
+                  </div>
+                </div>
+                {pickerSlot === slot && (
+                  <div className="equip-picker">
+                    {candidates.length === 0 ? (
+                      <div className="row locked">No {slot} in inventory.</div>
+                    ) : (
+                      candidates.map((cand) => (
+                        <button
+                          key={cand.id}
+                          className={`equip-picker-item item-${cand.rarity}`}
+                          onClick={() => {
+                            store.dispatch((s) => equipItem(s, adv.id, cand.id));
+                            setPickerSlot(null);
+                          }}
+                        >
+                          <span className="row-name">{itemIcon(cand)} {cand.name}</span>
+                          <span className="row-desc">
+                            {cand.rarity} · {itemStatParts(cand).join(' · ')}
+                          </span>
+                          <EquipDeltaChips delta={equipDelta(adv, cand)} />
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
+  );
+}
+
+/** Green/red ▲▼ chips showing how a candidate item changes atk/def/HP. */
+function EquipDeltaChips({ delta }: { delta: ReturnType<typeof equipDelta> }) {
+  const parts: { label: string; value: number }[] = [
+    { label: '⚔', value: delta.atk },
+    { label: '🛡', value: delta.def },
+    { label: '❤', value: delta.hp },
+  ].filter((p) => p.value !== 0);
+  if (parts.length === 0) {
+    return (
+      <span className="equip-delta-row">
+        <span className="equip-delta same">no change</span>
+      </span>
+    );
+  }
+  return (
+    <span className="equip-delta-row">
+      {parts.map((p) => (
+        <span key={p.label} className={`equip-delta ${p.value > 0 ? 'up' : 'down'}`}>
+          {p.label} {p.value > 0 ? '▲' : '▼'}{Math.abs(p.value)}
+        </span>
+      ))}
+    </span>
   );
 }
 

@@ -357,8 +357,9 @@ export interface GameState {
   quests: Quest[];
 
   // Guild — the managed Champion roster (stats/gear/expeditions). Recruiting
-  // is live; equipment/assignment/expedition UI is still DORMANT — the engine
-  // does not process this roster (see docs/game-design.md).
+  // and the equip-slot UI are live; assignment/expedition play is still
+  // DORMANT — the engine does not process this roster, so `inventory` has no
+  // drop source yet (see docs/game-design.md).
   adventurers: Adventurer[];
   /** 3 champion candidates currently shown for recruitment (empty if not yet generated) */
   recruitCandidates: Adventurer[];
