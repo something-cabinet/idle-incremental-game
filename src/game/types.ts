@@ -167,10 +167,15 @@ export interface QuestTargetDef {
 
 /**
  * A standing quest posted to the guild board. The numerous town adventurers
- * work it until the player deletes it. `batchSize` tunes the time/gold
- * efficiency curve. Materials/gold/reputation are granted in discrete lumps
- * when a batch finishes — see `progress` and engine.ts processQuests. The
- * displayed "/sec" rates elsewhere are a reference estimate only.
+ * work it until it's deleted (or, if `repeatCount` is set, until it finishes
+ * that many batches and auto-removes itself). `batchSize` tunes the
+ * time/gold efficiency curve. Materials/gold/reputation are granted in
+ * discrete lumps when a batch finishes — see `progress` and engine.ts
+ * processQuests. The displayed "/sec" rates elsewhere are a reference
+ * estimate only.
+ *
+ * Adventurers assigned to a quest are always a whole number (never
+ * fractional) — see guild.ts allocateAdventurers.
  */
 export interface Quest {
   id: number;
@@ -178,6 +183,15 @@ export interface Quest {
   batchSize: number;
   /** Accumulated adventurer-seconds of work toward the current batch. */
   progress: number;
+  /** How many batches this quest completes before auto-removing itself.
+   * 0 means unlimited (the default — runs until deleted). */
+  repeatCount: number;
+  /** How many batches have completed so far. */
+  completedCount: number;
+  /** Max adventurers that may work this quest at once (integer >= 1).
+   * When repeatCount is set, this can never exceed it — no point assigning
+   * more workers than there are repeats left to do. */
+  maxAdventurers: number;
 }
 
 export interface MaterialDef {

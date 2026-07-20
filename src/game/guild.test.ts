@@ -24,6 +24,7 @@ import {
 import { applyOfflineProgress, tick } from './engine';
 import {
   adventurerCount,
+  allocateAdventurers,
   autoEquipBest,
   batchGold,
   batchTimeSolo,
@@ -54,6 +55,12 @@ const mid = () => 0.5;
 
 function guildState(): GameState {
   return { ...createInitialState(0), act: 2 as const, gold: 100_000 };
+}
+
+/** postQuest with unlimited repeats + an effectively uncapped worker cap, for
+ * tests that don't care about the repeat/cap mechanics specifically. */
+function post(state: GameState, targetId: string, batchSize: number): GameState {
+  return postQuest(state, targetId, batchSize, ADVENTURER_MAX, 0);
 }
 
 function withAdventurer(state: GameState, rng = mid): GameState {
@@ -298,14 +305,14 @@ describe('quest board', () => {
 
   it('posting a quest requires an unlocked zone', () => {
     let s = guildState();
-    s = postQuest(s, 'gray-wolf', 5); // forest-edge, unlocked
+    s = post(s, 'gray-wolf', 5); // forest-edge, unlocked
     expect(s.quests).toHaveLength(1);
-    s = postQuest(s, 'bog-wraith', 5); // haunted-marsh, locked at rep 0
+    s = post(s, 'bog-wraith', 5); // haunted-marsh, locked at rep 0
     expect(s.quests).toHaveLength(1);
   });
 
   it('a running quest converts gold into its material plus reputation', () => {
-    let s = postQuest(guildState(), 'gray-wolf', 5);
+    let s = post(guildState(), 'gray-wolf', 5);
     const goldBefore = s.gold;
     s = tick(s, 60, 0);
     expect(s.materials['beast-pelt'] ?? 0).toBeGreaterThan(0);
@@ -314,7 +321,7 @@ describe('quest board', () => {
   });
 
   it('no materials/gold/reputation are granted until a batch actually completes', () => {
-    let s = postQuest(guildState(), 'gray-wolf', 5);
+    let s = post(guildState(), 'gray-wolf', 5);
     const target = questTargetDef('gray-wolf')!;
     const required = batchTimeSolo(5, unitDifficulty(target));
     const advPerQuest = adventurerCount(s); // one active quest → gets the full pool
@@ -328,7 +335,7 @@ describe('quest board', () => {
   });
 
   it('a batch resolves in one lump exactly when its required work is reached, carrying the remainder', () => {
-    let s = postQuest(guildState(), 'gray-wolf', 5);
+    let s = post(guildState(), 'gray-wolf', 5);
     const target = questTargetDef('gray-wolf')!;
     const required = batchTimeSolo(5, unitDifficulty(target));
     const advPerQuest = adventurerCount(s);
@@ -341,7 +348,7 @@ describe('quest board', () => {
   });
 
   it('questProgress reports live fraction/ETA toward the next completion, distinct from the reference rate', () => {
-    let s = postQuest(guildState(), 'gray-wolf', 5);
+    let s = post(guildState(), 'gray-wolf', 5);
     const p0 = questProgress(s, s.quests[0]);
     expect(p0.fraction).toBe(0);
     expect(p0.etaSeconds).toBeGreaterThan(0);
@@ -353,7 +360,7 @@ describe('quest board', () => {
   });
 
   it('questBatchSummary reports the full one-batch payout, matching what actually resolves', () => {
-    let s = postQuest(guildState(), 'gray-wolf', 5);
+    let s = post(guildState(), 'gray-wolf', 5);
     const target = questTargetDef('gray-wolf')!;
     const summary = questBatchSummary(s, s.quests[0])!;
     expect(summary.materialId).toBe(target.materialId);
@@ -397,9 +404,9 @@ describe('quest board', () => {
   });
 
   it('the adventurer pool is split across active quests', () => {
-    const one = postQuest(guildState(), 'gray-wolf', 5);
+    const one = post(guildState(), 'gray-wolf', 5);
     const solo = questRates(one, one.quests[0]);
-    const two = postQuest(one, 'wild-boar', 5);
+    const two = post(one, 'wild-boar', 5);
     const shared = questRates(two, two.quests[0]);
     // Same quest now shares the pool with another → fewer adventurers, less output.
     expect(shared.adventurers).toBeLessThan(solo.adventurers);
@@ -407,7 +414,7 @@ describe('quest board', () => {
   });
 
   it('deleting a quest stops its production', () => {
-    let s = postQuest(guildState(), 'gray-wolf', 5);
+    let s = post(guildState(), 'gray-wolf', 5);
     const id = s.quests[0].id;
     s = deleteQuest(s, id);
     expect(s.quests).toHaveLength(0);
@@ -417,7 +424,7 @@ describe('quest board', () => {
   });
 
   it('a gold-starved board produces nothing rather than a diminished amount', () => {
-    let s = { ...postQuest(guildState(), 'gray-wolf', 40), gold: 5 };
+    let s = { ...post(guildState(), 'gray-wolf', 40), gold: 5 };
     const before = { ...s.materials };
     s = tick(s, 300, 0);
     // No town income (no jobs bought) and not enough banked gold → hard gate: zero output.
@@ -427,7 +434,7 @@ describe('quest board', () => {
   });
 
   it('questRates reports zero output and goldStarved when the board is unaffordable', () => {
-    const s = { ...postQuest(guildState(), 'gray-wolf', 40), gold: 0 };
+    const s = { ...post(guildState(), 'gray-wolf', 40), gold: 0 };
     const rates = questRates(s, s.quests[0]);
     expect(rates.goldStarved).toBe(true);
     expect(rates.materialsPerSec).toBe(0);
@@ -436,17 +443,95 @@ describe('quest board', () => {
   });
 
   it('a positive bank is still considered affordable even with no town income', () => {
-    const s = postQuest(guildState(), 'gray-wolf', 5); // guildState() starts with 100_000 gold
+    const s = post(guildState(), 'gray-wolf', 5); // guildState() starts with 100_000 gold
     expect(questBoardAffordable(s)).toBe(true);
     expect(questRates(s, s.quests[0]).goldStarved).toBe(false);
   });
 
   it('offline catch-up runs the quest board over the credited time', () => {
-    const s = postQuest({ ...guildState(), lastUpdate: 0 }, 'gray-wolf', 5);
+    const s = post({ ...guildState(), lastUpdate: 0 }, 'gray-wolf', 5);
     const result = applyOfflineProgress(s, 120_000); // 120s later
     expect(result.offlineSeconds).toBeCloseTo(120, 0);
     expect(result.materialsGained['beast-pelt'] ?? 0).toBeGreaterThan(0);
     expect(result.state.reputation).toBeGreaterThan(0);
+  });
+});
+
+describe('quest worker allocation, repeats & caps', () => {
+  it('allocateAdventurers only ever hands out whole numbers, using the full pool', () => {
+    // reputation 0 → adventurerCount === ADVENTURER_BASE (3). Three quests,
+    // uncapped, so 3 doesn't divide evenly across them.
+    let s = postQuest(guildState(), 'gray-wolf', 5, ADVENTURER_MAX, 0);
+    s = postQuest(s, 'wild-boar', 5, ADVENTURER_MAX, 0);
+    s = postQuest(s, 'river-bandit', 5, ADVENTURER_MAX, 0);
+    const allocation = allocateAdventurers(s);
+    const values = Object.values(allocation);
+    for (const v of values) expect(Number.isInteger(v)).toBe(true);
+    expect(values.reduce((a, b) => a + b, 0)).toBe(adventurerCount(s));
+    // questRates surfaces the same integer, never a fraction like 1.5.
+    for (const q of s.quests) expect(Number.isInteger(questRates(s, q).adventurers)).toBe(true);
+  });
+
+  it('a quest capped below its fair share leaves adventurers for the others', () => {
+    // Pool of 3; cap the first quest to 1 so the second can claim the rest.
+    let s = postQuest(guildState(), 'gray-wolf', 5, 1, 0);
+    s = postQuest(s, 'wild-boar', 5, ADVENTURER_MAX, 0);
+    const allocation = allocateAdventurers(s);
+    expect(allocation[s.quests[0].id]).toBe(1);
+    expect(allocation[s.quests[1].id]).toBe(adventurerCount(s) - 1);
+  });
+
+  it('a quest can be starved of adventurers even when gold is plentiful', () => {
+    // Cap every quest to a sliver of the pool and post more quests than the
+    // pool can reach at all — leftover-round quests get 0 assigned.
+    let s = guildState();
+    for (let i = 0; i < 10; i++) {
+      s = postQuest(s, 'gray-wolf', 1, 1, 0);
+    }
+    const starvedCount = s.quests.filter((q) => questRates(s, q).adventurerStarved).length;
+    expect(starvedCount).toBeGreaterThan(0);
+    const starved = s.quests.find((q) => questRates(s, q).adventurerStarved)!;
+    const rates = questRates(s, starved);
+    expect(rates.adventurers).toBe(0);
+    expect(rates.materialsPerSec).toBe(0);
+    expect(rates.goldStarved).toBe(false); // it's a workforce shortage, not a money one
+  });
+
+  it('postQuest clamps maxAdventurers to at least 1, and to at most repeatCount when finite', () => {
+    let s = postQuest(guildState(), 'gray-wolf', 5, 0, 0); // 0 → floors up to 1
+    expect(s.quests[0].maxAdventurers).toBe(1);
+    s = postQuest(s, 'wild-boar', 5, 50, 3); // capped down to the repeat count
+    expect(s.quests[1].maxAdventurers).toBe(3);
+    s = postQuest(s, 'forest-herbs', 5, 2, 10); // within range → unchanged (also forest-edge)
+    expect(s.quests[2].maxAdventurers).toBe(2);
+  });
+
+  it('a quest auto-removes itself once it completes its full repeat count', () => {
+    let s = postQuest(guildState(), 'gray-wolf', 1, 1, 2); // 2 repeats, 1 worker
+    const target = questTargetDef('gray-wolf')!;
+    const required = batchTimeSolo(1, unitDifficulty(target));
+    // Enough time for well more than 2 batches if it weren't capped.
+    s = tick(s, required * 10, 0);
+    expect(s.quests).toHaveLength(0); // removed itself
+    expect(s.materials['beast-pelt']).toBe(2); // exactly repeatCount batches, not more
+  });
+
+  it('a huge offline dt does not overshoot a finite repeat count', () => {
+    const s = postQuest({ ...guildState(), lastUpdate: 0 }, 'gray-wolf', 1, 1, 3);
+    const result = applyOfflineProgress(s, 999_000); // ~999s, plenty for many batches
+    expect(result.state.quests).toHaveLength(0);
+    expect(result.materialsGained['beast-pelt']).toBe(3);
+  });
+
+  it('a fully-repeated quest is excluded from the pool split for its remaining peers', () => {
+    // completedCount already at repeatCount → 0 effective cap, so it takes no
+    // adventurers away from a sibling quest even while still in the array.
+    let s = postQuest(guildState(), 'gray-wolf', 5, 5, 2);
+    s = { ...s, quests: [{ ...s.quests[0], completedCount: 2 }] };
+    s = postQuest(s, 'wild-boar', 5, ADVENTURER_MAX, 0);
+    const allocation = allocateAdventurers(s);
+    expect(allocation[s.quests[0].id]).toBe(0);
+    expect(allocation[s.quests[1].id]).toBe(adventurerCount(s));
   });
 });
 

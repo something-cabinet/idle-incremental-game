@@ -46,7 +46,7 @@ export const AUTOSAVE_INTERVAL_MS = 10_000;
  * interval firing on schedule — see useGameLoop's visibility listeners.
  */
 export const BACKGROUND_CATCHUP_GAP_MS = 3_000;
-export const SAVE_VERSION = 7;
+export const SAVE_VERSION = 8;
 
 // ---------------------------------------------------------------------------
 // Act 1 — town income (low numbers by design)
@@ -409,6 +409,14 @@ export const ADVENTURER_BASE = 3;
 /** count = ADVENTURER_BASE + sqrt(reputation / ADVENTURER_REP_SCALE), soft-capped. */
 export const ADVENTURER_REP_SCALE = 1;
 export const ADVENTURER_MAX = 500;
+
+/** repeatCount sentinel: 0 means "unlimited" (never stored as Infinity — that
+ * would serialize to null through JSON.stringify/localStorage). */
+export const QUEST_UNLIMITED_REPEATS = 0;
+/** Highest repeatCount a player can type in when posting a quest (sanity cap; not a balance number). */
+export const QUEST_MAX_REPEATS_INPUT = 9_999;
+export const QUEST_DEFAULT_MAX_ADVENTURERS = 3;
+export const QUEST_MIN_ADVENTURERS = 1;
 
 export const GUILD_UPGRADES: GuildUpgradeDef[] = [
   {

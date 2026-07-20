@@ -1,18 +1,18 @@
 import { useState } from 'react';
-import { MATERIALS } from '../../game/config';
+import { MATERIALS, QUEST_DEFAULT_MAX_ADVENTURERS, QUEST_MAX_REPEATS_INPUT } from '../../game/config';
 import { formatDuration } from '../../game/format';
 import {
-  batchTimeSolo,
   clampBatchSize,
   deleteQuest,
+  isZoneUnlocked,
   postQuest,
+  previewBatchSummary,
   previewQuestRates,
+  questBatchSummary,
   questProgress,
   questRates,
   questTargetDef,
   targetsForLocation,
-  isZoneUnlocked,
-  unitDifficulty,
   zones,
 } from '../../game/guild';
 import type { LocationDef, Quest, QuestTargetDef } from '../../game/types';
@@ -30,24 +30,36 @@ function rate(n: number): string {
   return Math.round(n).toLocaleString();
 }
 
+function repeatsLabel(remaining: number, repeatCount: number, completedCount: number): string {
+  if (repeatCount <= 0) return 'unlimited';
+  return `${completedCount}/${repeatCount} done, ${Number.isFinite(remaining) ? remaining : '∞'} left`;
+}
+
 export function MapPanel() {
+  const [showPerSecond, setShowPerSecond] = useState(false);
+
   return (
     <div className="panel">
       <section className="rows">
-        <h3 className="section-title">Wilds</h3>
+        <div className="section-title-row">
+          <h3 className="section-title">Wilds</h3>
+          <button className="small-button" onClick={() => setShowPerSecond((v) => !v)}>
+            {showPerSecond ? 'Show batch totals' : 'Show per-second rates'}
+          </button>
+        </div>
         <p className="detail-sub">
           Post bounties on monsters and gatherables. The town’s adventurers pick them
           up — bigger batches finish faster per unit but cost more gold each.
         </p>
         {zones().map((zone) => (
-          <ZoneCard key={zone.id} zone={zone} />
+          <ZoneCard key={zone.id} zone={zone} showPerSecond={showPerSecond} />
         ))}
       </section>
     </div>
   );
 }
 
-function ZoneCard({ zone }: { zone: LocationDef }) {
+function ZoneCard({ zone, showPerSecond }: { zone: LocationDef; showPerSecond: boolean }) {
   const state = useGameState();
   const [open, setOpen] = useState(false);
   const unlocked = isZoneUnlocked(state, zone.id);
@@ -86,18 +98,18 @@ function ZoneCard({ zone }: { zone: LocationDef }) {
         <div className="zone-detail">
           <h4 className="section-title">👹 Monsters</h4>
           {monsters.map((t) => (
-            <TargetRow key={t.id} target={t} />
+            <TargetRow key={t.id} target={t} showPerSecond={showPerSecond} />
           ))}
           <h4 className="section-title">🌿 Gatherables</h4>
           {gatherables.map((t) => (
-            <TargetRow key={t.id} target={t} />
+            <TargetRow key={t.id} target={t} showPerSecond={showPerSecond} />
           ))}
 
           {activeHere.length > 0 && (
             <>
               <h4 className="section-title">📜 Quests Here</h4>
               {activeHere.map((q) => (
-                <ActiveQuestRow key={q.id} quest={q} />
+                <ActiveQuestRow key={q.id} quest={q} showPerSecond={showPerSecond} />
               ))}
             </>
           )}
@@ -107,34 +119,41 @@ function ZoneCard({ zone }: { zone: LocationDef }) {
   );
 }
 
-function TargetRow({ target }: { target: QuestTargetDef }) {
+function TargetRow({ target, showPerSecond }: { target: QuestTargetDef; showPerSecond: boolean }) {
   const store = useGameStore();
   const state = useGameState();
   const [batch, setBatch] = useState(5);
+  const [maxAdv, setMaxAdv] = useState(QUEST_DEFAULT_MAX_ADVENTURERS);
+  const [repeats, setRepeats] = useState(0); // 0 = unlimited
   const size = clampBatchSize(batch);
-  const preview = previewQuestRates(state, target.id, size);
   const verb = target.kind === 'monster' ? 'Kill' : 'Collect';
-  const batchSeconds =
-    preview.adventurers > 0
-      ? batchTimeSolo(size, unitDifficulty(target)) / preview.adventurers
-      : Infinity;
+  const summary = previewBatchSummary(state, target.id, size, maxAdv, repeats);
+  const rates = previewQuestRates(state, target.id, size, maxAdv, repeats);
 
   return (
     <div className="quest-target">
       <div className="row-info">
         <span className="row-name">{target.name}</span>
         <span className="row-desc">
-          {verb} → {materialName(target.materialId)} · first batch in ~{formatDuration(batchSeconds)}
+          {verb} → {materialName(target.materialId)}
         </span>
-        {preview.goldStarved ? (
+        {rates.goldStarved ? (
           <span className="row-bad">⚠ Not enough gold to sustain this quest.</span>
-        ) : (
+        ) : rates.adventurerStarved ? (
+          <span className="row-bad">⚠ No adventurers free to take this on right now.</span>
+        ) : showPerSecond ? (
           <span className="row-good">
-            ~{rate(preview.materialsPerSec)} {materialName(target.materialId)}/s ·{' '}
-            <span className="row-bad">−{rate(preview.goldPerSec)} 🪙/s</span> · +
-            {rate(preview.reputationPerSec)} ★/s (reference)
+            ~{rate(rates.materialsPerSec)} {materialName(target.materialId)}/s ·{' '}
+            <span className="row-bad">−{rate(rates.goldPerSec)} 🪙/s</span> · +
+            {rate(rates.reputationPerSec)} ★/s (reference)
           </span>
-        )}
+        ) : summary ? (
+          <span className="row-good">
+            {summary.materialAmount} {materialName(target.materialId)} ·{' '}
+            <span className="row-bad">−{rate(summary.gold)} 🪙</span> · +{rate(summary.reputation)} ★
+            · ~{formatDuration(summary.timeSeconds)}/batch · {summary.assigned}/{summary.maxAdventurers} adventurers
+          </span>
+        ) : null}
       </div>
       <div className="quest-post">
         <label className="batch-label">
@@ -147,9 +166,30 @@ function TargetRow({ target }: { target: QuestTargetDef }) {
             onChange={(e) => setBatch(Number(e.target.value) || 1)}
           />
         </label>
+        <label className="batch-label">
+          max adv
+          <input
+            type="number"
+            min={1}
+            max={500}
+            value={maxAdv}
+            onChange={(e) => setMaxAdv(Number(e.target.value) || 1)}
+          />
+        </label>
+        <label className="batch-label">
+          repeats
+          <input
+            type="number"
+            min={0}
+            max={QUEST_MAX_REPEATS_INPUT}
+            placeholder="∞"
+            value={repeats || ''}
+            onChange={(e) => setRepeats(Number(e.target.value) || 0)}
+          />
+        </label>
         <button
           className="small-button"
-          onClick={() => store.dispatch((s) => postQuest(s, target.id, size))}
+          onClick={() => store.dispatch((s) => postQuest(s, target.id, size, maxAdv, repeats))}
         >
           Post
         </button>
@@ -158,13 +198,14 @@ function TargetRow({ target }: { target: QuestTargetDef }) {
   );
 }
 
-function ActiveQuestRow({ quest }: { quest: Quest }) {
+function ActiveQuestRow({ quest, showPerSecond }: { quest: Quest; showPerSecond: boolean }) {
   const store = useGameStore();
   const state = useGameState();
   const target = questTargetDef(quest.targetId);
   const rates = questRates(state, quest);
   const progress = questProgress(state, quest);
-  if (!target) return null;
+  const summary = questBatchSummary(state, quest);
+  if (!target || !summary) return null;
 
   return (
     <div className="row item-common">
@@ -174,12 +215,23 @@ function ActiveQuestRow({ quest }: { quest: Quest }) {
         </span>
         {rates.goldStarved ? (
           <span className="row-bad">⚠ Not enough gold — this quest is stalled.</span>
-        ) : (
+        ) : rates.adventurerStarved ? (
+          <span className="row-bad">⚠ No adventurers assigned right now.</span>
+        ) : showPerSecond ? (
           <span className="row-desc">
             ~{rate(rates.materialsPerSec)} {materialName(target.materialId)}/s ·{' '}
-            −{rate(rates.goldPerSec)} 🪙/s · {rates.adventurers.toFixed(1)} adventurers
+            −{rate(rates.goldPerSec)} 🪙/s · {rates.adventurers} adventurers
+          </span>
+        ) : (
+          <span className="row-desc">
+            {summary.materialAmount} {materialName(summary.materialId)} · −{rate(summary.gold)} 🪙 ·
+            +{rate(summary.reputation)} ★ · {formatDuration(summary.timeSeconds)}/batch ·{' '}
+            {summary.assigned}/{summary.maxAdventurers} adventurers
           </span>
         )}
+        <span className="row-sub">
+          {repeatsLabel(summary.repeatsRemaining, summary.repeatCount, summary.completedCount)}
+        </span>
         <div className="progress-line">
           <div className="progress-track">
             <div className="progress-fill" style={{ width: `${progress.fraction * 100}%` }} />

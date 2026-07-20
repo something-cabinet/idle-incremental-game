@@ -153,6 +153,11 @@ function QuestsSection() {
   );
 }
 
+function repeatsLabel(remaining: number, repeatCount: number, completedCount: number): string {
+  if (repeatCount <= 0) return 'unlimited';
+  return `${completedCount}/${repeatCount} done, ${Number.isFinite(remaining) ? remaining : '∞'} left`;
+}
+
 function QuestRow({ quest, showPerSecond }: { quest: Quest; showPerSecond: boolean }) {
   const store = useGameStore();
   const state = useGameState();
@@ -170,20 +175,26 @@ function QuestRow({ quest, showPerSecond }: { quest: Quest; showPerSecond: boole
         </span>
         {rates.goldStarved ? (
           <span className="row-bad">⚠ Not enough gold — this quest is stalled.</span>
+        ) : rates.adventurerStarved ? (
+          <span className="row-bad">⚠ No adventurers assigned right now.</span>
         ) : showPerSecond ? (
           <>
             <span className="row-desc">
               ~{rate(rates.materialsPerSec)} {materialName(target.materialId)}/s ·{' '}
               −{rate(rates.goldPerSec)} 🪙/s · +{rate(rates.reputationPerSec)} ★/s (reference)
             </span>
-            <span className="row-good">{rates.adventurers.toFixed(1)} adventurers assigned</span>
+            <span className="row-good">{rates.adventurers} adventurers assigned</span>
           </>
         ) : (
           <span className="row-desc">
             {summary.materialAmount} {materialName(summary.materialId)} · −{rate(summary.gold)} 🪙 ·
-            +{rate(summary.reputation)} ★ · {formatDuration(summary.timeSeconds)}/batch
+            +{rate(summary.reputation)} ★ · {formatDuration(summary.timeSeconds)}/batch ·{' '}
+            {summary.assigned}/{summary.maxAdventurers} adventurers
           </span>
         )}
+        <span className="row-sub">
+          {repeatsLabel(summary.repeatsRemaining, summary.repeatCount, summary.completedCount)}
+        </span>
         <div className="progress-line">
           <div className="progress-track">
             <div className="progress-fill" style={{ width: `${progress.fraction * 100}%` }} />

@@ -1,5 +1,6 @@
 import { maxHp } from './adventurers';
 import {
+  ADVENTURER_MAX,
   ATTRIBUTES,
   CLASS_DEFS,
   CLICK_BASE_GOLD,
@@ -74,7 +75,16 @@ export function migrateSave(data: SaveData, now = Date.now()): GameState {
     reputation: s.reputation ?? 0,
     // v7 switched quests from continuous per-tick output to discrete batch
     // completion, adding a `progress` counter. v6 quests just start at 0.
-    quests: (s.quests ?? []).map((q) => ({ ...q, progress: q.progress ?? 0 })),
+    // v8 added repeatCount/completedCount/maxAdventurers (repeat limits +
+    // integer worker caps). Old quests get unlimited repeats (0) and an
+    // uncapped worker cap, matching their pre-v8 behavior.
+    quests: (s.quests ?? []).map((q) => ({
+      ...q,
+      progress: q.progress ?? 0,
+      repeatCount: q.repeatCount ?? 0,
+      completedCount: q.completedCount ?? 0,
+      maxAdventurers: q.maxAdventurers ?? ADVENTURER_MAX,
+    })),
     // v5 introduced the attribute/HP combat model and typed equipment. Old
     // items can't map to the new equipment types, so pre-v5 inventory and
     // equipped gear are dropped; adventurers gain fresh attributes + HP.

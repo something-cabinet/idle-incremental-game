@@ -1,11 +1,12 @@
 import { ACTIVITY_LOG_MAX } from './config';
 import {
-  adventurerCount,
+  allocateAdventurers,
   batchGold,
   batchReputation,
   batchTimeSolo,
   goldUnitDifficulty,
   questTargetDef,
+  remainingRepeats,
   unitDifficulty,
 } from './guild';
 import { productionPerSecond } from './logic';
@@ -70,34 +71,42 @@ interface QuestOutput {
 }
 
 /**
- * Resolve one tick of the standing quest board. The town's adventurer pool is
- * split evenly across all active quests; each quest accumulates adventurer-
- * seconds of work (Quest.progress) toward its batch. Quest time genuinely
- * matters: materials, gold cost, and reputation are only granted in a lump
- * the instant a batch's required work is reached — never smoothly per tick.
- * The "/sec" numbers shown elsewhere (questRates) are a reference estimate,
- * not what's actually being credited each tick.
+ * Resolve one tick of the standing quest board. The town's whole-number
+ * adventurer pool is split across active quests (integer only — see
+ * allocateAdventurers); each quest accumulates adventurer-seconds of work
+ * (Quest.progress) toward its batch. Quest time genuinely matters: materials,
+ * gold cost, and reputation are only granted in a lump the instant a batch's
+ * required work is reached — never smoothly per tick. The "/sec" numbers
+ * shown elsewhere (questRates) are a reference estimate, not what's actually
+ * being credited each tick.
  *
  * Gold is a hard gate on *resolving* a completed batch, not on doing the
  * work: if the board can't afford the lump cost of every batch completing
  * this tick, none of them resolve — the completed work waits (progress keeps
  * accumulating) until the guild can pay, then resolves in one lump.
+ *
+ * A quest with a finite repeatCount removes itself once completedCount
+ * reaches it — completions are capped at however many repeats it has left,
+ * so a huge offline dt can't overshoot past the quest's own limit.
  */
 function processQuests(state: GameState, dtSeconds: number, townGold: number): QuestOutput {
   const out: QuestOutput = { materials: {}, goldSpent: 0, reputation: 0, quests: state.quests };
-  const active = state.quests.length;
-  if (active === 0) return out;
+  if (state.quests.length === 0) return out;
 
-  const advPerQuest = adventurerCount(state) / active;
+  const allocation = allocateAdventurers(state);
 
   const rows = state.quests.map((quest) => {
     const target = questTargetDef(quest.targetId);
-    if (!target) return { quest, target, diff: 0, required: 0, newProgress: quest.progress, completions: 0 };
+    const assigned = allocation[quest.id] ?? 0;
+    const remaining = remainingRepeats(quest);
+    if (!target || assigned <= 0 || remaining <= 0) {
+      return { quest, target, diff: 0, required: 0, rawProgress: quest.progress, completions: 0 };
+    }
     const diff = unitDifficulty(target);
     const required = batchTimeSolo(quest.batchSize, diff);
-    const newProgress = quest.progress + advPerQuest * dtSeconds;
-    const completions = Math.floor(newProgress / required);
-    return { quest, target, diff, required, newProgress, completions };
+    const rawProgress = quest.progress + assigned * dtSeconds;
+    const completions = Math.min(Math.floor(rawProgress / required), remaining);
+    return { quest, target, diff, required, rawProgress, completions };
   });
 
   const goldNeeded = rows.reduce(
@@ -110,16 +119,30 @@ function processQuests(state: GameState, dtSeconds: number, townGold: number): Q
   const available = state.gold + townGold;
   const canResolve = goldNeeded === 0 || available >= goldNeeded;
 
-  out.quests = rows.map((r) => {
-    if (!r.target || !canResolve || r.completions <= 0) {
-      return { ...r.quest, progress: r.newProgress };
+  const nextQuests: Quest[] = [];
+  for (const r of rows) {
+    if (!r.target) {
+      nextQuests.push(r.quest);
+      continue;
+    }
+    if (!canResolve || r.completions <= 0) {
+      // Nothing resolves this tick; work still accrues (uncapped raw progress).
+      nextQuests.push({ ...r.quest, progress: r.rawProgress });
+      continue;
     }
     out.materials[r.target.materialId] =
       (out.materials[r.target.materialId] ?? 0) + r.completions * r.quest.batchSize;
     out.goldSpent += r.completions * batchGold(r.quest.batchSize, goldUnitDifficulty(r.target));
     out.reputation += r.completions * batchReputation(r.quest.batchSize, r.diff);
-    return { ...r.quest, progress: r.newProgress - r.completions * r.required };
-  });
+
+    const completedCount = r.quest.completedCount + r.completions;
+    const finished = r.quest.repeatCount > 0 && completedCount >= r.quest.repeatCount;
+    if (finished) continue; // ran its full repeat count — auto-remove from the board
+
+    const remainder = r.rawProgress - r.completions * r.required;
+    nextQuests.push({ ...r.quest, progress: remainder, completedCount });
+  }
+  out.quests = nextQuests;
 
   return out;
 }

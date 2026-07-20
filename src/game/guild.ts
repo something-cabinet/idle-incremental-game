@@ -15,6 +15,8 @@ import {
   QUEST_GOLD_EXP,
   QUEST_GOLD_TIER_EXP,
   QUEST_MAX_BATCH,
+  QUEST_MAX_REPEATS_INPUT,
+  QUEST_MIN_ADVENTURERS,
   QUEST_MIN_BATCH,
   QUEST_REP_BASE,
   QUEST_TARGETS,
@@ -444,15 +446,86 @@ export function clampBatchSize(batchSize: number): number {
   return Math.max(QUEST_MIN_BATCH, Math.min(QUEST_MAX_BATCH, Math.floor(batchSize)));
 }
 
+/** repeatCount input clamp. 0 (QUEST_UNLIMITED_REPEATS) means unlimited. */
+export function clampRepeatCount(repeatCount: number): number {
+  return Math.max(0, Math.min(QUEST_MAX_REPEATS_INPUT, Math.floor(repeatCount) || 0));
+}
+
+/**
+ * maxAdventurers input clamp: always a positive integer, and — when
+ * repeatCount is finite — never larger than it (no point assigning more
+ * simultaneous workers than there are repeats left to do).
+ */
+export function clampMaxAdventurers(maxAdventurers: number, repeatCount: number): number {
+  const floored = Math.max(QUEST_MIN_ADVENTURERS, Math.floor(maxAdventurers) || QUEST_MIN_ADVENTURERS);
+  return repeatCount > 0 ? Math.min(floored, repeatCount) : floored;
+}
+
+/** Batches left before the quest auto-removes itself; Infinity if unlimited. */
+export function remainingRepeats(quest: Quest): number {
+  if (quest.repeatCount <= 0) return Infinity;
+  return Math.max(0, quest.repeatCount - quest.completedCount);
+}
+
+/** The most adventurers this quest could use right now: its own cap, further
+ * bounded by how many repeats it has left. */
+function effectiveAdventurerCap(quest: Quest): number {
+  return Math.min(quest.maxAdventurers, remainingRepeats(quest));
+}
+
+/**
+ * Splits the town's whole-number adventurer pool across every active quest,
+ * integer only (never fractional — a quest can't be worked by "1.5 people").
+ * Max-min fair share: repeatedly gives each quest still under its cap an
+ * equal whole share of what's left, then hands out any single leftover units
+ * one at a time in quest-post order. Some quests can land on 0 if total
+ * demand outstrips the pool.
+ */
+export function allocateAdventurers(state: GameState): Record<number, number> {
+  const allocation: Record<number, number> = {};
+  for (const q of state.quests) allocation[q.id] = 0;
+
+  let remainingPool = adventurerCount(state);
+  let active = state.quests.filter((q) => effectiveAdventurerCap(q) > 0);
+
+  while (remainingPool > 0 && active.length > 0) {
+    const share = Math.floor(remainingPool / active.length);
+    if (share >= 1) {
+      let given = 0;
+      for (const q of active) {
+        const room = effectiveAdventurerCap(q) - allocation[q.id];
+        const grant = Math.min(share, room);
+        allocation[q.id] += grant;
+        given += grant;
+      }
+      remainingPool -= given;
+      active = active.filter((q) => allocation[q.id] < effectiveAdventurerCap(q));
+      if (given === 0) break; // safety: every remaining quest is already at cap
+    } else {
+      // Fewer adventurers left than active quests — hand out single units
+      // in posting order until the pool is empty.
+      for (const q of active) {
+        if (remainingPool <= 0) break;
+        if (allocation[q.id] < effectiveAdventurerCap(q)) {
+          allocation[q.id] += 1;
+          remainingPool -= 1;
+        }
+      }
+      break;
+    }
+  }
+  return allocation;
+}
+
 /** Total gold/sec every active quest on the board would cost right now. */
 export function totalQuestGoldPerSec(state: GameState): number {
-  const active = state.quests.length;
-  if (active === 0) return 0;
-  const advPerQuest = adventurerCount(state) / active;
+  if (state.quests.length === 0) return 0;
+  const allocation = allocateAdventurers(state);
   return state.quests.reduce((sum, q) => {
     const target = questTargetDef(q.targetId);
-    if (!target) return sum;
-    const batchesPerSec = advPerQuest / batchTimeSolo(q.batchSize, unitDifficulty(target));
+    const assigned = allocation[q.id] ?? 0;
+    if (!target || assigned <= 0) return sum;
+    const batchesPerSec = assigned / batchTimeSolo(q.batchSize, unitDifficulty(target));
     return sum + batchGold(q.batchSize, goldUnitDifficulty(target)) * batchesPerSec;
   }, 0);
 }
@@ -470,7 +543,7 @@ export function questBoardAffordable(state: GameState): boolean {
 }
 
 export interface QuestRates {
-  /** Adventurers currently assigned to this quest (pool split across quests). */
+  /** Adventurers currently assigned to this quest — always a whole number. */
   adventurers: number;
   /** Reference-only estimate: what this quest would average per second if run
    * continuously. Actual materials/gold/reputation are granted in a lump when
@@ -481,57 +554,87 @@ export interface QuestRates {
   reputationPerSec: number;
   /** True when the board can't currently be sustained — all rates are 0. */
   goldStarved: boolean;
+  /** True when no adventurers are assigned because the pool is spread too
+   * thin across the board (distinct from goldStarved — this is a workforce
+   * shortage, not a money one). */
+  adventurerStarved: boolean;
 }
 
 /**
- * Reference throughput estimate for a quest, given the current adventurer
- * pool split evenly across all active quests. Zeroed out when the board is
- * gold-starved, matching the engine's hard gate — see questBoardAffordable.
+ * Reference throughput estimate for a quest, given its actual integer
+ * adventurer allocation (see allocateAdventurers). Zeroed out when the board
+ * is gold-starved, matching the engine's hard gate — see questBoardAffordable.
  * For real-time progress toward the next actual payout, see questProgress.
  */
 export function questRates(state: GameState, quest: Quest): QuestRates {
   const target = questTargetDef(quest.targetId);
-  const active = state.quests.length;
-  if (!target || active === 0) {
-    return { adventurers: 0, materialsPerSec: 0, goldPerSec: 0, reputationPerSec: 0, goldStarved: false };
+  if (!target || state.quests.length === 0) {
+    return {
+      adventurers: 0, materialsPerSec: 0, goldPerSec: 0, reputationPerSec: 0,
+      goldStarved: false, adventurerStarved: false,
+    };
   }
-  const advPerQuest = adventurerCount(state) / active;
+  const assigned = allocateAdventurers(state)[quest.id] ?? 0;
+  const adventurerStarved = assigned <= 0;
   const diff = unitDifficulty(target);
-  const batchesPerSec = advPerQuest / batchTimeSolo(quest.batchSize, diff);
   const goldStarved = !questBoardAffordable(state);
+  const stalled = goldStarved || adventurerStarved;
+  const batchesPerSec = adventurerStarved ? 0 : assigned / batchTimeSolo(quest.batchSize, diff);
   return {
-    adventurers: advPerQuest,
-    materialsPerSec: goldStarved ? 0 : quest.batchSize * batchesPerSec,
-    goldPerSec: goldStarved ? 0 : batchGold(quest.batchSize, goldUnitDifficulty(target)) * batchesPerSec,
-    reputationPerSec: goldStarved ? 0 : batchReputation(quest.batchSize, diff) * batchesPerSec,
+    adventurers: assigned,
+    materialsPerSec: stalled ? 0 : quest.batchSize * batchesPerSec,
+    goldPerSec: stalled ? 0 : batchGold(quest.batchSize, goldUnitDifficulty(target)) * batchesPerSec,
+    reputationPerSec: stalled ? 0 : batchReputation(quest.batchSize, diff) * batchesPerSec,
     goldStarved,
+    adventurerStarved,
   };
 }
 
 /**
- * Projected rates for a quest that isn't posted yet, as if it were added to the
- * board now (the extra quest dilutes the adventurer split). Drives the map's
- * "post quest" preview.
+ * Projected rates for a quest that isn't posted yet, as if it were added to
+ * the board now with the given settings (the extra quest competes for the
+ * adventurer pool like any other). Drives the map's "post quest" preview.
  */
 export function previewQuestRates(
   state: GameState,
   targetId: string,
   batchSize: number,
+  maxAdventurers: number,
+  repeatCount: number,
 ): QuestRates {
-  const preview: Quest = { id: -1, targetId, batchSize: clampBatchSize(batchSize), progress: 0 };
+  const preview = previewQuest(targetId, batchSize, maxAdventurers, repeatCount);
   return questRates({ ...state, quests: [...state.quests, preview] }, preview);
 }
 
-export function postQuest(state: GameState, targetId: string, batchSize: number): GameState {
-  const target = questTargetDef(targetId);
-  if (!target) return state;
-  if (!isZoneUnlocked(state, target.locationId)) return state;
-  const quest: Quest = {
-    id: state.nextEntityId,
+function previewQuest(
+  targetId: string,
+  batchSize: number,
+  maxAdventurers: number,
+  repeatCount: number,
+): Quest {
+  const repeats = clampRepeatCount(repeatCount);
+  return {
+    id: -1,
     targetId,
     batchSize: clampBatchSize(batchSize),
     progress: 0,
+    repeatCount: repeats,
+    completedCount: 0,
+    maxAdventurers: clampMaxAdventurers(maxAdventurers, repeats),
   };
+}
+
+export function postQuest(
+  state: GameState,
+  targetId: string,
+  batchSize: number,
+  maxAdventurers: number,
+  repeatCount: number,
+): GameState {
+  const target = questTargetDef(targetId);
+  if (!target) return state;
+  if (!isZoneUnlocked(state, target.locationId)) return state;
+  const quest: Quest = { ...previewQuest(targetId, batchSize, maxAdventurers, repeatCount), id: state.nextEntityId };
   return {
     ...state,
     quests: [...state.quests, quest],
@@ -547,7 +650,7 @@ export interface QuestProgress {
   /** 0-1 fraction of the way through the current batch. */
   fraction: number;
   /** Estimated seconds until the current batch completes, at the current
-   * adventurer split (drops if more quests join the board). */
+   * adventurer allocation (shifts if quests join/leave the board). */
   etaSeconds: number;
 }
 
@@ -560,13 +663,12 @@ export interface QuestProgress {
  */
 export function questProgress(state: GameState, quest: Quest): QuestProgress {
   const target = questTargetDef(quest.targetId);
-  const active = state.quests.length;
-  if (!target || active === 0) return { fraction: 0, etaSeconds: Infinity };
-  const advPerQuest = adventurerCount(state) / active;
+  if (!target || state.quests.length === 0) return { fraction: 0, etaSeconds: Infinity };
+  const assigned = allocateAdventurers(state)[quest.id] ?? 0;
   const required = batchTimeSolo(quest.batchSize, unitDifficulty(target));
   const fraction = Math.min(1, quest.progress / required);
   const remaining = Math.max(0, required - quest.progress);
-  return { fraction, etaSeconds: advPerQuest > 0 ? remaining / advPerQuest : Infinity };
+  return { fraction, etaSeconds: assigned > 0 ? remaining / assigned : Infinity };
 }
 
 export interface QuestBatchSummary {
@@ -578,8 +680,35 @@ export interface QuestBatchSummary {
   /** Full reputation reward of one completed batch (not a rate). */
   reputation: number;
   /** Seconds for one full batch from a standing start, at the current
-   * adventurer split — not the remaining time on an in-progress batch. */
+   * adventurer allocation — not the remaining time on an in-progress batch. */
   timeSeconds: number;
+  /** Adventurers currently assigned (integer; 0 if the pool is spread thin). */
+  assigned: number;
+  maxAdventurers: number;
+  /** 0 means unlimited. */
+  repeatCount: number;
+  completedCount: number;
+  /** Infinity when repeatCount is unlimited. */
+  repeatsRemaining: number;
+}
+
+function batchSummaryFor(quest: Quest, assigned: number): QuestBatchSummary | null {
+  const target = questTargetDef(quest.targetId);
+  if (!target) return null;
+  const diff = unitDifficulty(target);
+  const required = batchTimeSolo(quest.batchSize, diff);
+  return {
+    materialId: target.materialId,
+    materialAmount: quest.batchSize,
+    gold: batchGold(quest.batchSize, goldUnitDifficulty(target)),
+    reputation: batchReputation(quest.batchSize, diff),
+    timeSeconds: assigned > 0 ? required / assigned : Infinity,
+    assigned,
+    maxAdventurers: quest.maxAdventurers,
+    repeatCount: quest.repeatCount,
+    completedCount: quest.completedCount,
+    repeatsRemaining: remainingRepeats(quest),
+  };
 }
 
 /**
@@ -588,17 +717,24 @@ export interface QuestBatchSummary {
  * questRates()'s "if this ran continuously" per-second estimate.
  */
 export function questBatchSummary(state: GameState, quest: Quest): QuestBatchSummary | null {
-  const target = questTargetDef(quest.targetId);
-  const active = state.quests.length;
-  if (!target || active === 0) return null;
-  const advPerQuest = adventurerCount(state) / active;
-  const diff = unitDifficulty(target);
-  const required = batchTimeSolo(quest.batchSize, diff);
-  return {
-    materialId: target.materialId,
-    materialAmount: quest.batchSize,
-    gold: batchGold(quest.batchSize, goldUnitDifficulty(target)),
-    reputation: batchReputation(quest.batchSize, diff),
-    timeSeconds: advPerQuest > 0 ? required / advPerQuest : Infinity,
-  };
+  if (state.quests.length === 0) return null;
+  const assigned = allocateAdventurers(state)[quest.id] ?? 0;
+  return batchSummaryFor(quest, assigned);
+}
+
+/**
+ * Batch summary for a quest that isn't posted yet, with the given settings —
+ * drives the map's "post quest" full-stats preview.
+ */
+export function previewBatchSummary(
+  state: GameState,
+  targetId: string,
+  batchSize: number,
+  maxAdventurers: number,
+  repeatCount: number,
+): QuestBatchSummary | null {
+  const preview = previewQuest(targetId, batchSize, maxAdventurers, repeatCount);
+  const withPreview = { ...state, quests: [...state.quests, preview] };
+  const assigned = allocateAdventurers(withPreview)[preview.id] ?? 0;
+  return batchSummaryFor(preview, assigned);
 }
