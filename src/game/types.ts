@@ -165,28 +165,36 @@ export interface QuestTargetDef {
   difficulty: number;
 }
 
+/** One target requested within a quest, and how many units of it. */
+export interface QuestRequirement {
+  targetId: string;
+  batchSize: number;
+}
+
 /**
- * A standing quest posted to the guild board. The numerous town adventurers
- * work it until it's deleted (or, if `repeatCount` is set, until it finishes
- * that many batches and auto-removes itself). `batchSize` tunes the
- * time/gold efficiency curve. Materials/gold/reputation are granted in
- * discrete lumps when a batch finishes — see `progress` and engine.ts
- * processQuests. The displayed "/sec" rates elsewhere are a reference
- * estimate only.
+ * A standing quest posted to the guild board — one or more requirements
+ * (e.g. "5 Gray Wolves AND 3 Forest Herbs") that must ALL be fulfilled
+ * together before the batch pays out. The numerous town adventurers work it
+ * until it's deleted (or, if `repeatCount` is set, until it finishes that
+ * many batches and auto-removes itself). Materials/gold/reputation are
+ * granted in one discrete lump when every requirement's batch finishes — see
+ * `progress` and engine.ts processQuests. The displayed "/sec" rates
+ * elsewhere are a reference estimate only.
  *
  * Adventurers assigned to a quest are always a whole number (never
  * fractional) — see guild.ts allocateAdventurers.
  */
 export interface Quest {
   id: number;
-  targetId: string;
-  batchSize: number;
-  /** Accumulated adventurer-seconds of work toward the current batch. */
+  /** At least one requirement. */
+  requirements: QuestRequirement[];
+  /** Accumulated adventurer-seconds of work toward completing every
+   * requirement together (see guild.ts questRequiredWork). */
   progress: number;
-  /** How many batches this quest completes before auto-removing itself.
+  /** How many times this quest completes before auto-removing itself.
    * 0 means unlimited (the default — runs until deleted). */
   repeatCount: number;
-  /** How many batches have completed so far. */
+  /** How many times it has completed so far. */
   completedCount: number;
   /** Max adventurers that may work this quest at once (integer >= 1).
    * When repeatCount is set, this can never exceed it — no point assigning

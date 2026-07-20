@@ -1331,3 +1331,20 @@ button.row:disabled {
   font: inherit;
   font-size: 0.8rem;
 }
+
+/* ---- Quest creation dialog checklist ---- */
+.quest-checklist-row {
+  cursor: pointer;
+  user-select: none;
+}
+
+.quest-checklist-row.disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.quest-checklist-row input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}

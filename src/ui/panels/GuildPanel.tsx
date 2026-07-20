@@ -158,21 +158,31 @@ function repeatsLabel(remaining: number, repeatCount: number, completedCount: nu
   return `${completedCount}/${repeatCount} done, ${Number.isFinite(remaining) ? remaining : '∞'} left`;
 }
 
+/** "5 Beast Pelt, 3 Wild Herbs" — one requirement's name isn't shown here
+ * since a quest can bundle several different targets into one payout. */
+function materialsSummary(materials: { materialId: string; amount: number }[]): string {
+  return materials.map((m) => `${m.amount} ${materialName(m.materialId)}`).join(', ');
+}
+
+function questTitle(quest: Quest): string {
+  const names = quest.requirements
+    .map((r) => questTargetDef(r.targetId)?.name)
+    .filter((n): n is string => !!n);
+  return names.join(' + ') || 'Quest';
+}
+
 function QuestRow({ quest, showPerSecond }: { quest: Quest; showPerSecond: boolean }) {
   const store = useGameStore();
   const state = useGameState();
-  const target = questTargetDef(quest.targetId);
   const rates = questRates(state, quest);
   const progress = questProgress(state, quest);
   const summary = questBatchSummary(state, quest);
-  if (!target || !summary) return null;
+  if (!summary) return null;
 
   return (
     <div className="row item-common">
       <div className="row-info">
-        <span className="row-name">
-          {target.name} <span className="row-sub">batch {quest.batchSize}</span>
-        </span>
+        <span className="row-name">{questTitle(quest)}</span>
         {rates.goldStarved ? (
           <span className="row-bad">⚠ Not enough gold — this quest is stalled.</span>
         ) : rates.adventurerStarved ? (
@@ -180,16 +190,18 @@ function QuestRow({ quest, showPerSecond }: { quest: Quest; showPerSecond: boole
         ) : showPerSecond ? (
           <>
             <span className="row-desc">
-              ~{rate(rates.materialsPerSec)} {materialName(target.materialId)}/s ·{' '}
-              −{rate(rates.goldPerSec)} 🪙/s · +{rate(rates.reputationPerSec)} ★/s (reference)
+              {Object.entries(rates.materialsPerSec)
+                .map(([id, perSec]) => `~${rate(perSec)} ${materialName(id)}/s`)
+                .join(' · ')} · −{rate(rates.goldPerSec)} 🪙/s · +{rate(rates.reputationPerSec)} ★/s
+              (reference)
             </span>
             <span className="row-good">{rates.adventurers} adventurers assigned</span>
           </>
         ) : (
           <span className="row-desc">
-            {summary.materialAmount} {materialName(summary.materialId)} · −{rate(summary.gold)} 🪙 ·
-            +{rate(summary.reputation)} ★ · {formatDuration(summary.timeSeconds)}/batch ·{' '}
-            {summary.assigned}/{summary.maxAdventurers} adventurers
+            {materialsSummary(summary.materials)} · −{rate(summary.gold)} 🪙 · +{rate(summary.reputation)} ★
+            · {formatDuration(summary.timeSeconds)}/batch · {summary.assigned}/{summary.maxAdventurers}{' '}
+            adventurers
           </span>
         )}
         <span className="row-sub">

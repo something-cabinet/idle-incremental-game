@@ -1,13 +1,11 @@
 import { ACTIVITY_LOG_MAX } from './config';
 import {
   allocateAdventurers,
-  batchGold,
-  batchReputation,
-  batchTimeSolo,
-  goldUnitDifficulty,
+  questRequiredWork,
   questTargetDef,
+  questTotalGold,
+  questTotalReputation,
   remainingRepeats,
-  unitDifficulty,
 } from './guild';
 import { productionPerSecond } from './logic';
 import { computeModifiers } from './perks';
@@ -96,24 +94,19 @@ function processQuests(state: GameState, dtSeconds: number, townGold: number): Q
   const allocation = allocateAdventurers(state);
 
   const rows = state.quests.map((quest) => {
-    const target = questTargetDef(quest.targetId);
     const assigned = allocation[quest.id] ?? 0;
     const remaining = remainingRepeats(quest);
-    if (!target || assigned <= 0 || remaining <= 0) {
-      return { quest, target, diff: 0, required: 0, rawProgress: quest.progress, completions: 0 };
+    const required = questRequiredWork(quest);
+    if (assigned <= 0 || remaining <= 0 || required <= 0) {
+      return { quest, required, rawProgress: quest.progress, completions: 0 };
     }
-    const diff = unitDifficulty(target);
-    const required = batchTimeSolo(quest.batchSize, diff);
     const rawProgress = quest.progress + assigned * dtSeconds;
     const completions = Math.min(Math.floor(rawProgress / required), remaining);
-    return { quest, target, diff, required, rawProgress, completions };
+    return { quest, required, rawProgress, completions };
   });
 
   const goldNeeded = rows.reduce(
-    (sum, r) =>
-      r.target && r.completions > 0
-        ? sum + r.completions * batchGold(r.quest.batchSize, goldUnitDifficulty(r.target))
-        : sum,
+    (sum, r) => (r.completions > 0 ? sum + r.completions * questTotalGold(r.quest) : sum),
     0,
   );
   const available = state.gold + townGold;
@@ -121,19 +114,19 @@ function processQuests(state: GameState, dtSeconds: number, townGold: number): Q
 
   const nextQuests: Quest[] = [];
   for (const r of rows) {
-    if (!r.target) {
-      nextQuests.push(r.quest);
-      continue;
-    }
     if (!canResolve || r.completions <= 0) {
       // Nothing resolves this tick; work still accrues (uncapped raw progress).
       nextQuests.push({ ...r.quest, progress: r.rawProgress });
       continue;
     }
-    out.materials[r.target.materialId] =
-      (out.materials[r.target.materialId] ?? 0) + r.completions * r.quest.batchSize;
-    out.goldSpent += r.completions * batchGold(r.quest.batchSize, goldUnitDifficulty(r.target));
-    out.reputation += r.completions * batchReputation(r.quest.batchSize, r.diff);
+    for (const req of r.quest.requirements) {
+      const target = questTargetDef(req.targetId);
+      if (!target) continue;
+      out.materials[target.materialId] =
+        (out.materials[target.materialId] ?? 0) + r.completions * req.batchSize;
+    }
+    out.goldSpent += r.completions * questTotalGold(r.quest);
+    out.reputation += r.completions * questTotalReputation(r.quest);
 
     const completedCount = r.quest.completedCount + r.completions;
     const finished = r.quest.repeatCount > 0 && completedCount >= r.quest.repeatCount;

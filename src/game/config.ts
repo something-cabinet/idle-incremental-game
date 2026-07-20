@@ -46,7 +46,7 @@ export const AUTOSAVE_INTERVAL_MS = 10_000;
  * interval firing on schedule — see useGameLoop's visibility listeners.
  */
 export const BACKGROUND_CATCHUP_GAP_MS = 3_000;
-export const SAVE_VERSION = 8;
+export const SAVE_VERSION = 9;
 
 // ---------------------------------------------------------------------------
 // Act 1 — town income (low numbers by design)
@@ -417,6 +417,8 @@ export const QUEST_UNLIMITED_REPEATS = 0;
 export const QUEST_MAX_REPEATS_INPUT = 9_999;
 export const QUEST_DEFAULT_MAX_ADVENTURERS = 3;
 export const QUEST_MIN_ADVENTURERS = 1;
+/** Sane UI cap on how many distinct targets one quest posting can bundle. */
+export const QUEST_MAX_REQUIREMENTS = 6;
 
 export const GUILD_UPGRADES: GuildUpgradeDef[] = [
   {

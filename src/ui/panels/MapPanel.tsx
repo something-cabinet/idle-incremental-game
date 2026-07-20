@@ -1,21 +1,20 @@
 import { useState } from 'react';
-import { MATERIALS, QUEST_DEFAULT_MAX_ADVENTURERS, QUEST_MAX_REPEATS_INPUT } from '../../game/config';
+import {
+  MATERIALS,
+  QUEST_DEFAULT_MAX_ADVENTURERS,
+  QUEST_MAX_REPEATS_INPUT,
+  QUEST_MAX_REQUIREMENTS,
+} from '../../game/config';
 import { formatDuration } from '../../game/format';
 import {
   clampBatchSize,
-  deleteQuest,
   isZoneUnlocked,
   postQuest,
   previewBatchSummary,
-  previewQuestRates,
-  questBatchSummary,
-  questProgress,
-  questRates,
-  questTargetDef,
   targetsForLocation,
   zones,
 } from '../../game/guild';
-import type { LocationDef, Quest, QuestTargetDef } from '../../game/types';
+import type { LocationDef, QuestRequirement, QuestTargetDef } from '../../game/types';
 import { useGameState, useGameStore } from '../../hooks/useGame';
 
 function materialName(id: string): string {
@@ -30,36 +29,34 @@ function rate(n: number): string {
   return Math.round(n).toLocaleString();
 }
 
-function repeatsLabel(remaining: number, repeatCount: number, completedCount: number): string {
-  if (repeatCount <= 0) return 'unlimited';
-  return `${completedCount}/${repeatCount} done, ${Number.isFinite(remaining) ? remaining : '∞'} left`;
-}
-
 export function MapPanel() {
-  const [showPerSecond, setShowPerSecond] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   return (
     <div className="panel">
       <section className="rows">
         <div className="section-title-row">
           <h3 className="section-title">Wilds</h3>
-          <button className="small-button" onClick={() => setShowPerSecond((v) => !v)}>
-            {showPerSecond ? 'Show batch totals' : 'Show per-second rates'}
+          <button className="small-button" onClick={() => setDialogOpen(true)}>
+            + Post Quest
           </button>
         </div>
         <p className="detail-sub">
-          Post bounties on monsters and gatherables. The town’s adventurers pick them
-          up — bigger batches finish faster per unit but cost more gold each.
+          Browse the monsters and gatherables the guild knows about, then post a
+          quest requesting whichever of them you need — see Guild → Quests to
+          manage what's running.
         </p>
         {zones().map((zone) => (
-          <ZoneCard key={zone.id} zone={zone} showPerSecond={showPerSecond} />
+          <ZoneCard key={zone.id} zone={zone} />
         ))}
       </section>
+
+      {dialogOpen && <QuestCreationDialog onClose={() => setDialogOpen(false)} />}
     </div>
   );
 }
 
-function ZoneCard({ zone, showPerSecond }: { zone: LocationDef; showPerSecond: boolean }) {
+function ZoneCard({ zone }: { zone: LocationDef }) {
   const state = useGameState();
   const [open, setOpen] = useState(false);
   const unlocked = isZoneUnlocked(state, zone.id);
@@ -75,9 +72,6 @@ function ZoneCard({ zone, showPerSecond }: { zone: LocationDef; showPerSecond: b
   const targets = targetsForLocation(zone.id);
   const monsters = targets.filter((t) => t.kind === 'monster');
   const gatherables = targets.filter((t) => t.kind === 'gatherable');
-  const activeHere = state.quests.filter(
-    (q) => questTargetDef(q.targetId)?.locationId === zone.id,
-  );
 
   return (
     <div className="zone-card">
@@ -86,169 +80,186 @@ function ZoneCard({ zone, showPerSecond }: { zone: LocationDef; showPerSecond: b
           {zone.name} <span className="row-sub">tier {zone.tier}</span>
         </span>
         <span className="row-desc">{zone.description}</span>
-        <span className="zone-toggle">
-          {activeHere.length > 0 && (
-            <span className="row-good">{activeHere.length} active</span>
-          )}
-          {open ? ' ▲' : ' ▼'}
-        </span>
+        <span className="zone-toggle">{open ? ' ▲' : ' ▼'}</span>
       </button>
 
       {open && (
         <div className="zone-detail">
           <h4 className="section-title">👹 Monsters</h4>
           {monsters.map((t) => (
-            <TargetRow key={t.id} target={t} showPerSecond={showPerSecond} />
+            <TargetCatalogRow key={t.id} target={t} />
           ))}
           <h4 className="section-title">🌿 Gatherables</h4>
           {gatherables.map((t) => (
-            <TargetRow key={t.id} target={t} showPerSecond={showPerSecond} />
+            <TargetCatalogRow key={t.id} target={t} />
           ))}
-
-          {activeHere.length > 0 && (
-            <>
-              <h4 className="section-title">📜 Quests Here</h4>
-              {activeHere.map((q) => (
-                <ActiveQuestRow key={q.id} quest={q} showPerSecond={showPerSecond} />
-              ))}
-            </>
-          )}
         </div>
       )}
     </div>
   );
 }
 
-function TargetRow({ target, showPerSecond }: { target: QuestTargetDef; showPerSecond: boolean }) {
-  const store = useGameStore();
-  const state = useGameState();
-  const [batch, setBatch] = useState(5);
-  const [maxAdv, setMaxAdv] = useState(QUEST_DEFAULT_MAX_ADVENTURERS);
-  const [repeats, setRepeats] = useState(0); // 0 = unlimited
-  const size = clampBatchSize(batch);
+function TargetCatalogRow({ target }: { target: QuestTargetDef }) {
   const verb = target.kind === 'monster' ? 'Kill' : 'Collect';
-  const summary = previewBatchSummary(state, target.id, size, maxAdv, repeats);
-  const rates = previewQuestRates(state, target.id, size, maxAdv, repeats);
-
   return (
-    <div className="quest-target">
+    <div className="row">
       <div className="row-info">
         <span className="row-name">{target.name}</span>
         <span className="row-desc">
           {verb} → {materialName(target.materialId)}
         </span>
-        {rates.goldStarved ? (
-          <span className="row-bad">⚠ Not enough gold to sustain this quest.</span>
-        ) : rates.adventurerStarved ? (
-          <span className="row-bad">⚠ No adventurers free to take this on right now.</span>
-        ) : showPerSecond ? (
-          <span className="row-good">
-            ~{rate(rates.materialsPerSec)} {materialName(target.materialId)}/s ·{' '}
-            <span className="row-bad">−{rate(rates.goldPerSec)} 🪙/s</span> · +
-            {rate(rates.reputationPerSec)} ★/s (reference)
-          </span>
-        ) : summary ? (
-          <span className="row-good">
-            {summary.materialAmount} {materialName(target.materialId)} ·{' '}
-            <span className="row-bad">−{rate(summary.gold)} 🪙</span> · +{rate(summary.reputation)} ★
-            · ~{formatDuration(summary.timeSeconds)}/batch · {summary.assigned}/{summary.maxAdventurers} adventurers
-          </span>
-        ) : null}
-      </div>
-      <div className="quest-post">
-        <label className="batch-label">
-          batch
-          <input
-            type="number"
-            min={1}
-            max={50}
-            value={batch}
-            onChange={(e) => setBatch(Number(e.target.value) || 1)}
-          />
-        </label>
-        <label className="batch-label">
-          max adv
-          <input
-            type="number"
-            min={1}
-            max={500}
-            value={maxAdv}
-            onChange={(e) => setMaxAdv(Number(e.target.value) || 1)}
-          />
-        </label>
-        <label className="batch-label">
-          repeats
-          <input
-            type="number"
-            min={0}
-            max={QUEST_MAX_REPEATS_INPUT}
-            placeholder="∞"
-            value={repeats || ''}
-            onChange={(e) => setRepeats(Number(e.target.value) || 0)}
-          />
-        </label>
-        <button
-          className="small-button"
-          onClick={() => store.dispatch((s) => postQuest(s, target.id, size, maxAdv, repeats))}
-        >
-          Post
-        </button>
       </div>
     </div>
   );
 }
 
-function ActiveQuestRow({ quest, showPerSecond }: { quest: Quest; showPerSecond: boolean }) {
+// ---------------------------------------------------------------------------
+// Quest creation dialog — pick multiple monsters/gatherables required together
+// ---------------------------------------------------------------------------
+
+function QuestCreationDialog({ onClose }: { onClose: () => void }) {
   const store = useGameStore();
   const state = useGameState();
-  const target = questTargetDef(quest.targetId);
-  const rates = questRates(state, quest);
-  const progress = questProgress(state, quest);
-  const summary = questBatchSummary(state, quest);
-  if (!target || !summary) return null;
+  // targetId -> batch size, for every currently-selected requirement.
+  const [selected, setSelected] = useState<Record<string, number>>({});
+  const [maxAdv, setMaxAdv] = useState(QUEST_DEFAULT_MAX_ADVENTURERS);
+  const [repeats, setRepeats] = useState(0); // 0 = unlimited
+
+  const unlockedZones = zones().filter((z) => isZoneUnlocked(state, z.id));
+  const selectedIds = Object.keys(selected);
+  const atCap = selectedIds.length >= QUEST_MAX_REQUIREMENTS;
+
+  function toggle(targetId: string) {
+    setSelected((prev) => {
+      const next = { ...prev };
+      if (targetId in next) {
+        delete next[targetId];
+      } else if (Object.keys(next).length < QUEST_MAX_REQUIREMENTS) {
+        next[targetId] = 5;
+      }
+      return next;
+    });
+  }
+
+  function setBatch(targetId: string, batch: number) {
+    setSelected((prev) => (targetId in prev ? { ...prev, [targetId]: batch } : prev));
+  }
+
+  const requirements: QuestRequirement[] = selectedIds.map((targetId) => ({
+    targetId,
+    batchSize: clampBatchSize(selected[targetId]),
+  }));
+  const summary = requirements.length > 0 ? previewBatchSummary(state, requirements, maxAdv, repeats) : null;
+
+  function handlePost() {
+    if (requirements.length === 0) return;
+    store.dispatch((s) => postQuest(s, requirements, maxAdv, repeats));
+    setSelected({});
+    onClose();
+  }
 
   return (
-    <div className="row item-common">
-      <div className="row-info">
-        <span className="row-name">
-          {target.name} <span className="row-sub">batch {quest.batchSize}</span>
-        </span>
-        {rates.goldStarved ? (
-          <span className="row-bad">⚠ Not enough gold — this quest is stalled.</span>
-        ) : rates.adventurerStarved ? (
-          <span className="row-bad">⚠ No adventurers assigned right now.</span>
-        ) : showPerSecond ? (
-          <span className="row-desc">
-            ~{rate(rates.materialsPerSec)} {materialName(target.materialId)}/s ·{' '}
-            −{rate(rates.goldPerSec)} 🪙/s · {rates.adventurers} adventurers
-          </span>
-        ) : (
-          <span className="row-desc">
-            {summary.materialAmount} {materialName(summary.materialId)} · −{rate(summary.gold)} 🪙 ·
-            +{rate(summary.reputation)} ★ · {formatDuration(summary.timeSeconds)}/batch ·{' '}
-            {summary.assigned}/{summary.maxAdventurers} adventurers
-          </span>
-        )}
-        <span className="row-sub">
-          {repeatsLabel(summary.repeatsRemaining, summary.repeatCount, summary.completedCount)}
-        </span>
-        <div className="progress-line">
-          <div className="progress-track">
-            <div className="progress-fill" style={{ width: `${progress.fraction * 100}%` }} />
-          </div>
-          <span className="progress-time">
-            {Number.isFinite(progress.etaSeconds)
-              ? `${formatDuration(progress.etaSeconds)} to next batch`
-              : 'stalled'}
-          </span>
+    <div className="story-overlay" onClick={onClose}>
+      <div className="story-modal detail-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="detail-header">
+          <h2 className="story-title">Post a Quest</h2>
+          <button className="small-button" onClick={onClose}>✕</button>
         </div>
+        <p className="detail-sub">
+          Check everything this quest requires (up to {QUEST_MAX_REQUIREMENTS}) — the whole
+          bundle must be fulfilled together before it pays out.
+        </p>
+
+        <div className="rows">
+          {unlockedZones.map((zone) => (
+            <div key={zone.id}>
+              <h4 className="section-title">{zone.name}</h4>
+              {targetsForLocation(zone.id).map((target) => {
+                const isSelected = target.id in selected;
+                const disabled = !isSelected && atCap;
+                return (
+                  <div
+                    key={target.id}
+                    className={`row quest-checklist-row ${disabled ? 'disabled' : ''}`}
+                    onClick={() => !disabled && toggle(target.id)}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      disabled={disabled}
+                      readOnly
+                    />
+                    <div className="row-info">
+                      <span className="row-name">{target.name}</span>
+                      <span className="row-desc">
+                        {target.kind === 'monster' ? 'Kill' : 'Collect'} → {materialName(target.materialId)}
+                      </span>
+                    </div>
+                    {isSelected && (
+                      <label className="batch-label" onClick={(e) => e.stopPropagation()}>
+                        batch
+                        <input
+                          type="number"
+                          min={1}
+                          max={50}
+                          value={selected[target.id]}
+                          onChange={(e) => setBatch(target.id, Number(e.target.value) || 1)}
+                        />
+                      </label>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+
+        <h3 className="section-title">Settings</h3>
+        <div className="quest-post">
+          <label className="batch-label">
+            max adv
+            <input
+              type="number"
+              min={1}
+              max={500}
+              value={maxAdv}
+              onChange={(e) => setMaxAdv(Number(e.target.value) || 1)}
+            />
+          </label>
+          <label className="batch-label">
+            repeats
+            <input
+              type="number"
+              min={0}
+              max={QUEST_MAX_REPEATS_INPUT}
+              placeholder="∞"
+              value={repeats || ''}
+              onChange={(e) => setRepeats(Number(e.target.value) || 0)}
+            />
+          </label>
+        </div>
+
+        <h3 className="section-title">Preview</h3>
+        {summary ? (
+          <div className="row locked">
+            {summary.materials.map((m) => `${m.amount} ${materialName(m.materialId)}`).join(' · ')}
+            <br />
+            −{rate(summary.gold)} 🪙 · +{rate(summary.reputation)} ★ · ~
+            {formatDuration(summary.timeSeconds)}/batch · {summary.assigned}/{summary.maxAdventurers}{' '}
+            adventurers
+          </div>
+        ) : (
+          <div className="row locked">Check at least one monster or gatherable.</div>
+        )}
+
+        <button
+          className="small-button"
+          disabled={requirements.length === 0}
+          onClick={handlePost}
+        >
+          Post Quest
+        </button>
       </div>
-      <button
-        className="small-button danger"
-        onClick={() => store.dispatch((s) => deleteQuest(s, quest.id))}
-      >
-        Delete
-      </button>
     </div>
   );
 }

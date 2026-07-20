@@ -16,6 +16,7 @@ import {
   QUEST_GOLD_TIER_EXP,
   QUEST_MAX_BATCH,
   QUEST_MAX_REPEATS_INPUT,
+  QUEST_MAX_REQUIREMENTS,
   QUEST_MIN_ADVENTURERS,
   QUEST_MIN_BATCH,
   QUEST_REP_BASE,
@@ -33,6 +34,7 @@ import type {
   GameState,
   LocationDef,
   Quest,
+  QuestRequirement,
   QuestTargetDef,
   Rng,
 } from './types';
@@ -400,6 +402,11 @@ export function targetsForLocation(locationId: string): QuestTargetDef[] {
   return QUEST_TARGETS.filter((t) => t.locationId === locationId);
 }
 
+/** Every target across every zone the guild currently has unlocked. */
+export function availableTargets(state: GameState): QuestTargetDef[] {
+  return QUEST_TARGETS.filter((t) => isZoneUnlocked(state, t.locationId));
+}
+
 /**
  * The numerous town adventurers: a single derived number, not managed entities.
  * Grows with the guild's reputation (few at first → hundreds over a long game),
@@ -444,6 +451,47 @@ export function batchReputation(batchSize: number, unitDiff: number): number {
 
 export function clampBatchSize(batchSize: number): number {
   return Math.max(QUEST_MIN_BATCH, Math.min(QUEST_MAX_BATCH, Math.floor(batchSize)));
+}
+
+/** Solo work-seconds one requirement demands on its own. 0 if the target is unknown. */
+export function requirementTime(req: QuestRequirement): number {
+  const target = questTargetDef(req.targetId);
+  if (!target) return 0;
+  return batchTimeSolo(req.batchSize, unitDifficulty(target));
+}
+
+/** Gold cost of fulfilling one requirement once. 0 if the target is unknown. */
+export function requirementGold(req: QuestRequirement): number {
+  const target = questTargetDef(req.targetId);
+  if (!target) return 0;
+  return batchGold(req.batchSize, goldUnitDifficulty(target));
+}
+
+/** Reputation earned from fulfilling one requirement once. 0 if the target is unknown. */
+export function requirementReputation(req: QuestRequirement): number {
+  const target = questTargetDef(req.targetId);
+  if (!target) return 0;
+  return batchReputation(req.batchSize, unitDifficulty(target));
+}
+
+/**
+ * Total adventurer-seconds of combined work to fulfil every requirement of a
+ * quest together, once. A multi-requirement quest ("5 wolves AND 3 herbs")
+ * demands the sum of each part's work — the party has to do all of it, not
+ * just the hardest part.
+ */
+export function questRequiredWork(quest: { requirements: QuestRequirement[] }): number {
+  return quest.requirements.reduce((sum, r) => sum + requirementTime(r), 0);
+}
+
+/** Total gold cost of one full completion of every requirement together. */
+export function questTotalGold(quest: { requirements: QuestRequirement[] }): number {
+  return quest.requirements.reduce((sum, r) => sum + requirementGold(r), 0);
+}
+
+/** Total reputation earned from one full completion of every requirement together. */
+export function questTotalReputation(quest: { requirements: QuestRequirement[] }): number {
+  return quest.requirements.reduce((sum, r) => sum + requirementReputation(r), 0);
 }
 
 /** repeatCount input clamp. 0 (QUEST_UNLIMITED_REPEATS) means unlimited. */
@@ -522,11 +570,11 @@ export function totalQuestGoldPerSec(state: GameState): number {
   if (state.quests.length === 0) return 0;
   const allocation = allocateAdventurers(state);
   return state.quests.reduce((sum, q) => {
-    const target = questTargetDef(q.targetId);
     const assigned = allocation[q.id] ?? 0;
-    if (!target || assigned <= 0) return sum;
-    const batchesPerSec = assigned / batchTimeSolo(q.batchSize, unitDifficulty(target));
-    return sum + batchGold(q.batchSize, goldUnitDifficulty(target)) * batchesPerSec;
+    const requiredWork = questRequiredWork(q);
+    if (assigned <= 0 || requiredWork <= 0) return sum;
+    const batchesPerSec = assigned / requiredWork;
+    return sum + questTotalGold(q) * batchesPerSec;
   }, 0);
 }
 
@@ -545,11 +593,12 @@ export function questBoardAffordable(state: GameState): boolean {
 export interface QuestRates {
   /** Adventurers currently assigned to this quest — always a whole number. */
   adventurers: number;
-  /** Reference-only estimate: what this quest would average per second if run
-   * continuously. Actual materials/gold/reputation are granted in a lump when
-   * a batch completes (see questProgress and engine.ts processQuests) — this
-   * is display guidance, not a promise of a smooth per-tick trickle. */
-  materialsPerSec: number;
+  /** Reference-only estimate per material id: what this quest would average
+   * per second if run continuously. Actual materials/gold/reputation are
+   * granted in a lump when a batch completes (see questProgress and
+   * engine.ts processQuests) — this is display guidance, not a promise of a
+   * smooth per-tick trickle. */
+  materialsPerSec: Record<string, number>;
   goldPerSec: number;
   reputationPerSec: number;
   /** True when the board can't currently be sustained — all rates are 0. */
@@ -560,6 +609,13 @@ export interface QuestRates {
   adventurerStarved: boolean;
 }
 
+function emptyQuestRates(): QuestRates {
+  return {
+    adventurers: 0, materialsPerSec: {}, goldPerSec: 0, reputationPerSec: 0,
+    goldStarved: false, adventurerStarved: false,
+  };
+}
+
 /**
  * Reference throughput estimate for a quest, given its actual integer
  * adventurer allocation (see allocateAdventurers). Zeroed out when the board
@@ -567,24 +623,30 @@ export interface QuestRates {
  * For real-time progress toward the next actual payout, see questProgress.
  */
 export function questRates(state: GameState, quest: Quest): QuestRates {
-  const target = questTargetDef(quest.targetId);
-  if (!target || state.quests.length === 0) {
-    return {
-      adventurers: 0, materialsPerSec: 0, goldPerSec: 0, reputationPerSec: 0,
-      goldStarved: false, adventurerStarved: false,
-    };
-  }
+  if (quest.requirements.length === 0 || state.quests.length === 0) return emptyQuestRates();
+  const requiredWork = questRequiredWork(quest);
+  if (requiredWork <= 0) return emptyQuestRates();
+
   const assigned = allocateAdventurers(state)[quest.id] ?? 0;
   const adventurerStarved = assigned <= 0;
-  const diff = unitDifficulty(target);
   const goldStarved = !questBoardAffordable(state);
   const stalled = goldStarved || adventurerStarved;
-  const batchesPerSec = adventurerStarved ? 0 : assigned / batchTimeSolo(quest.batchSize, diff);
+  const batchesPerSec = adventurerStarved ? 0 : assigned / requiredWork;
+
+  const materialsPerSec: Record<string, number> = {};
+  if (!stalled) {
+    for (const req of quest.requirements) {
+      const target = questTargetDef(req.targetId);
+      if (!target) continue;
+      materialsPerSec[target.materialId] =
+        (materialsPerSec[target.materialId] ?? 0) + req.batchSize * batchesPerSec;
+    }
+  }
   return {
     adventurers: assigned,
-    materialsPerSec: stalled ? 0 : quest.batchSize * batchesPerSec,
-    goldPerSec: stalled ? 0 : batchGold(quest.batchSize, goldUnitDifficulty(target)) * batchesPerSec,
-    reputationPerSec: stalled ? 0 : batchReputation(quest.batchSize, diff) * batchesPerSec,
+    materialsPerSec,
+    goldPerSec: stalled ? 0 : questTotalGold(quest) * batchesPerSec,
+    reputationPerSec: stalled ? 0 : questTotalReputation(quest) * batchesPerSec,
     goldStarved,
     adventurerStarved,
   };
@@ -593,30 +655,29 @@ export function questRates(state: GameState, quest: Quest): QuestRates {
 /**
  * Projected rates for a quest that isn't posted yet, as if it were added to
  * the board now with the given settings (the extra quest competes for the
- * adventurer pool like any other). Drives the map's "post quest" preview.
+ * adventurer pool like any other). Drives the quest-creation dialog's preview.
  */
 export function previewQuestRates(
   state: GameState,
-  targetId: string,
-  batchSize: number,
+  requirements: QuestRequirement[],
   maxAdventurers: number,
   repeatCount: number,
 ): QuestRates {
-  const preview = previewQuest(targetId, batchSize, maxAdventurers, repeatCount);
+  const preview = previewQuest(requirements, maxAdventurers, repeatCount);
   return questRates({ ...state, quests: [...state.quests, preview] }, preview);
 }
 
 function previewQuest(
-  targetId: string,
-  batchSize: number,
+  requirements: QuestRequirement[],
   maxAdventurers: number,
   repeatCount: number,
 ): Quest {
   const repeats = clampRepeatCount(repeatCount);
   return {
     id: -1,
-    targetId,
-    batchSize: clampBatchSize(batchSize),
+    requirements: requirements
+      .filter((r) => questTargetDef(r.targetId))
+      .map((r) => ({ targetId: r.targetId, batchSize: clampBatchSize(r.batchSize) })),
     progress: 0,
     repeatCount: repeats,
     completedCount: 0,
@@ -624,17 +685,24 @@ function previewQuest(
   };
 }
 
+/**
+ * Post a quest bundling one or more requirements ("5 Gray Wolves AND 3
+ * Forest Herbs") — they must ALL be fulfilled together before the batch pays
+ * out. Every requirement's zone must already be unlocked.
+ */
 export function postQuest(
   state: GameState,
-  targetId: string,
-  batchSize: number,
+  requirements: QuestRequirement[],
   maxAdventurers: number,
   repeatCount: number,
 ): GameState {
-  const target = questTargetDef(targetId);
-  if (!target) return state;
-  if (!isZoneUnlocked(state, target.locationId)) return state;
-  const quest: Quest = { ...previewQuest(targetId, batchSize, maxAdventurers, repeatCount), id: state.nextEntityId };
+  const trimmed = requirements.slice(0, QUEST_MAX_REQUIREMENTS);
+  if (trimmed.length === 0) return state;
+  for (const req of trimmed) {
+    const target = questTargetDef(req.targetId);
+    if (!target || !isZoneUnlocked(state, target.locationId)) return state;
+  }
+  const quest: Quest = { ...previewQuest(trimmed, maxAdventurers, repeatCount), id: state.nextEntityId };
   return {
     ...state,
     quests: [...state.quests, quest],
@@ -659,22 +727,20 @@ export interface QuestProgress {
  * questRates(), this reflects actual accumulated work (Quest.progress), not
  * an instantaneous estimate. Purely informational for the UI: the engine
  * (processQuests) is the only place that grants materials/gold/reputation,
- * which happens in a lump exactly when a batch completes.
+ * which happens in a lump exactly when every requirement's batch completes.
  */
 export function questProgress(state: GameState, quest: Quest): QuestProgress {
-  const target = questTargetDef(quest.targetId);
-  if (!target || state.quests.length === 0) return { fraction: 0, etaSeconds: Infinity };
+  const required = questRequiredWork(quest);
+  if (required <= 0 || state.quests.length === 0) return { fraction: 0, etaSeconds: Infinity };
   const assigned = allocateAdventurers(state)[quest.id] ?? 0;
-  const required = batchTimeSolo(quest.batchSize, unitDifficulty(target));
   const fraction = Math.min(1, quest.progress / required);
   const remaining = Math.max(0, required - quest.progress);
   return { fraction, etaSeconds: assigned > 0 ? remaining / assigned : Infinity };
 }
 
 export interface QuestBatchSummary {
-  materialId: string;
-  /** Units of material one completed batch yields — just quest.batchSize. */
-  materialAmount: number;
+  /** One entry per requirement: the material and amount it grants per completion. */
+  materials: { materialId: string; amount: number }[];
   /** Full gold cost of one completed batch (not a rate). */
   gold: number;
   /** Full reputation reward of one completed batch (not a rate). */
@@ -693,15 +759,19 @@ export interface QuestBatchSummary {
 }
 
 function batchSummaryFor(quest: Quest, assigned: number): QuestBatchSummary | null {
-  const target = questTargetDef(quest.targetId);
-  if (!target) return null;
-  const diff = unitDifficulty(target);
-  const required = batchTimeSolo(quest.batchSize, diff);
+  if (quest.requirements.length === 0) return null;
+  const required = questRequiredWork(quest);
+  const materials = quest.requirements
+    .map((r) => {
+      const target = questTargetDef(r.targetId);
+      return target ? { materialId: target.materialId, amount: r.batchSize } : null;
+    })
+    .filter((m): m is { materialId: string; amount: number } => m !== null);
+  if (materials.length === 0) return null;
   return {
-    materialId: target.materialId,
-    materialAmount: quest.batchSize,
-    gold: batchGold(quest.batchSize, goldUnitDifficulty(target)),
-    reputation: batchReputation(quest.batchSize, diff),
+    materials,
+    gold: questTotalGold(quest),
+    reputation: questTotalReputation(quest),
     timeSeconds: assigned > 0 ? required / assigned : Infinity,
     assigned,
     maxAdventurers: quest.maxAdventurers,
@@ -724,16 +794,15 @@ export function questBatchSummary(state: GameState, quest: Quest): QuestBatchSum
 
 /**
  * Batch summary for a quest that isn't posted yet, with the given settings —
- * drives the map's "post quest" full-stats preview.
+ * drives the quest-creation dialog's full-stats preview.
  */
 export function previewBatchSummary(
   state: GameState,
-  targetId: string,
-  batchSize: number,
+  requirements: QuestRequirement[],
   maxAdventurers: number,
   repeatCount: number,
 ): QuestBatchSummary | null {
-  const preview = previewQuest(targetId, batchSize, maxAdventurers, repeatCount);
+  const preview = previewQuest(requirements, maxAdventurers, repeatCount);
   const withPreview = { ...state, quests: [...state.quests, preview] };
   const assigned = allocateAdventurers(withPreview)[preview.id] ?? 0;
   return batchSummaryFor(preview, assigned);

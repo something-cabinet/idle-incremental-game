@@ -19,6 +19,18 @@ import type { Adventurer, Attributes, GameState, SaveData, Settings } from './ty
 
 /** Town economy + state lifecycle. Every function is pure: (state) => state. */
 
+/** Pre-v9 quests had a single targetId/batchSize instead of `requirements`. */
+interface LegacyQuestShape {
+  id: number;
+  targetId?: string;
+  batchSize?: number;
+  requirements?: { targetId: string; batchSize: number }[];
+  progress?: number;
+  repeatCount?: number;
+  completedCount?: number;
+  maxAdventurers?: number;
+}
+
 export function createInitialState(now = Date.now()): GameState {
   return {
     act: 1,
@@ -78,13 +90,20 @@ export function migrateSave(data: SaveData, now = Date.now()): GameState {
     // v8 added repeatCount/completedCount/maxAdventurers (repeat limits +
     // integer worker caps). Old quests get unlimited repeats (0) and an
     // uncapped worker cap, matching their pre-v8 behavior.
-    quests: (s.quests ?? []).map((q) => ({
-      ...q,
-      progress: q.progress ?? 0,
-      repeatCount: q.repeatCount ?? 0,
-      completedCount: q.completedCount ?? 0,
-      maxAdventurers: q.maxAdventurers ?? ADVENTURER_MAX,
-    })),
+    // v9 replaced a quest's single targetId/batchSize with a `requirements`
+    // list, letting one quest bundle several targets together. A pre-v9
+    // quest becomes a one-requirement quest with the same target/batch.
+    quests: ((s.quests ?? []) as unknown as LegacyQuestShape[])
+      .map((q) => ({
+        id: q.id,
+        requirements:
+          q.requirements ?? (q.targetId ? [{ targetId: q.targetId, batchSize: q.batchSize ?? 1 }] : []),
+        progress: q.progress ?? 0,
+        repeatCount: q.repeatCount ?? 0,
+        completedCount: q.completedCount ?? 0,
+        maxAdventurers: q.maxAdventurers ?? ADVENTURER_MAX,
+      }))
+      .filter((q) => q.requirements.length > 0),
     // v5 introduced the attribute/HP combat model and typed equipment. Old
     // items can't map to the new equipment types, so pre-v5 inventory and
     // equipped gear are dropped; adventurers gain fresh attributes + HP.
