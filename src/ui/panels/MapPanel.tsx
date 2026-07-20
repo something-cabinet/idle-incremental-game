@@ -117,44 +117,44 @@ function TargetCatalogRow({ target }: { target: QuestTargetDef }) {
 // Quest creation dialog — pick multiple monsters/gatherables required together
 // ---------------------------------------------------------------------------
 
+const DEFAULT_AMOUNT = 5;
+
 function QuestCreationDialog({ onClose }: { onClose: () => void }) {
   const store = useGameStore();
   const state = useGameState();
-  // targetId -> batch size, for every currently-selected requirement.
-  const [selected, setSelected] = useState<Record<string, number>>({});
+  const [checked, setChecked] = useState<Record<string, boolean>>({});
+  // targetId -> requested amount. Kept for every target (not just checked
+  // ones) so the amount box stays put — and keeps its value — when a
+  // checkbox is toggled, instead of appearing/disappearing and shifting the row.
+  const [amounts, setAmounts] = useState<Record<string, number>>({});
   const [maxAdv, setMaxAdv] = useState(QUEST_DEFAULT_MAX_ADVENTURERS);
   const [repeats, setRepeats] = useState(0); // 0 = unlimited
 
   const unlockedZones = zones().filter((z) => isZoneUnlocked(state, z.id));
-  const selectedIds = Object.keys(selected);
+  const selectedIds = Object.keys(checked).filter((id) => checked[id]);
   const atCap = selectedIds.length >= QUEST_MAX_REQUIREMENTS;
 
   function toggle(targetId: string) {
-    setSelected((prev) => {
-      const next = { ...prev };
-      if (targetId in next) {
-        delete next[targetId];
-      } else if (Object.keys(next).length < QUEST_MAX_REQUIREMENTS) {
-        next[targetId] = 5;
-      }
-      return next;
+    setChecked((prev) => {
+      if (!prev[targetId] && selectedIds.length >= QUEST_MAX_REQUIREMENTS) return prev;
+      return { ...prev, [targetId]: !prev[targetId] };
     });
   }
 
-  function setBatch(targetId: string, batch: number) {
-    setSelected((prev) => (targetId in prev ? { ...prev, [targetId]: batch } : prev));
+  function setAmount(targetId: string, amount: number) {
+    setAmounts((prev) => ({ ...prev, [targetId]: amount }));
   }
 
   const requirements: QuestRequirement[] = selectedIds.map((targetId) => ({
     targetId,
-    batchSize: clampBatchSize(selected[targetId]),
+    batchSize: clampBatchSize(amounts[targetId] ?? DEFAULT_AMOUNT),
   }));
   const summary = requirements.length > 0 ? previewBatchSummary(state, requirements, maxAdv, repeats) : null;
 
   function handlePost() {
     if (requirements.length === 0) return;
     store.dispatch((s) => postQuest(s, requirements, maxAdv, repeats));
-    setSelected({});
+    setChecked({});
     onClose();
   }
 
@@ -175,18 +175,18 @@ function QuestCreationDialog({ onClose }: { onClose: () => void }) {
             <div key={zone.id}>
               <h4 className="section-title">{zone.name}</h4>
               {targetsForLocation(zone.id).map((target) => {
-                const isSelected = target.id in selected;
-                const disabled = !isSelected && atCap;
+                const isSelected = !!checked[target.id];
+                const checkboxDisabled = !isSelected && atCap;
                 return (
                   <div
                     key={target.id}
-                    className={`row quest-checklist-row ${disabled ? 'disabled' : ''}`}
-                    onClick={() => !disabled && toggle(target.id)}
+                    className={`row quest-checklist-row ${checkboxDisabled ? 'disabled' : ''}`}
+                    onClick={() => !checkboxDisabled && toggle(target.id)}
                   >
                     <input
                       type="checkbox"
                       checked={isSelected}
-                      disabled={disabled}
+                      disabled={checkboxDisabled}
                       readOnly
                     />
                     <div className="row-info">
@@ -195,18 +195,17 @@ function QuestCreationDialog({ onClose }: { onClose: () => void }) {
                         {target.kind === 'monster' ? 'Kill' : 'Collect'} → {materialName(target.materialId)}
                       </span>
                     </div>
-                    {isSelected && (
-                      <label className="batch-label" onClick={(e) => e.stopPropagation()}>
-                        batch
-                        <input
-                          type="number"
-                          min={1}
-                          max={50}
-                          value={selected[target.id]}
-                          onChange={(e) => setBatch(target.id, Number(e.target.value) || 1)}
-                        />
-                      </label>
-                    )}
+                    <label className="field-label" onClick={(e) => e.stopPropagation()}>
+                      amount
+                      <input
+                        type="number"
+                        min={1}
+                        max={50}
+                        disabled={!isSelected}
+                        value={amounts[target.id] ?? DEFAULT_AMOUNT}
+                        onChange={(e) => setAmount(target.id, Number(e.target.value) || 1)}
+                      />
+                    </label>
                   </div>
                 );
               })}
@@ -216,7 +215,7 @@ function QuestCreationDialog({ onClose }: { onClose: () => void }) {
 
         <h3 className="section-title">Settings</h3>
         <div className="quest-post">
-          <label className="batch-label">
+          <label className="field-label">
             max adv
             <input
               type="number"
@@ -226,7 +225,7 @@ function QuestCreationDialog({ onClose }: { onClose: () => void }) {
               onChange={(e) => setMaxAdv(Number(e.target.value) || 1)}
             />
           </label>
-          <label className="batch-label">
+          <label className="field-label">
             repeats
             <input
               type="number"
@@ -245,7 +244,7 @@ function QuestCreationDialog({ onClose }: { onClose: () => void }) {
             {summary.materials.map((m) => `${m.amount} ${materialName(m.materialId)}`).join(' · ')}
             <br />
             −{rate(summary.gold)} 🪙 · +{rate(summary.reputation)} ★ · ~
-            {formatDuration(summary.timeSeconds)}/batch · {summary.assigned}/{summary.maxAdventurers}{' '}
+            {formatDuration(summary.timeSeconds)}/round · {summary.assigned}/{summary.maxAdventurers}{' '}
             adventurers
           </div>
         ) : (

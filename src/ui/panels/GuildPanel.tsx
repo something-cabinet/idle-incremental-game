@@ -133,7 +133,7 @@ function QuestsSection() {
       <div className="section-title-row">
         <h3 className="section-title">Running Quests ({state.quests.length})</h3>
         <button className="small-button" onClick={() => setShowPerSecond((v) => !v)}>
-          {showPerSecond ? 'Show batch totals' : 'Show per-second rates'}
+          {showPerSecond ? 'Show round totals' : 'Show per-second rates'}
         </button>
       </div>
       {state.quests.length > 0 && (
@@ -200,7 +200,7 @@ function QuestRow({ quest, showPerSecond }: { quest: Quest; showPerSecond: boole
         ) : (
           <span className="row-desc">
             {materialsSummary(summary.materials)} · −{rate(summary.gold)} 🪙 · +{rate(summary.reputation)} ★
-            · {formatDuration(summary.timeSeconds)}/batch · {summary.assigned}/{summary.maxAdventurers}{' '}
+            · {formatDuration(summary.timeSeconds)}/round · {summary.assigned}/{summary.maxAdventurers}{' '}
             adventurers
           </span>
         )}
@@ -213,7 +213,7 @@ function QuestRow({ quest, showPerSecond }: { quest: Quest; showPerSecond: boole
           </div>
           <span className="progress-time">
             {Number.isFinite(progress.etaSeconds)
-              ? `${formatDuration(progress.etaSeconds)} to next batch`
+              ? `${formatDuration(progress.etaSeconds)} to next round`
               : 'stalled'}
           </span>
         </div>
