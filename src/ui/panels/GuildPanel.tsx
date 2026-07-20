@@ -7,6 +7,7 @@ import {
   canBuyGuildUpgrade,
   deleteQuest,
   guildUpgradeCost,
+  questBatchSummary,
   questProgress,
   questRates,
   questTargetDef,
@@ -125,10 +126,16 @@ function QuestsSection() {
   const state = useGameState();
   const fmt = useFormat();
   const totalGoldPerSec = totalQuestGoldPerSec(state);
+  const [showPerSecond, setShowPerSecond] = useState(false);
 
   return (
     <section className="rows">
-      <h3 className="section-title">Running Quests ({state.quests.length})</h3>
+      <div className="section-title-row">
+        <h3 className="section-title">Running Quests ({state.quests.length})</h3>
+        <button className="small-button" onClick={() => setShowPerSecond((v) => !v)}>
+          {showPerSecond ? 'Show batch totals' : 'Show per-second rates'}
+        </button>
+      </div>
       {state.quests.length > 0 && (
         <div className="row locked">
           Total upkeep: <strong>{fmt(totalGoldPerSec)} 🪙/s</strong> across the whole board
@@ -140,19 +147,20 @@ function QuestsSection() {
         </div>
       )}
       {state.quests.map((q) => (
-        <QuestRow key={q.id} quest={q} />
+        <QuestRow key={q.id} quest={q} showPerSecond={showPerSecond} />
       ))}
     </section>
   );
 }
 
-function QuestRow({ quest }: { quest: Quest }) {
+function QuestRow({ quest, showPerSecond }: { quest: Quest; showPerSecond: boolean }) {
   const store = useGameStore();
   const state = useGameState();
   const target = questTargetDef(quest.targetId);
   const rates = questRates(state, quest);
   const progress = questProgress(state, quest);
-  if (!target) return null;
+  const summary = questBatchSummary(state, quest);
+  if (!target || !summary) return null;
 
   return (
     <div className="row item-common">
@@ -162,7 +170,7 @@ function QuestRow({ quest }: { quest: Quest }) {
         </span>
         {rates.goldStarved ? (
           <span className="row-bad">⚠ Not enough gold — this quest is stalled.</span>
-        ) : (
+        ) : showPerSecond ? (
           <>
             <span className="row-desc">
               ~{rate(rates.materialsPerSec)} {materialName(target.materialId)}/s ·{' '}
@@ -170,6 +178,11 @@ function QuestRow({ quest }: { quest: Quest }) {
             </span>
             <span className="row-good">{rates.adventurers.toFixed(1)} adventurers assigned</span>
           </>
+        ) : (
+          <span className="row-desc">
+            {summary.materialAmount} {materialName(summary.materialId)} · −{rate(summary.gold)} 🪙 ·
+            +{rate(summary.reputation)} ★ · {formatDuration(summary.timeSeconds)}/batch
+          </span>
         )}
         <div className="progress-line">
           <div className="progress-track">

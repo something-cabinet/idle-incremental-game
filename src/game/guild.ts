@@ -568,3 +568,37 @@ export function questProgress(state: GameState, quest: Quest): QuestProgress {
   const remaining = Math.max(0, required - quest.progress);
   return { fraction, etaSeconds: advPerQuest > 0 ? remaining / advPerQuest : Infinity };
 }
+
+export interface QuestBatchSummary {
+  materialId: string;
+  /** Units of material one completed batch yields — just quest.batchSize. */
+  materialAmount: number;
+  /** Full gold cost of one completed batch (not a rate). */
+  gold: number;
+  /** Full reputation reward of one completed batch (not a rate). */
+  reputation: number;
+  /** Seconds for one full batch from a standing start, at the current
+   * adventurer split — not the remaining time on an in-progress batch. */
+  timeSeconds: number;
+}
+
+/**
+ * The full, absolute cost/reward of one batch of this quest — what the
+ * player actually receives in the lump-sum payout, as opposed to
+ * questRates()'s "if this ran continuously" per-second estimate.
+ */
+export function questBatchSummary(state: GameState, quest: Quest): QuestBatchSummary | null {
+  const target = questTargetDef(quest.targetId);
+  const active = state.quests.length;
+  if (!target || active === 0) return null;
+  const advPerQuest = adventurerCount(state) / active;
+  const diff = unitDifficulty(target);
+  const required = batchTimeSolo(quest.batchSize, diff);
+  return {
+    materialId: target.materialId,
+    materialAmount: quest.batchSize,
+    gold: batchGold(quest.batchSize, goldUnitDifficulty(target)),
+    reputation: batchReputation(quest.batchSize, diff),
+    timeSeconds: advPerQuest > 0 ? required / advPerQuest : Infinity,
+  };
+}

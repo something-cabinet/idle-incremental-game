@@ -35,6 +35,7 @@ import {
   isBossUnlocked,
   isZoneUnlocked,
   postQuest,
+  questBatchSummary,
   questBoardAffordable,
   questProgress,
   questRates,
@@ -349,6 +350,22 @@ describe('quest board', () => {
     expect(p1.fraction).toBeGreaterThan(0);
     expect(p1.fraction).toBeLessThan(1);
     expect(p1.etaSeconds).toBeLessThan(p0.etaSeconds);
+  });
+
+  it('questBatchSummary reports the full one-batch payout, matching what actually resolves', () => {
+    let s = postQuest(guildState(), 'gray-wolf', 5);
+    const target = questTargetDef('gray-wolf')!;
+    const summary = questBatchSummary(s, s.quests[0])!;
+    expect(summary.materialId).toBe(target.materialId);
+    expect(summary.materialAmount).toBe(5);
+    expect(summary.gold).toBeGreaterThan(0);
+    expect(summary.reputation).toBeGreaterThan(0);
+    expect(summary.timeSeconds).toBeGreaterThan(0);
+
+    // Ticking exactly one batch's worth of time credits exactly this summary.
+    s = tick(s, summary.timeSeconds + 1, 0);
+    expect(s.materials[target.materialId]).toBe(summary.materialAmount);
+    expect(s.reputation).toBeCloseTo(summary.reputation, 5);
   });
 
   it('bigger batches are more time-efficient per unit but cost more gold per unit', () => {
