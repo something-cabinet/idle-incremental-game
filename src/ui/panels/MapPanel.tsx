@@ -124,16 +124,21 @@ function QuestCreationDialog({ zone, onClose }: { zone: LocationDef; onClose: ()
   const store = useGameStore();
   const state = useGameState();
   const [checked, setChecked] = useState<Record<string, boolean>>({});
-  // targetId -> requested amount. Kept for every target (not just checked
-  // ones) so the amount box stays put — and keeps its value — when a
-  // checkbox is toggled, instead of appearing/disappearing and shifting the row.
-  const [amounts, setAmounts] = useState<Record<string, number>>({});
-  const [maxAdv, setMaxAdv] = useState(QUEST_DEFAULT_MAX_ADVENTURERS);
-  const [repeats, setRepeats] = useState(0); // 0 = unlimited
+  // targetId -> requested amount, as raw input text (not a parsed number) so
+  // the field can sit empty mid-edit instead of snapping back to a fallback
+  // value and eating the digit the player is trying to type or delete. Kept
+  // for every target (not just checked ones) so the amount box stays put —
+  // and keeps its value — when a checkbox is toggled, instead of
+  // appearing/disappearing and shifting the row.
+  const [amounts, setAmounts] = useState<Record<string, string>>({});
+  const [maxAdvInput, setMaxAdvInput] = useState(String(QUEST_DEFAULT_MAX_ADVENTURERS));
+  const [repeatsInput, setRepeatsInput] = useState(''); // '' = unlimited
 
   const targets = targetsForLocation(zone.id);
   const selectedIds = Object.keys(checked).filter((id) => checked[id]);
   const atCap = selectedIds.length >= QUEST_MAX_REQUIREMENTS;
+  const maxAdv = Number(maxAdvInput) || 1;
+  const repeats = Number(repeatsInput) || 0;
 
   function toggle(targetId: string) {
     setChecked((prev) => {
@@ -142,13 +147,13 @@ function QuestCreationDialog({ zone, onClose }: { zone: LocationDef; onClose: ()
     });
   }
 
-  function setAmount(targetId: string, amount: number) {
-    setAmounts((prev) => ({ ...prev, [targetId]: amount }));
+  function setAmount(targetId: string, raw: string) {
+    setAmounts((prev) => ({ ...prev, [targetId]: raw }));
   }
 
   const requirements: QuestRequirement[] = selectedIds.map((targetId) => ({
     targetId,
-    batchSize: clampBatchSize(amounts[targetId] ?? DEFAULT_AMOUNT),
+    batchSize: clampBatchSize(Number(amounts[targetId]) || DEFAULT_AMOUNT),
   }));
   const summary = requirements.length > 0 ? previewBatchSummary(state, requirements, maxAdv, repeats) : null;
 
@@ -200,8 +205,8 @@ function QuestCreationDialog({ zone, onClose }: { zone: LocationDef; onClose: ()
                     min={1}
                     max={50}
                     disabled={!isSelected}
-                    value={amounts[target.id] ?? DEFAULT_AMOUNT}
-                    onChange={(e) => setAmount(target.id, Number(e.target.value) || 1)}
+                    value={amounts[target.id] ?? String(DEFAULT_AMOUNT)}
+                    onChange={(e) => setAmount(target.id, e.target.value)}
                   />
                 </label>
               </div>
@@ -217,8 +222,8 @@ function QuestCreationDialog({ zone, onClose }: { zone: LocationDef; onClose: ()
               type="number"
               min={1}
               max={500}
-              value={maxAdv}
-              onChange={(e) => setMaxAdv(Number(e.target.value) || 1)}
+              value={maxAdvInput}
+              onChange={(e) => setMaxAdvInput(e.target.value)}
             />
           </label>
           <label className="field-label">
@@ -228,8 +233,8 @@ function QuestCreationDialog({ zone, onClose }: { zone: LocationDef; onClose: ()
               min={0}
               max={QUEST_MAX_REPEATS_INPUT}
               placeholder="∞"
-              value={repeats || ''}
-              onChange={(e) => setRepeats(Number(e.target.value) || 0)}
+              value={repeatsInput}
+              onChange={(e) => setRepeatsInput(e.target.value)}
             />
           </label>
         </div>
