@@ -336,17 +336,17 @@ describe('quest board', () => {
     expect(s.quests[0].progress).toBeGreaterThan(0); // but the work is accruing
   });
 
-  it('a batch resolves in one lump exactly when its required work is reached, carrying the remainder', () => {
+  it('a round resolves in one lump exactly when its required time is reached, carrying the remainder', () => {
     let s = post(guildState(), 'gray-wolf', 5);
     const target = questTargetDef('gray-wolf')!;
     const required = batchTimeSolo(5, unitDifficulty(target));
     const advPerQuest = adventurerCount(s);
-    // Cross the threshold for exactly one batch, with room to spare left over.
-    s = tick(s, required / advPerQuest + 1, 0);
-    expect(s.materials['beast-pelt']).toBe(5); // exactly one batch's worth, not a fraction
+    // Cross the round's fixed time threshold, with room to spare left over.
+    s = tick(s, required + 1, 0);
+    expect(s.materials['beast-pelt']).toBe(5 * advPerQuest); // every assigned adventurer's own repeat
     expect(s.reputation).toBeGreaterThan(0);
-    expect(s.quests[0].progress).toBeGreaterThan(0); // leftover work carries into the next batch
-    expect(s.quests[0].progress).toBeLessThan(required); // but not a whole extra batch's worth
+    expect(s.quests[0].progress).toBeGreaterThan(0); // leftover work carries into the next round
+    expect(s.quests[0].progress).toBeLessThan(required); // but not a whole extra round's worth
   });
 
   it('questProgress reports live fraction/ETA toward the next completion, distinct from the reference rate', () => {
@@ -361,18 +361,18 @@ describe('quest board', () => {
     expect(p1.etaSeconds).toBeLessThan(p0.etaSeconds);
   });
 
-  it('questBatchSummary reports the full one-batch payout, matching what actually resolves', () => {
+  it('questBatchSummary reports the full round payout, matching what actually resolves', () => {
     let s = post(guildState(), 'gray-wolf', 5);
     const target = questTargetDef('gray-wolf')!;
     const summary = questBatchSummary(s, s.quests[0])!;
-    expect(summary.materials).toEqual([{ materialId: target.materialId, amount: 5 }]);
+    expect(summary.materials).toEqual([{ materialId: target.materialId, amount: 5 * summary.assigned }]);
     expect(summary.gold).toBeGreaterThan(0);
     expect(summary.reputation).toBeGreaterThan(0);
     expect(summary.timeSeconds).toBeGreaterThan(0);
 
-    // Ticking exactly one batch's worth of time credits exactly this summary.
+    // Ticking exactly one round's worth of time credits exactly this summary.
     s = tick(s, summary.timeSeconds + 1, 0);
-    expect(s.materials[target.materialId]).toBe(5);
+    expect(s.materials[target.materialId]).toBe(5 * summary.assigned);
     expect(s.reputation).toBeCloseTo(summary.reputation, 5);
   });
 
@@ -498,11 +498,11 @@ describe('quest worker allocation, repeats & caps', () => {
     expect(rates.goldStarved).toBe(false); // it's a workforce shortage, not a money one
   });
 
-  it('postQuest clamps maxAdventurers to at least 1, and to at most repeatCount when finite', () => {
+  it('postQuest clamps maxAdventurers to at least 1, independent of repeatCount', () => {
     let s = postQuest(guildState(), [{ targetId: 'gray-wolf', batchSize: 5 }], 0, 0); // 0 → floors up to 1
     expect(s.quests[0].maxAdventurers).toBe(1);
-    s = postQuest(s, [{ targetId: 'wild-boar', batchSize: 5 }], 50, 3); // capped down to the repeat count
-    expect(s.quests[1].maxAdventurers).toBe(3);
+    s = postQuest(s, [{ targetId: 'wild-boar', batchSize: 5 }], 50, 3); // not capped by the repeat count
+    expect(s.quests[1].maxAdventurers).toBe(50);
     s = postQuest(s, [{ targetId: 'forest-herbs', batchSize: 5 }], 2, 10); // within range → unchanged
     expect(s.quests[2].maxAdventurers).toBe(2);
   });
@@ -515,6 +515,45 @@ describe('quest worker allocation, repeats & caps', () => {
     s = tick(s, required * 10, 0);
     expect(s.quests).toHaveLength(0); // removed itself
     expect(s.materials['beast-pelt']).toBe(2); // exactly repeatCount batches, not more
+  });
+
+  it('more assigned adventurers complete more repeats per round, not a faster round', () => {
+    const target = questTargetDef('gray-wolf')!;
+    const required = batchTimeSolo(1, unitDifficulty(target));
+
+    // One worker, unlimited repeats: manages exactly 1 repeat in `required` seconds.
+    let solo = postQuest(guildState(), [{ targetId: 'gray-wolf', batchSize: 1 }], 1, 0);
+    solo = tick(solo, required, 0);
+    expect(solo.materials['beast-pelt']).toBe(1);
+
+    // Whole town's worth of workers (ADVENTURER_BASE, all assigned to one
+    // quest with matching repeats): the round still takes the very same
+    // `required` seconds — but every one of them completes their own repeat
+    // when it fills, so ADVENTURER_BASE repeats land at once instead of 1.
+    let party = postQuest(guildState(), [{ targetId: 'gray-wolf', batchSize: 1 }], ADVENTURER_BASE, ADVENTURER_BASE);
+    party = tick(party, required, 0);
+    expect(party.materials['beast-pelt']).toBe(ADVENTURER_BASE);
+  });
+
+  it('a big party clears a big repeat count in the same number of rounds a small one would', () => {
+    // The scenario from the design brief: 50 adventurers, a 100-repeat quest
+    // with a 1-minute round — the whole board should clear in 2 rounds (2
+    // minutes), 50 repeats credited per round, not sped up or slowed down by
+    // the adventurer count.
+    const target = questTargetDef('gray-wolf')!;
+    const party = 50;
+    let s = { ...guildState(), reputation: 1e12 }; // enough reputation for a 50-strong pool
+    expect(adventurerCount(s)).toBeGreaterThanOrEqual(party);
+    s = postQuest(s, [{ targetId: 'gray-wolf', batchSize: 1 }], party, 100);
+    const required = batchTimeSolo(1, unitDifficulty(target));
+
+    s = tick(s, required, 0); // round 1
+    expect(s.quests[0].completedCount).toBe(50);
+    expect(s.materials['beast-pelt']).toBe(50);
+
+    s = tick(s, required, 0); // round 2
+    expect(s.quests).toHaveLength(0); // exactly 100 repeats done — removed itself
+    expect(s.materials['beast-pelt']).toBe(100);
   });
 
   it('a huge offline dt does not overshoot a finite repeat count', () => {
@@ -558,13 +597,13 @@ describe('quest worker allocation, repeats & caps', () => {
     expect(questRequiredWork(s.quests[0])).toBeCloseTo(expectedWork, 6);
 
     const summary = questBatchSummary(s, s.quests[0])!;
-    expect(summary.materials).toContainEqual({ materialId: 'beast-pelt', amount: 5 });
-    expect(summary.materials).toContainEqual({ materialId: 'herbs', amount: 3 });
+    expect(summary.materials).toContainEqual({ materialId: 'beast-pelt', amount: 5 * summary.assigned });
+    expect(summary.materials).toContainEqual({ materialId: 'herbs', amount: 3 * summary.assigned });
 
-    // Ticking exactly one combined batch's worth of time credits both materials at once.
+    // Ticking exactly one combined round's worth of time credits both materials at once.
     s = tick(s, summary.timeSeconds + 1, 0);
-    expect(s.materials['beast-pelt']).toBe(5);
-    expect(s.materials['herbs']).toBe(3);
+    expect(s.materials['beast-pelt']).toBe(5 * summary.assigned);
+    expect(s.materials['herbs']).toBe(3 * summary.assigned);
   });
 
   it('a quest is rejected if any requirement targets a locked zone', () => {

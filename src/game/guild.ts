@@ -429,7 +429,12 @@ export function goldUnitDifficulty(target: QuestTargetDef): number {
   return target.difficulty * Math.pow(tier, QUEST_GOLD_TIER_EXP);
 }
 
-/** Seconds one adventurer takes to complete one batch (sublinear in batch size). */
+/**
+ * Seconds one round of this batch takes to complete (sublinear in batch
+ * size). Fixed — how many adventurers are assigned doesn't change this; it
+ * changes how many repeats get credited when the round finishes (see
+ * questRequiredWork and processQuests).
+ */
 export function batchTimeSolo(batchSize: number, unitDiff: number): number {
   return QUEST_BATCH_TIME_BASE * unitDiff * Math.pow(batchSize, QUEST_TIME_EXP);
 }
@@ -448,7 +453,7 @@ export function clampBatchSize(batchSize: number): number {
   return Math.max(QUEST_MIN_BATCH, Math.min(QUEST_MAX_BATCH, Math.floor(batchSize)));
 }
 
-/** Solo work-seconds one requirement demands on its own. 0 if the target is unknown. */
+/** Round-seconds one requirement demands on its own. 0 if the target is unknown. */
 export function requirementTime(req: QuestRequirement): number {
   const target = questTargetDef(req.targetId);
   if (!target) return 0;
@@ -470,10 +475,13 @@ export function requirementReputation(req: QuestRequirement): number {
 }
 
 /**
- * Total adventurer-seconds of combined work to fulfil every requirement of a
- * quest together, once. A multi-requirement quest ("5 wolves AND 3 herbs")
- * demands the sum of each part's work — the party has to do all of it, not
- * just the hardest part.
+ * Total seconds one round of this quest takes to complete every requirement
+ * together. A multi-requirement quest ("5 wolves AND 3 herbs") demands the
+ * sum of each part's round time — the party has to do all of it, not just
+ * the hardest part. This is the fixed duration of the progress bar: it does
+ * not shrink with more assigned adventurers (see processQuests) — instead,
+ * every adventurer assigned when the bar fills completes their own repeat,
+ * so more adventurers means more repeats credited per round, not a faster bar.
  */
 export function questRequiredWork(quest: { requirements: QuestRequirement[] }): number {
   return quest.requirements.reduce((sum, r) => sum + requirementTime(r), 0);
@@ -495,13 +503,14 @@ export function clampRepeatCount(repeatCount: number): number {
 }
 
 /**
- * maxAdventurers input clamp: always a positive integer, and — when
- * repeatCount is finite — never larger than it (no point assigning more
- * simultaneous workers than there are repeats left to do).
+ * maxAdventurers input clamp: always a positive integer. Independent of
+ * repeatCount at creation time — effectiveAdventurerCap re-applies the
+ * repeats-left bound dynamically every tick anyway, so there's no need to
+ * force it down up front (and it'd only need re-deriving as completedCount
+ * climbs and remainingRepeats shrinks over the quest's life).
  */
-export function clampMaxAdventurers(maxAdventurers: number, repeatCount: number): number {
-  const floored = Math.max(QUEST_MIN_ADVENTURERS, Math.floor(maxAdventurers) || QUEST_MIN_ADVENTURERS);
-  return repeatCount > 0 ? Math.min(floored, repeatCount) : floored;
+export function clampMaxAdventurers(maxAdventurers: number): number {
+  return Math.max(QUEST_MIN_ADVENTURERS, Math.floor(maxAdventurers) || QUEST_MIN_ADVENTURERS);
 }
 
 /** Batches left before the quest auto-removes itself; Infinity if unlimited. */
@@ -510,8 +519,13 @@ export function remainingRepeats(quest: Quest): number {
   return Math.max(0, quest.repeatCount - quest.completedCount);
 }
 
-/** The most adventurers this quest could use right now: its own cap, further
- * bounded by how many repeats it has left. */
+/**
+ * The most adventurers this quest can usefully hold right now: its own cap,
+ * further bounded by repeats left. Each assigned adventurer completes one
+ * repeat per round (see processQuests), so assigning more than the repeats
+ * remaining would only strand extra workers who'd credit nothing — better to
+ * leave them free for other quests on the board.
+ */
 function effectiveAdventurerCap(quest: Quest): number {
   return Math.min(quest.maxAdventurers, remainingRepeats(quest));
 }
@@ -676,7 +690,7 @@ function previewQuest(
     progress: 0,
     repeatCount: repeats,
     completedCount: 0,
-    maxAdventurers: clampMaxAdventurers(maxAdventurers, repeats),
+    maxAdventurers: clampMaxAdventurers(maxAdventurers),
   };
 }
 
@@ -714,19 +728,21 @@ export function deleteQuest(state: GameState, questId: number): GameState {
 }
 
 export interface QuestProgress {
-  /** 0-1 fraction of the way through the current batch. */
+  /** 0-1 fraction of the way through the current round. */
   fraction: number;
-  /** Estimated seconds until the current batch completes, at the current
-   * adventurer allocation (shifts if quests join/leave the board). */
+  /** Seconds until the current round completes. Fixed by the quest's own
+   * round time — not affected by how many adventurers are assigned (only the
+   * number of repeats credited when it fills is). Infinity if nobody's
+   * assigned, since the bar doesn't move at all. */
   etaSeconds: number;
 }
 
 /**
- * Real progress toward this quest's next batch completing — unlike
+ * Real progress toward this quest's current round completing — unlike
  * questRates(), this reflects actual accumulated work (Quest.progress), not
  * an instantaneous estimate. Purely informational for the UI: the engine
  * (processQuests) is the only place that grants materials/gold/reputation,
- * which happens in a lump exactly when every requirement's batch completes.
+ * which happens in a lump exactly when the round's required time is reached.
  */
 export function questProgress(state: GameState, quest: Quest): QuestProgress {
   const required = questRequiredWork(quest);
@@ -734,18 +750,20 @@ export function questProgress(state: GameState, quest: Quest): QuestProgress {
   const assigned = allocateAdventurers(state)[quest.id] ?? 0;
   const fraction = Math.min(1, quest.progress / required);
   const remaining = Math.max(0, required - quest.progress);
-  return { fraction, etaSeconds: assigned > 0 ? remaining / assigned : Infinity };
+  return { fraction, etaSeconds: assigned > 0 ? remaining : Infinity };
 }
 
 export interface QuestBatchSummary {
-  /** One entry per requirement: the material and amount it grants per completion. */
+  /** One entry per requirement: the material and total amount the round
+   * grants — already multiplied by how many adventurers are assigned, since
+   * each one completes its own repeat when the round fills. */
   materials: { materialId: string; amount: number }[];
-  /** Full gold cost of one completed batch (not a rate). */
+  /** Total gold cost of the round (one repeat's cost × adventurers assigned). */
   gold: number;
-  /** Full reputation reward of one completed batch (not a rate). */
+  /** Total reputation reward of the round (one repeat's reward × adventurers assigned). */
   reputation: number;
-  /** Seconds for one full batch from a standing start, at the current
-   * adventurer allocation — not the remaining time on an in-progress batch. */
+  /** Seconds for the round to complete — fixed by the quest itself, not by
+   * how many adventurers are assigned (see questRequiredWork). */
   timeSeconds: number;
   /** Adventurers currently assigned (integer; 0 if the pool is spread thin). */
   assigned: number;
@@ -763,15 +781,15 @@ function batchSummaryFor(quest: Quest, assigned: number): QuestBatchSummary | nu
   const materials = quest.requirements
     .map((r) => {
       const target = questTargetDef(r.targetId);
-      return target ? { materialId: target.materialId, amount: r.batchSize } : null;
+      return target ? { materialId: target.materialId, amount: r.batchSize * assigned } : null;
     })
     .filter((m): m is { materialId: string; amount: number } => m !== null);
   if (materials.length === 0) return null;
   return {
     materials,
-    gold: questTotalGold(quest),
-    reputation: questTotalReputation(quest),
-    timeSeconds: assigned > 0 ? required / assigned : Infinity,
+    gold: questTotalGold(quest) * assigned,
+    reputation: questTotalReputation(quest) * assigned,
+    timeSeconds: assigned > 0 ? required : Infinity,
     assigned,
     maxAdventurers: quest.maxAdventurers,
     repeatCount: quest.repeatCount,

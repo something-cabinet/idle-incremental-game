@@ -69,17 +69,20 @@ interface QuestOutput {
 }
 
 /**
- * Resolve one tick of the standing quest board. The town's whole-number
- * adventurer pool is split across active quests (integer only — see
- * allocateAdventurers); each quest accumulates adventurer-seconds of work
- * (Quest.progress) toward its batch. Quest time genuinely matters: materials,
- * gold cost, and reputation are only granted in a lump the instant a batch's
- * required work is reached — never smoothly per tick. The "/sec" numbers
+ * Resolve one tick of the standing quest board. Each quest has a fixed round
+ * time (Quest.progress counts plain seconds toward questRequiredWork) — how
+ * many adventurers are assigned does NOT speed up the round. Instead, every
+ * adventurer assigned when a round fills completes their own repeat, so a
+ * round credits `assigned` completions at once (capped by however many
+ * repeats the quest has left — see allocateAdventurers/effectiveAdventurerCap
+ * for why quests never hold more adventurers than they can use). Materials,
+ * gold cost, and reputation are only granted in a lump the instant a round's
+ * required time is reached — never smoothly per tick. The "/sec" numbers
  * shown elsewhere (questRates) are a reference estimate, not what's actually
  * being credited each tick.
  *
- * Gold is a hard gate on *resolving* a completed batch, not on doing the
- * work: if the board can't afford the lump cost of every batch completing
+ * Gold is a hard gate on *resolving* a completed round, not on doing the
+ * work: if the board can't afford the lump cost of every round completing
  * this tick, none of them resolve — the completed work waits (progress keeps
  * accumulating) until the guild can pay, then resolves in one lump.
  *
@@ -98,11 +101,12 @@ function processQuests(state: GameState, dtSeconds: number, townGold: number): Q
     const remaining = remainingRepeats(quest);
     const required = questRequiredWork(quest);
     if (assigned <= 0 || remaining <= 0 || required <= 0) {
-      return { quest, required, rawProgress: quest.progress, completions: 0 };
+      return { quest, required, rawProgress: quest.progress, rounds: 0, completions: 0 };
     }
-    const rawProgress = quest.progress + assigned * dtSeconds;
-    const completions = Math.min(Math.floor(rawProgress / required), remaining);
-    return { quest, required, rawProgress, completions };
+    const rawProgress = quest.progress + dtSeconds;
+    const rounds = Math.floor(rawProgress / required);
+    const completions = Math.min(rounds * assigned, remaining);
+    return { quest, required, rawProgress, rounds, completions };
   });
 
   const goldNeeded = rows.reduce(
@@ -132,7 +136,7 @@ function processQuests(state: GameState, dtSeconds: number, townGold: number): Q
     const finished = r.quest.repeatCount > 0 && completedCount >= r.quest.repeatCount;
     if (finished) continue; // ran its full repeat count — auto-remove from the board
 
-    const remainder = r.rawProgress - r.completions * r.required;
+    const remainder = r.rawProgress - r.rounds * r.required;
     nextQuests.push({ ...r.quest, progress: remainder, completedCount });
   }
   out.quests = nextQuests;
