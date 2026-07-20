@@ -167,13 +167,17 @@ export interface QuestTargetDef {
 
 /**
  * A standing quest posted to the guild board. The numerous town adventurers
- * fulfil it continuously (materials/sec in, gold/sec out) until the player
- * deletes it. `batchSize` tunes the time/gold efficiency curve.
+ * work it until the player deletes it. `batchSize` tunes the time/gold
+ * efficiency curve. Materials/gold/reputation are granted in discrete lumps
+ * when a batch finishes — see `progress` and engine.ts processQuests. The
+ * displayed "/sec" rates elsewhere are a reference estimate only.
  */
 export interface Quest {
   id: number;
   targetId: string;
   batchSize: number;
+  /** Accumulated adventurer-seconds of work toward the current batch. */
+  progress: number;
 }
 
 export interface MaterialDef {

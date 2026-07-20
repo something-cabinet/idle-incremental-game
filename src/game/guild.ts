@@ -472,6 +472,10 @@ export function questBoardAffordable(state: GameState): boolean {
 export interface QuestRates {
   /** Adventurers currently assigned to this quest (pool split across quests). */
   adventurers: number;
+  /** Reference-only estimate: what this quest would average per second if run
+   * continuously. Actual materials/gold/reputation are granted in a lump when
+   * a batch completes (see questProgress and engine.ts processQuests) — this
+   * is display guidance, not a promise of a smooth per-tick trickle. */
   materialsPerSec: number;
   goldPerSec: number;
   reputationPerSec: number;
@@ -480,9 +484,10 @@ export interface QuestRates {
 }
 
 /**
- * Live throughput of a quest given the current adventurer pool, which is split
- * evenly across all active quests. Zeroed out when the board is gold-starved,
- * matching the engine's hard gate — see questBoardAffordable.
+ * Reference throughput estimate for a quest, given the current adventurer
+ * pool split evenly across all active quests. Zeroed out when the board is
+ * gold-starved, matching the engine's hard gate — see questBoardAffordable.
+ * For real-time progress toward the next actual payout, see questProgress.
  */
 export function questRates(state: GameState, quest: Quest): QuestRates {
   const target = questTargetDef(quest.targetId);
@@ -513,7 +518,7 @@ export function previewQuestRates(
   targetId: string,
   batchSize: number,
 ): QuestRates {
-  const preview: Quest = { id: -1, targetId, batchSize: clampBatchSize(batchSize) };
+  const preview: Quest = { id: -1, targetId, batchSize: clampBatchSize(batchSize), progress: 0 };
   return questRates({ ...state, quests: [...state.quests, preview] }, preview);
 }
 
@@ -525,6 +530,7 @@ export function postQuest(state: GameState, targetId: string, batchSize: number)
     id: state.nextEntityId,
     targetId,
     batchSize: clampBatchSize(batchSize),
+    progress: 0,
   };
   return {
     ...state,
@@ -535,4 +541,30 @@ export function postQuest(state: GameState, targetId: string, batchSize: number)
 
 export function deleteQuest(state: GameState, questId: number): GameState {
   return { ...state, quests: state.quests.filter((q) => q.id !== questId) };
+}
+
+export interface QuestProgress {
+  /** 0-1 fraction of the way through the current batch. */
+  fraction: number;
+  /** Estimated seconds until the current batch completes, at the current
+   * adventurer split (drops if more quests join the board). */
+  etaSeconds: number;
+}
+
+/**
+ * Real progress toward this quest's next batch completing — unlike
+ * questRates(), this reflects actual accumulated work (Quest.progress), not
+ * an instantaneous estimate. Purely informational for the UI: the engine
+ * (processQuests) is the only place that grants materials/gold/reputation,
+ * which happens in a lump exactly when a batch completes.
+ */
+export function questProgress(state: GameState, quest: Quest): QuestProgress {
+  const target = questTargetDef(quest.targetId);
+  const active = state.quests.length;
+  if (!target || active === 0) return { fraction: 0, etaSeconds: Infinity };
+  const advPerQuest = adventurerCount(state) / active;
+  const required = batchTimeSolo(quest.batchSize, unitDifficulty(target));
+  const fraction = Math.min(1, quest.progress / required);
+  const remaining = Math.max(0, required - quest.progress);
+  return { fraction, etaSeconds: advPerQuest > 0 ? remaining / advPerQuest : Infinity };
 }

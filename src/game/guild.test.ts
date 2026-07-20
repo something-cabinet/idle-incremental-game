@@ -36,6 +36,7 @@ import {
   isZoneUnlocked,
   postQuest,
   questBoardAffordable,
+  questProgress,
   questRates,
   questTargetDef,
   rosterCap,
@@ -309,6 +310,45 @@ describe('quest board', () => {
     expect(s.materials['beast-pelt'] ?? 0).toBeGreaterThan(0);
     expect(s.reputation).toBeGreaterThan(0);
     expect(s.gold).toBeLessThan(goldBefore); // town has no jobs here → net gold spent
+  });
+
+  it('no materials/gold/reputation are granted until a batch actually completes', () => {
+    let s = postQuest(guildState(), 'gray-wolf', 5);
+    const target = questTargetDef('gray-wolf')!;
+    const required = batchTimeSolo(5, unitDifficulty(target));
+    const advPerQuest = adventurerCount(s); // one active quest → gets the full pool
+    const goldBefore = s.gold;
+    // Advance well under the time needed for a single batch.
+    s = tick(s, required / advPerQuest / 3, 0);
+    expect(s.materials['beast-pelt'] ?? 0).toBe(0);
+    expect(s.reputation).toBe(0);
+    expect(s.gold).toBe(goldBefore); // nothing spent either — no lump has resolved yet
+    expect(s.quests[0].progress).toBeGreaterThan(0); // but the work is accruing
+  });
+
+  it('a batch resolves in one lump exactly when its required work is reached, carrying the remainder', () => {
+    let s = postQuest(guildState(), 'gray-wolf', 5);
+    const target = questTargetDef('gray-wolf')!;
+    const required = batchTimeSolo(5, unitDifficulty(target));
+    const advPerQuest = adventurerCount(s);
+    // Cross the threshold for exactly one batch, with room to spare left over.
+    s = tick(s, required / advPerQuest + 1, 0);
+    expect(s.materials['beast-pelt']).toBe(5); // exactly one batch's worth, not a fraction
+    expect(s.reputation).toBeGreaterThan(0);
+    expect(s.quests[0].progress).toBeGreaterThan(0); // leftover work carries into the next batch
+    expect(s.quests[0].progress).toBeLessThan(required); // but not a whole extra batch's worth
+  });
+
+  it('questProgress reports live fraction/ETA toward the next completion, distinct from the reference rate', () => {
+    let s = postQuest(guildState(), 'gray-wolf', 5);
+    const p0 = questProgress(s, s.quests[0]);
+    expect(p0.fraction).toBe(0);
+    expect(p0.etaSeconds).toBeGreaterThan(0);
+    s = tick(s, 2, 0);
+    const p1 = questProgress(s, s.quests[0]);
+    expect(p1.fraction).toBeGreaterThan(0);
+    expect(p1.fraction).toBeLessThan(1);
+    expect(p1.etaSeconds).toBeLessThan(p0.etaSeconds);
   });
 
   it('bigger batches are more time-efficient per unit but cost more gold per unit', () => {

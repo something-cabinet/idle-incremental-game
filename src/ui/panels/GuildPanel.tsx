@@ -1,13 +1,16 @@
 import { useState } from 'react';
 import { GUILD_UPGRADES, MATERIALS } from '../../game/config';
+import { formatDuration } from '../../game/format';
 import {
   adventurerCount,
   buyGuildUpgrade,
   canBuyGuildUpgrade,
   deleteQuest,
   guildUpgradeCost,
+  questProgress,
   questRates,
   questTargetDef,
+  totalQuestGoldPerSec,
   zones,
 } from '../../game/guild';
 import type { Quest } from '../../game/types';
@@ -120,10 +123,17 @@ function AdventurersSection() {
 
 function QuestsSection() {
   const state = useGameState();
+  const fmt = useFormat();
+  const totalGoldPerSec = totalQuestGoldPerSec(state);
 
   return (
     <section className="rows">
       <h3 className="section-title">Running Quests ({state.quests.length})</h3>
+      {state.quests.length > 0 && (
+        <div className="row locked">
+          Total upkeep: <strong>{fmt(totalGoldPerSec)} 🪙/s</strong> across the whole board
+        </div>
+      )}
       {state.quests.length === 0 && (
         <div className="row locked">
           No quests posted. Open the Map tab and post a bounty on a monster or gatherable.
@@ -141,6 +151,7 @@ function QuestRow({ quest }: { quest: Quest }) {
   const state = useGameState();
   const target = questTargetDef(quest.targetId);
   const rates = questRates(state, quest);
+  const progress = questProgress(state, quest);
   if (!target) return null;
 
   return (
@@ -154,12 +165,22 @@ function QuestRow({ quest }: { quest: Quest }) {
         ) : (
           <>
             <span className="row-desc">
-              +{rate(rates.materialsPerSec)} {materialName(target.materialId)}/s ·{' '}
-              −{rate(rates.goldPerSec)} 🪙/s · +{rate(rates.reputationPerSec)} ★/s
+              ~{rate(rates.materialsPerSec)} {materialName(target.materialId)}/s ·{' '}
+              −{rate(rates.goldPerSec)} 🪙/s · +{rate(rates.reputationPerSec)} ★/s (reference)
             </span>
             <span className="row-good">{rates.adventurers.toFixed(1)} adventurers assigned</span>
           </>
         )}
+        <div className="progress-line">
+          <div className="progress-track">
+            <div className="progress-fill" style={{ width: `${progress.fraction * 100}%` }} />
+          </div>
+          <span className="progress-time">
+            {Number.isFinite(progress.etaSeconds)
+              ? `${formatDuration(progress.etaSeconds)} to next batch`
+              : 'stalled'}
+          </span>
+        </div>
       </div>
       <button
         className="small-button danger"

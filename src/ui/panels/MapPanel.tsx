@@ -1,14 +1,18 @@
 import { useState } from 'react';
 import { MATERIALS } from '../../game/config';
+import { formatDuration } from '../../game/format';
 import {
+  batchTimeSolo,
   clampBatchSize,
   deleteQuest,
   postQuest,
   previewQuestRates,
+  questProgress,
   questRates,
   questTargetDef,
   targetsForLocation,
   isZoneUnlocked,
+  unitDifficulty,
   zones,
 } from '../../game/guild';
 import type { LocationDef, Quest, QuestTargetDef } from '../../game/types';
@@ -110,21 +114,25 @@ function TargetRow({ target }: { target: QuestTargetDef }) {
   const size = clampBatchSize(batch);
   const preview = previewQuestRates(state, target.id, size);
   const verb = target.kind === 'monster' ? 'Kill' : 'Collect';
+  const batchSeconds =
+    preview.adventurers > 0
+      ? batchTimeSolo(size, unitDifficulty(target)) / preview.adventurers
+      : Infinity;
 
   return (
     <div className="quest-target">
       <div className="row-info">
         <span className="row-name">{target.name}</span>
         <span className="row-desc">
-          {verb} → {materialName(target.materialId)}
+          {verb} → {materialName(target.materialId)} · first batch in ~{formatDuration(batchSeconds)}
         </span>
         {preview.goldStarved ? (
           <span className="row-bad">⚠ Not enough gold to sustain this quest.</span>
         ) : (
           <span className="row-good">
-            +{rate(preview.materialsPerSec)} {materialName(target.materialId)}/s ·{' '}
+            ~{rate(preview.materialsPerSec)} {materialName(target.materialId)}/s ·{' '}
             <span className="row-bad">−{rate(preview.goldPerSec)} 🪙/s</span> · +
-            {rate(preview.reputationPerSec)} ★/s
+            {rate(preview.reputationPerSec)} ★/s (reference)
           </span>
         )}
       </div>
@@ -155,6 +163,7 @@ function ActiveQuestRow({ quest }: { quest: Quest }) {
   const state = useGameState();
   const target = questTargetDef(quest.targetId);
   const rates = questRates(state, quest);
+  const progress = questProgress(state, quest);
   if (!target) return null;
 
   return (
@@ -167,10 +176,20 @@ function ActiveQuestRow({ quest }: { quest: Quest }) {
           <span className="row-bad">⚠ Not enough gold — this quest is stalled.</span>
         ) : (
           <span className="row-desc">
-            +{rate(rates.materialsPerSec)} {materialName(target.materialId)}/s ·{' '}
+            ~{rate(rates.materialsPerSec)} {materialName(target.materialId)}/s ·{' '}
             −{rate(rates.goldPerSec)} 🪙/s · {rates.adventurers.toFixed(1)} adventurers
           </span>
         )}
+        <div className="progress-line">
+          <div className="progress-track">
+            <div className="progress-fill" style={{ width: `${progress.fraction * 100}%` }} />
+          </div>
+          <span className="progress-time">
+            {Number.isFinite(progress.etaSeconds)
+              ? `${formatDuration(progress.etaSeconds)} to next batch`
+              : 'stalled'}
+          </span>
+        </div>
       </div>
       <button
         className="small-button danger"

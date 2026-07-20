@@ -11,7 +11,7 @@ import {
 import { productionPerSecond } from './logic';
 import { computeModifiers } from './perks';
 import { checkStoryTriggers } from './story';
-import type { GameState, Rng } from './types';
+import type { GameState, Quest, Rng } from './types';
 
 /**
  * The simulation tick. Handles any dt — 100ms live ticks and multi-hour
@@ -49,6 +49,7 @@ export function tick(
   next.gold = state.gold + townGold - quest.goldSpent;
   next.totalGoldEarned = state.totalGoldEarned + townGold;
   next.reputation = state.reputation + quest.reputation;
+  next.quests = quest.quests;
 
   if (next.activityLog.length > ACTIVITY_LOG_MAX) {
     next.activityLog = next.activityLog.slice(-ACTIVITY_LOG_MAX);
@@ -65,50 +66,61 @@ interface QuestOutput {
   materials: Record<string, number>;
   goldSpent: number;
   reputation: number;
+  quests: Quest[];
 }
 
 /**
  * Resolve one tick of the standing quest board. The town's adventurer pool is
- * split evenly across all active quests; each quest converts gold into its
- * material plus reputation at a rate set by batch size and difficulty.
+ * split evenly across all active quests; each quest accumulates adventurer-
+ * seconds of work (Quest.progress) toward its batch. Quest time genuinely
+ * matters: materials, gold cost, and reputation are only granted in a lump
+ * the instant a batch's required work is reached — never smoothly per tick.
+ * The "/sec" numbers shown elsewhere (questRates) are a reference estimate,
+ * not what's actually being credited each tick.
  *
- * Gold is a hard gate, not a dimmer: if the board would cost more than the
- * player can pay this tick (current gold + town income), the whole board
- * produces nothing — no materials, no gold spent, no reputation — rather than
- * quietly running at a diminished rate. This mirrors questRates()/UI, which
- * shows 0 output and a "not enough gold" warning under the same condition.
+ * Gold is a hard gate on *resolving* a completed batch, not on doing the
+ * work: if the board can't afford the lump cost of every batch completing
+ * this tick, none of them resolve — the completed work waits (progress keeps
+ * accumulating) until the guild can pay, then resolves in one lump.
  */
 function processQuests(state: GameState, dtSeconds: number, townGold: number): QuestOutput {
-  const out: QuestOutput = { materials: {}, goldSpent: 0, reputation: 0 };
+  const out: QuestOutput = { materials: {}, goldSpent: 0, reputation: 0, quests: state.quests };
   const active = state.quests.length;
   if (active === 0) return out;
 
   const advPerQuest = adventurerCount(state) / active;
 
-  const rows = state.quests
-    .map((q) => {
-      const target = questTargetDef(q.targetId);
-      if (!target) return null;
-      const diff = unitDifficulty(target);
-      const batchesPerSec = advPerQuest / batchTimeSolo(q.batchSize, diff);
-      return {
-        materialId: target.materialId,
-        materialPerSec: q.batchSize * batchesPerSec,
-        goldPerSec: batchGold(q.batchSize, goldUnitDifficulty(target)) * batchesPerSec,
-        repPerSec: batchReputation(q.batchSize, diff) * batchesPerSec,
-      };
-    })
-    .filter((r): r is NonNullable<typeof r> => r !== null);
+  const rows = state.quests.map((quest) => {
+    const target = questTargetDef(quest.targetId);
+    if (!target) return { quest, target, diff: 0, required: 0, newProgress: quest.progress, completions: 0 };
+    const diff = unitDifficulty(target);
+    const required = batchTimeSolo(quest.batchSize, diff);
+    const newProgress = quest.progress + advPerQuest * dtSeconds;
+    const completions = Math.floor(newProgress / required);
+    return { quest, target, diff, required, newProgress, completions };
+  });
 
-  const goldNeeded = rows.reduce((sum, r) => sum + r.goldPerSec * dtSeconds, 0);
+  const goldNeeded = rows.reduce(
+    (sum, r) =>
+      r.target && r.completions > 0
+        ? sum + r.completions * batchGold(r.quest.batchSize, goldUnitDifficulty(r.target))
+        : sum,
+    0,
+  );
   const available = state.gold + townGold;
-  if (goldNeeded > 0 && available < goldNeeded) return out; // gold-starved: zero output
+  const canResolve = goldNeeded === 0 || available >= goldNeeded;
 
-  for (const r of rows) {
-    out.materials[r.materialId] = (out.materials[r.materialId] ?? 0) + r.materialPerSec * dtSeconds;
-    out.goldSpent += r.goldPerSec * dtSeconds;
-    out.reputation += r.repPerSec * dtSeconds;
-  }
+  out.quests = rows.map((r) => {
+    if (!r.target || !canResolve || r.completions <= 0) {
+      return { ...r.quest, progress: r.newProgress };
+    }
+    out.materials[r.target.materialId] =
+      (out.materials[r.target.materialId] ?? 0) + r.completions * r.quest.batchSize;
+    out.goldSpent += r.completions * batchGold(r.quest.batchSize, goldUnitDifficulty(r.target));
+    out.reputation += r.completions * batchReputation(r.quest.batchSize, r.diff);
+    return { ...r.quest, progress: r.newProgress - r.completions * r.required };
+  });
+
   return out;
 }
 

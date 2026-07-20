@@ -72,7 +72,9 @@ export function migrateSave(data: SaveData, now = Date.now()): GameState {
     // v6 introduced the reputation/quest-board economy (mercenaries went
     // dormant). Older saves simply start with no reputation and no posted quests.
     reputation: s.reputation ?? 0,
-    quests: s.quests ?? [],
+    // v7 switched quests from continuous per-tick output to discrete batch
+    // completion, adding a `progress` counter. v6 quests just start at 0.
+    quests: (s.quests ?? []).map((q) => ({ ...q, progress: q.progress ?? 0 })),
     // v5 introduced the attribute/HP combat model and typed equipment. Old
     // items can't map to the new equipment types, so pre-v5 inventory and
     // equipped gear are dropped; adventurers gain fresh attributes + HP.
