@@ -1,6 +1,7 @@
 import {
   ADVENTURER_EPITHETS,
   ADVENTURER_FIRST_NAMES,
+  ADVENTURER_SURNAMES,
   ATK_PER_PRIMARY,
   ATTRIBUTES,
   BONUS_ATTR_TIER_DIV,
@@ -148,6 +149,17 @@ export function generateEquipment(id: number, tier: number, rng: Rng): Equipment
 // Adventurers
 // ---------------------------------------------------------------------------
 
+/** first + surname, with a chance of a quoted nickname wedged between. */
+const NICKNAME_CHANCE = 0.3;
+function generateName(rng: Rng): string {
+  const first = pick(ADVENTURER_FIRST_NAMES, rng);
+  const surname = pick(ADVENTURER_SURNAMES, rng);
+  if (rng() < NICKNAME_CHANCE) {
+    return `${first} "${pick(ADVENTURER_EPITHETS, rng)}" ${surname}`;
+  }
+  return `${first} ${surname}`;
+}
+
 export function generateAdventurer(id: number, rng: Rng): Adventurer {
   const className = pick(CLASSES, rng);
   const base = CLASS_DEFS[className].base;
@@ -158,7 +170,7 @@ export function generateAdventurer(id: number, rng: Rng): Adventurer {
   }
   const adv: Adventurer = {
     id,
-    name: `${pick(ADVENTURER_FIRST_NAMES, rng)} ${pick(ADVENTURER_EPITHETS, rng)}`,
+    name: generateName(rng),
     className,
     level: 1,
     xp: 0,

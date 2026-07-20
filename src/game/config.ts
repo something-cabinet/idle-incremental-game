@@ -257,10 +257,28 @@ export const ADVENTURER_FIRST_NAMES = [
   'Ash', 'Bryn', 'Corin', 'Dara', 'Edda', 'Fenn', 'Garet', 'Hild',
   'Ivo', 'Jora', 'Kell', 'Lina', 'Merek', 'Nyssa', 'Orin', 'Petra',
   'Quill', 'Rook', 'Sable', 'Tamsin', 'Ulric', 'Vera', 'Wren', 'Yara',
+  'Alden', 'Brynja', 'Cass', 'Doran', 'Elin', 'Finch', 'Gwen', 'Harlan',
+  'Isolde', 'Joric', 'Kessa', 'Leif', 'Maren', 'Nolan', 'Oswin', 'Perrin',
+  'Quenna', 'Ren', 'Sylas', 'Tova', 'Umber', 'Vidar', 'Wyn', 'Yorick',
+  'Ainsley', 'Bracken', 'Cyrus', 'Delwyn', 'Ember', 'Faye', 'Gideon', 'Hess',
+  'Ilsa', 'Jax', 'Korrin', 'Liora', 'Mabel', 'Niall', 'Osric', 'Pryda',
+];
+export const ADVENTURER_SURNAMES = [
+  'Ashford', 'Blackwood', 'Cindervale', 'Dunmore', 'Emberlyn', 'Fairwind',
+  'Graystone', 'Hollowmere', 'Ironvale', 'Larkspur', 'Marrow', 'Nightshade',
+  'Oakhaven', 'Proudfoot', 'Ravensworth', 'Stormcrow', 'Thistlewood', 'Underhill',
+  'Vaneshire', 'Whitlock', 'Yewbranch', 'Amberfell', 'Brightwater', 'Coldharbor',
+  'Drakemoor', 'Elmsworth', 'Foxglove', 'Greywick', 'Hartley', 'Ivywood',
+  'Kestrel', 'Ledger', 'Moonwhisper', 'Northgate', 'Pemberton', 'Quarrow',
+  'Redfern', 'Silverpine', 'Thornbury', 'Vale',
 ];
 export const ADVENTURER_EPITHETS = [
   'the Bold', 'of the Ford', 'Quickblade', 'the Quiet', 'Ironhand',
   'the Stray', 'Duskwalker', 'the Younger', 'Longstride', 'the Unlucky',
+  'the Grim', 'Stonefist', 'the Wanderer', 'Nightblade', 'the Merciful',
+  'Farsight', 'the Reckless', 'Ashenblood', 'the Steadfast', 'Wolfsbane',
+  'the Cunning', 'Ravenshadow', 'the Lucky', 'Stormrider', 'the Weary',
+  'Goldtooth', 'the Silent', 'Doomhollow', 'the Fair', 'Grimjaw',
 ];
 
 export const MATERIALS: MaterialDef[] = [

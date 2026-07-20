@@ -3,8 +3,8 @@ import { useFormat } from '../../hooks/useFormat';
 import { useGameState } from '../../hooks/useGame';
 
 /**
- * Materials store. Equipment/inventory management is dormant while the Mercenary
- * system is parked (see types.ts) — for now this tab just shows the raw
+ * Materials store. Equipment/inventory management is dormant while the Champion
+ * gear system is parked (see types.ts) — for now this tab just shows the raw
  * materials your posted quests bring in.
  */
 

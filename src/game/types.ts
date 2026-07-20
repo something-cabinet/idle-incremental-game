@@ -356,11 +356,11 @@ export interface GameState {
   /** Standing quests posted to the guild board. */
   quests: Quest[];
 
-  // Guild — the managed Mercenary roster (stats/gear/expeditions). Currently
-  // DORMANT: no hiring/equipment UI and the engine no longer processes it.
-  // Kept in state so the system can be developed later (see docs/game-design.md).
+  // Guild — the managed Champion roster (stats/gear/expeditions). Recruiting
+  // is live; equipment/assignment/expedition UI is still DORMANT — the engine
+  // does not process this roster (see docs/game-design.md).
   adventurers: Adventurer[];
-  /** 3 adventurer candidates currently shown for recruitment (empty if not yet generated) */
+  /** 3 champion candidates currently shown for recruitment (empty if not yet generated) */
   recruitCandidates: Adventurer[];
   inventory: Equipment[]; // unequipped items
   guildUpgrades: Record<string, number>;

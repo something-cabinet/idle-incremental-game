@@ -21,8 +21,10 @@ import type { GameState, Quest, Rng } from './types';
  *  - The guild quest board: the numerous town adventurers fulfil standing
  *    quests continuously, converting gold into materials and reputation.
  *
- * The managed Mercenary roster is currently dormant (see types.ts), so it is
- * not processed here; Act 3 expeditions are parked until it is built out.
+ * The managed Champion roster can now be recruited (see guild.ts), but combat
+ * assignment/equipment/expeditions are still dormant (see types.ts) — this
+ * roster is not otherwise processed here; Act 3 expeditions are parked until
+ * it is built out.
  */
 export function tick(
   state: GameState,

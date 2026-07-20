@@ -206,6 +206,23 @@ button.row:disabled {
   border-color: var(--green);
 }
 
+.empty-slot {
+  padding: 11px 13px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.1s, color 0.1s;
+}
+
+.empty-slot:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .row-info {
   display: flex;
   flex-direction: column;

@@ -82,7 +82,7 @@ export function migrateSave(data: SaveData, now = Date.now()): GameState {
     townSkills: { ...(s.townSkills ?? {}) },
     activityLog: s.activityLog ?? [],
     settings: { ...base.settings, ...(s.settings ?? {}) },
-    // v6 introduced the reputation/quest-board economy (mercenaries went
+    // v6 introduced the reputation/quest-board economy (champions went
     // dormant). Older saves simply start with no reputation and no posted quests.
     reputation: s.reputation ?? 0,
     // v7 switched quests from continuous per-tick output to discrete batch
