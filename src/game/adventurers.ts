@@ -99,9 +99,13 @@ function attrPointsForTier(tier: number): number {
   return 1 + Math.floor(tier / BONUS_ATTR_TIER_DIV);
 }
 
-/** Generate a piece of equipment scaled to a location tier. */
-export function generateEquipment(id: number, tier: number, rng: Rng): Equipment {
-  const slot = pick(SLOTS, rng);
+/**
+ * Generate a piece of equipment scaled to a location tier. `forcedSlot` pins
+ * the slot instead of rolling one at random — used by crafting (guild.ts
+ * startCraft/engine.ts processCrafting), where the player picks the slot.
+ */
+export function generateEquipment(id: number, tier: number, rng: Rng, forcedSlot?: EquipSlot): Equipment {
+  const slot = forcedSlot ?? pick(SLOTS, rng);
   const type = pick(EQUIP_TYPES.filter((t) => t.slot === slot), rng);
   const rarity = rollRarity(tier, rng);
   const prefix = rollPrefix(rarity, rng);

@@ -19,6 +19,7 @@ import { TownPanel } from './ui/panels/TownPanel';
 import { GuildPanel } from './ui/panels/GuildPanel';
 import { MapPanel } from './ui/panels/MapPanel';
 import { InventoryPanel } from './ui/panels/InventoryPanel';
+import { CraftingPanel } from './ui/panels/CraftingPanel';
 import { TimelinePanel } from './ui/panels/TimelinePanel';
 import { SettingsPanel } from './ui/panels/SettingsPanel';
 import './App.css';
@@ -75,6 +76,7 @@ export default function App() {
           {tab === 'guild' && <GuildPanel />}
           {tab === 'map' && <MapPanel />}
           {tab === 'inventory' && <InventoryPanel />}
+          {tab === 'crafting' && <CraftingPanel />}
           {tab === 'timeline' && <TimelinePanel />}
           {tab === 'settings' && <SettingsPanel />}
         </main>

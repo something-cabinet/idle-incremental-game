@@ -46,7 +46,7 @@ export const AUTOSAVE_INTERVAL_MS = 10_000;
  * interval firing on schedule — see useGameLoop's visibility listeners.
  */
 export const BACKGROUND_CATCHUP_GAP_MS = 3_000;
-export const SAVE_VERSION = 9;
+export const SAVE_VERSION = 10;
 
 // ---------------------------------------------------------------------------
 // Act 1 — town income (low numbers by design)
@@ -454,6 +454,12 @@ export const GUILD_UPGRADES: GuildUpgradeDef[] = [
     description: 'Adventurers gain +15% XP per level.',
     baseCostGold: 1_200, costGrowth: 2.2, materials: { 'beast-pelt': 5, 'iron-ore': 5 },
   },
+  // ---- Feature unlocks (one-time) ----
+  {
+    id: 'forge', name: 'Forge', maxLevel: 1,
+    description: 'Unlocks the Crafting tab — forge your own equipment from gold and materials.',
+    baseCostGold: 4_000, costGrowth: 1, materials: { 'iron-ore': 15 },
+  },
   // ---- Job unlocks (one-time) ----
   {
     id: 'unlock-caravan', name: 'Trade Routes', maxLevel: 1,
@@ -620,6 +626,43 @@ export const EXALTED_PREFIXES: ItemPrefixDef[] = [
   { id: 'immortals', name: "Immortal's", weight: 10, defMult: 1.3, hpPerTier: 12, attrs: { con: 2 } },
   { id: 'fated', name: 'Fated', weight: 10, atkMult: 1.2, defMult: 1.2, attrs: { lck: 2 } },
 ];
+
+// ---------------------------------------------------------------------------
+// Crafting (the Forge) — turn gold + materials into equipment on a timer.
+// Reuses generateEquipment/rollRarity (adventurers.ts) with a forced slot, so
+// tier here behaves exactly like a monster-drop's location tier: it scales
+// the stat budget and unlocks a shot at exalted at EXALTED_MIN_TIER, but
+// never changes the common/rare/epic odds.
+// ---------------------------------------------------------------------------
+
+/** Highest craftable tier is otherwise capped by the highest zone tier the
+ * guild's reputation has unlocked (see guild.ts maxCraftableTier) — this is
+ * just the ceiling on that, matching LOCATIONS' highest zone tier. */
+export const CRAFT_MAX_TIER = 6;
+
+/** Materials consumed per single crafted item, by tier. Later tiers ask for
+ * more units and pull in materials that only drop in higher-tier zones. */
+export const CRAFT_TIER_MATERIALS: Record<number, Record<string, number>> = {
+  1: { 'beast-pelt': 4 },
+  2: { 'beast-pelt': 6, timber: 3 },
+  3: { 'iron-ore': 8, timber: 4 },
+  4: { 'iron-ore': 6, 'spirit-essence': 5 },
+  5: { 'spirit-essence': 10, crystal: 4 },
+  6: { 'demon-ash': 8, crystal: 8 },
+};
+
+/** Gold cost per single crafted item at tier T = base * T^exp. */
+export const CRAFT_GOLD_BASE = 50;
+export const CRAFT_GOLD_TIER_EXP = 1.5;
+
+/** Craft duration = base * tier^tierExp * quantity^qtyExp. qtyExp < 1 gives
+ * bulk crafting a time discount, mirroring the quest board's batch timing. */
+export const CRAFT_TIME_BASE = 8;
+export const CRAFT_TIME_TIER_EXP = 1;
+export const CRAFT_TIME_QTY_EXP = 0.6;
+
+/** Batch sizes offered in the Crafting UI. */
+export const CRAFT_QUANTITIES: number[] = [1, 10, 100];
 
 // ---------------------------------------------------------------------------
 // Perks (Time Shard shop — persists across timelines)

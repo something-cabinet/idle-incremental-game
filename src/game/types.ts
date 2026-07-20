@@ -224,6 +224,17 @@ export interface Expedition {
   memberIds: number[];
 }
 
+/** The Forge's single active job — one craft (of `quantity` items) at a time. */
+export interface CraftJob {
+  slot: EquipSlot;
+  tier: number;
+  quantity: number;
+  /** runTimeSeconds when this job was started */
+  startedAt: number;
+  /** runTimeSeconds when it completes */
+  endsAt: number;
+}
+
 // ---------------------------------------------------------------------------
 // Town skills (gold-bought tree, resets each timeline)
 // ---------------------------------------------------------------------------
@@ -366,6 +377,8 @@ export interface GameState {
   inventory: Equipment[]; // unequipped items
   guildUpgrades: Record<string, number>;
   expedition: Expedition | null;
+  /** The Forge's single active craft job, if any (see guild.ts craft*). */
+  crafting: CraftJob | null;
   nextEntityId: number; // shared id counter for adventurers/equipment
   locationsCleared: Record<string, boolean>; // first quest success per zone
   bossesDefeated: Record<string, boolean>; // this timeline

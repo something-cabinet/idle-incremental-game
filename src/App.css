@@ -223,6 +223,12 @@ button.row:disabled {
   color: var(--accent);
 }
 
+.craft-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .row-info {
   display: flex;
   flex-direction: column;

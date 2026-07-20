@@ -1,3 +1,4 @@
+import { generateEquipment } from './adventurers';
 import { ACTIVITY_LOG_MAX } from './config';
 import {
   allocateAdventurers,
@@ -10,16 +11,19 @@ import {
 import { productionPerSecond } from './logic';
 import { computeModifiers } from './perks';
 import { checkStoryTriggers } from './story';
-import type { GameState, Quest, Rng } from './types';
+import type { CraftJob, Equipment, GameState, Quest, Rng } from './types';
 
 /**
  * The simulation tick. Handles any dt — 100ms live ticks and multi-hour
  * offline catch-ups go through the same code path.
  *
- * Two income/production streams:
+ * Three income/production streams:
  *  - Passive town gold (jobs + workers), unchanged from Act 1.
  *  - The guild quest board: the numerous town adventurers fulfil standing
  *    quests continuously, converting gold into materials and reputation.
+ *  - The Forge: one craft job at a time, minting equipment once its timer
+ *    elapses (see processCrafting) — gold/materials are spent up front when
+ *    the job starts (guild.ts startCraft), not here.
  *
  * The managed Champion roster can now be recruited and equipped (see
  * guild.ts), but combat assignment/expeditions are still dormant (see
@@ -30,7 +34,7 @@ export function tick(
   state: GameState,
   dtSeconds: number,
   now = Date.now(),
-  _rng: Rng = Math.random,
+  rng: Rng = Math.random,
 ): GameState {
   if (dtSeconds <= 0) return { ...state, lastUpdate: now };
 
@@ -51,6 +55,11 @@ export function tick(
   next.totalGoldEarned = state.totalGoldEarned + townGold;
   next.reputation = state.reputation + quest.reputation;
   next.quests = quest.quests;
+
+  const craft = processCrafting(next, rng);
+  next.crafting = craft.crafting;
+  next.inventory = craft.inventory;
+  next.nextEntityId = craft.nextEntityId;
 
   if (next.activityLog.length > ACTIVITY_LOG_MAX) {
     next.activityLog = next.activityLog.slice(-ACTIVITY_LOG_MAX);
@@ -144,6 +153,37 @@ function processQuests(state: GameState, dtSeconds: number, townGold: number): Q
   out.quests = nextQuests;
 
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Crafting (the Forge)
+// ---------------------------------------------------------------------------
+
+interface CraftOutput {
+  crafting: CraftJob | null;
+  inventory: Equipment[];
+  nextEntityId: number;
+}
+
+/**
+ * Resolve the Forge's single active job once its timer elapses — works the
+ * same for a live tick or a multi-hour offline catch-up, since it's just a
+ * one-shot deadline check (no per-encounter chunking needed, unlike patrols).
+ * Mints `quantity` items at the job's tier/slot via the same generateEquipment
+ * used for monster drops, so tier only feeds the stat budget and the
+ * exalted-rarity gate — never the common/rare/epic odds (see rollRarity).
+ */
+function processCrafting(state: GameState, rng: Rng): CraftOutput {
+  const job = state.crafting;
+  if (!job || state.runTimeSeconds < job.endsAt) {
+    return { crafting: job, inventory: state.inventory, nextEntityId: state.nextEntityId };
+  }
+  let nextId = state.nextEntityId;
+  const items: Equipment[] = [];
+  for (let i = 0; i < job.quantity; i++) {
+    items.push(generateEquipment(nextId++, job.tier, rng, job.slot));
+  }
+  return { crafting: null, inventory: [...state.inventory, ...items], nextEntityId: nextId };
 }
 
 // ---------------------------------------------------------------------------

@@ -29,12 +29,18 @@ import {
   batchGold,
   batchTimeSolo,
   buyGuildUpgrade,
+  canStartCraft,
+  craftDurationSeconds,
+  craftGoldCost,
+  craftMaterialsCost,
   deleteQuest,
   equipItem,
+  forgeUnlocked,
   goldUnitDifficulty,
   hireAdventurer,
   isBossUnlocked,
   isZoneUnlocked,
+  maxCraftableTier,
   postQuest,
   questBatchSummary,
   questBoardAffordable,
@@ -45,6 +51,7 @@ import {
   rosterCap,
   sellItem,
   sellItems,
+  startCraft,
   unitDifficulty,
 } from './guild';
 import { createInitialState } from './logic';
@@ -691,5 +698,104 @@ describe('expeditions & prestige', () => {
     const a30 = { ...a1, level: 30 };
     const s = createInitialState(0);
     expect(adventurerPower(s, a30)).toBeGreaterThan(adventurerPower(s, a1));
+  });
+});
+
+describe('crafting (the Forge)', () => {
+  /** Forge purchased, plush with gold and every material a recipe might need. */
+  function forgeState(): GameState {
+    let s: GameState = {
+      ...guildState(),
+      materials: {
+        'beast-pelt': 1_000,
+        timber: 1_000,
+        'iron-ore': 1_000,
+        'spirit-essence': 1_000,
+        crystal: 1_000,
+        'demon-ash': 1_000,
+      },
+    };
+    s = buyGuildUpgrade(s, 'forge');
+    return s;
+  }
+
+  it('forge starts locked and unlocks via the guild upgrade', () => {
+    expect(forgeUnlocked(guildState())).toBe(false);
+    expect(forgeUnlocked(forgeState())).toBe(true);
+  });
+
+  it('max craftable tier tracks the highest reputation-unlocked zone', () => {
+    expect(maxCraftableTier(forgeState())).toBe(1); // forest-edge, repRequired 0
+    expect(maxCraftableTier({ ...forgeState(), reputation: 30 })).toBe(2); // river-crossing (needs 25)
+    expect(maxCraftableTier({ ...forgeState(), reputation: 1e12 })).toBe(6); // frontier-pass
+  });
+
+  it('gold and material costs scale with tier and quantity', () => {
+    expect(craftGoldCost(1, 10)).toBe(craftGoldCost(1, 1) * 10);
+    expect(craftGoldCost(6, 1)).toBeGreaterThan(craftGoldCost(1, 1));
+
+    const one = craftMaterialsCost(1, 1);
+    const ten = craftMaterialsCost(1, 10);
+    for (const id of Object.keys(one)) expect(ten[id]).toBe(one[id] * 10);
+
+    // Tier 6 pulls in materials tier 1 never touches ("rarer" ingredients).
+    expect(Object.keys(craftMaterialsCost(1, 1))).not.toContain('demon-ash');
+    expect(Object.keys(craftMaterialsCost(6, 1))).toContain('demon-ash');
+  });
+
+  it('tier does not change craft duration\'s use of quantity as a batch discount', () => {
+    const solo = craftDurationSeconds(3, 1);
+    const bulk = craftDurationSeconds(3, 100);
+    expect(bulk).toBeGreaterThan(solo);
+    expect(bulk).toBeLessThan(solo * 100); // sublinear — bulk crafting is time-efficient
+  });
+
+  it('canStartCraft rejects a locked forge, an over-cap tier, and unaffordable jobs', () => {
+    expect(canStartCraft(guildState(), 'weapon', 1, 1)).toBe(false); // forge locked
+    const s = forgeState();
+    expect(canStartCraft(s, 'weapon', 2, 1)).toBe(false); // tier 2 needs river-crossing unlocked
+    expect(canStartCraft(s, 'weapon', 1, 1)).toBe(true);
+    expect(canStartCraft({ ...s, gold: 0 }, 'weapon', 1, 1)).toBe(false);
+    expect(canStartCraft({ ...s, materials: {} }, 'weapon', 1, 1)).toBe(false);
+  });
+
+  it('starting a craft spends gold/materials up front and queues one job', () => {
+    const s = startCraft(forgeState(), 'weapon', 1, 10);
+    expect(s.crafting).not.toBeNull();
+    expect(s.crafting?.slot).toBe('weapon');
+    expect(s.crafting?.tier).toBe(1);
+    expect(s.crafting?.quantity).toBe(10);
+    expect(s.gold).toBe(forgeState().gold - craftGoldCost(1, 10));
+    expect(s.materials['beast-pelt']).toBe(1_000 - craftMaterialsCost(1, 10)['beast-pelt']);
+  });
+
+  it('only one craft job runs at a time', () => {
+    let s = startCraft(forgeState(), 'weapon', 1, 1);
+    const busy = s;
+    s = startCraft(s, 'armor', 1, 1);
+    expect(s).toBe(busy); // unchanged — second start is a no-op
+  });
+
+  it('a craft job resolves into inventory once its timer elapses, not before', () => {
+    const started = startCraft({ ...forgeState(), reputation: 100 }, 'trinket', 2, 10);
+    const duration = craftDurationSeconds(2, 10);
+
+    const early = tick(started, duration / 2, 0, mid);
+    expect(early.crafting).not.toBeNull();
+    expect(early.inventory).toHaveLength(0);
+
+    const done = tick(early, duration / 2 + 1, 0, mid);
+    expect(done.crafting).toBeNull();
+    expect(done.inventory).toHaveLength(10);
+    for (const item of done.inventory) expect(item.slot).toBe('trinket');
+  });
+
+  it('offline catch-up resolves a finished craft job the same as a live tick', () => {
+    const started = { ...startCraft(forgeState(), 'armor', 1, 1), lastUpdate: 0 };
+    const duration = craftDurationSeconds(1, 1);
+    const result = applyOfflineProgress(started, (duration + 5) * 1000);
+    expect(result.state.crafting).toBeNull();
+    expect(result.equipmentGained).toBe(1);
+    expect(result.state.inventory[0].slot).toBe('armor');
   });
 });

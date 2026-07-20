@@ -4,6 +4,13 @@ import {
   ADVENTURER_MAX,
   ADVENTURER_REP_SCALE,
   BASE_ROSTER_CAP,
+  CRAFT_GOLD_BASE,
+  CRAFT_GOLD_TIER_EXP,
+  CRAFT_QUANTITIES,
+  CRAFT_TIER_MATERIALS,
+  CRAFT_TIME_BASE,
+  CRAFT_TIME_QTY_EXP,
+  CRAFT_TIME_TIER_EXP,
   DEMON_KING_ID,
   GENERAL_IDS,
   GUILD_UPGRADES,
@@ -269,6 +276,79 @@ export function sellItems(state: GameState, itemIds: number[]): GameState {
     inventory: state.inventory.filter((i) => !ids.has(i.id)),
     gold: state.gold + gold,
     totalGoldEarned: state.totalGoldEarned + gold,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Crafting (the Forge) — one craft job at a time, resolved on a timer in
+// engine.ts processCrafting once its endsAt passes.
+// ---------------------------------------------------------------------------
+
+export function forgeUnlocked(state: GameState): boolean {
+  return (state.guildUpgrades['forge'] ?? 0) > 0;
+}
+
+/** Highest tier craftable right now: the highest zone tier reputation has
+ * unlocked (0 before any zone is), same gate used for posting quests there. */
+export function maxCraftableTier(state: GameState): number {
+  const unlockedTiers = zones()
+    .filter((z) => isZoneUnlocked(state, z.id))
+    .map((z) => z.tier);
+  return unlockedTiers.length > 0 ? Math.max(...unlockedTiers) : 0;
+}
+
+export function craftMaterialsCost(tier: number, quantity: number): Record<string, number> {
+  const recipe = CRAFT_TIER_MATERIALS[tier] ?? {};
+  return Object.fromEntries(Object.entries(recipe).map(([id, n]) => [id, n * quantity]));
+}
+
+export function craftGoldCost(tier: number, quantity: number): number {
+  return Math.ceil(CRAFT_GOLD_BASE * Math.pow(tier, CRAFT_GOLD_TIER_EXP) * quantity);
+}
+
+export function craftDurationSeconds(tier: number, quantity: number): number {
+  return CRAFT_TIME_BASE * Math.pow(tier, CRAFT_TIME_TIER_EXP) * Math.pow(quantity, CRAFT_TIME_QTY_EXP);
+}
+
+/** `_slot` is accepted for symmetry with startCraft; cost/afford checks are
+ * slot-independent (every slot costs the same at a given tier/quantity). */
+export function canStartCraft(
+  state: GameState,
+  _slot: EquipSlot,
+  tier: number,
+  quantity: number,
+): boolean {
+  if (!forgeUnlocked(state)) return false;
+  if (state.crafting) return false; // one job at a time, like expeditions
+  if (tier < 1 || tier > maxCraftableTier(state)) return false;
+  if (!CRAFT_QUANTITIES.includes(quantity)) return false;
+  if (state.gold < craftGoldCost(tier, quantity)) return false;
+  const materials = craftMaterialsCost(tier, quantity);
+  return Object.entries(materials).every(([id, n]) => (state.materials[id] ?? 0) >= n);
+}
+
+export function startCraft(
+  state: GameState,
+  slot: EquipSlot,
+  tier: number,
+  quantity: number,
+): GameState {
+  if (!canStartCraft(state, slot, tier, quantity)) return state;
+  const materials = { ...state.materials };
+  for (const [id, n] of Object.entries(craftMaterialsCost(tier, quantity))) {
+    materials[id] = (materials[id] ?? 0) - n;
+  }
+  return {
+    ...state,
+    gold: state.gold - craftGoldCost(tier, quantity),
+    materials,
+    crafting: {
+      slot,
+      tier,
+      quantity,
+      startedAt: state.runTimeSeconds,
+      endsAt: state.runTimeSeconds + craftDurationSeconds(tier, quantity),
+    },
   };
 }
 

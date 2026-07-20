@@ -1,7 +1,8 @@
+import { forgeUnlocked } from '../game/guild';
 import { isTimeTravelUnlocked } from '../game/prestige';
 import { useGameState } from '../hooks/useGame';
 
-export type TabId = 'town' | 'guild' | 'map' | 'inventory' | 'timeline' | 'settings';
+export type TabId = 'town' | 'guild' | 'map' | 'inventory' | 'crafting' | 'timeline' | 'settings';
 
 interface TabDef {
   id: TabId;
@@ -14,6 +15,7 @@ const TABS: TabDef[] = [
   { id: 'guild', label: 'Guild', icon: '🛡' },
   { id: 'map', label: 'Map', icon: '🗺' },
   { id: 'inventory', label: 'Materials', icon: '🎒' },
+  { id: 'crafting', label: 'Crafting', icon: '🔨' },
   { id: 'timeline', label: 'Timeline', icon: '⏳' },
   { id: 'settings', label: 'Settings', icon: '⚙' },
 ];
@@ -34,6 +36,7 @@ export function TabBar({
         // bar doesn't reflow when they appear.
         const locked =
           (state.act < 2 && ['guild', 'map', 'inventory'].includes(tab.id)) ||
+          (tab.id === 'crafting' && !forgeUnlocked(state)) ||
           (tab.id === 'timeline' && !isTimeTravelUnlocked(state));
         return (
           <button

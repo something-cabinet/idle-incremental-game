@@ -49,6 +49,7 @@ export function createInitialState(now = Date.now()): GameState {
     inventory: [],
     guildUpgrades: {},
     expedition: null,
+    crafting: null,
     nextEntityId: 1,
     locationsCleared: {},
     bossesDefeated: {},
@@ -109,6 +110,9 @@ export function migrateSave(data: SaveData, now = Date.now()): GameState {
     // equipped gear are dropped; adventurers gain fresh attributes + HP.
     inventory: preV5 ? [] : (s.inventory ?? []),
     adventurers: (s.adventurers ?? []).map((a) => migrateAdventurer(a, preV5)),
+    // v10 added the Forge's single craft job (`crafting`); `base` already
+    // defaults it to null, and older saves simply lack the key, so the
+    // `...base, ...s` spread above backfills it with no extra code needed.
   };
 }
 
