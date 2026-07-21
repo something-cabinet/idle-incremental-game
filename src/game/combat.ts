@@ -32,7 +32,7 @@ import {
   exploreMonsterCount,
   tierXp,
 } from './config';
-import { locationDef, targetsForLocation } from './guild';
+import { autoExploreMembers, locationDef, targetsForLocation } from './guild';
 import { computeModifiers } from './perks';
 import type { Adventurer, Equipment, GameState, LogEntry, LogKind, QuestTargetDef, Rng } from './types';
 
@@ -315,8 +315,8 @@ export function simulateBattle(
  * a full trio each get a third — see docs discussion / user design intent.
  *
  * `logKind` controls the activity-log entry: 'explore' (default) for a manual
- * Explore fight, 'injury' for an auto-patrol encounter that hurt someone, or
- * null to stay silent (routine patrol wins, to avoid flooding the log). */
+ * Explore fight, 'injury' for an Auto-Explore encounter that hurt someone, or
+ * null to stay silent (routine Auto-Explore wins, to avoid flooding the log). */
 export function applyBattleResult(
   state: GameState,
   result: BattleOutcome,
@@ -411,26 +411,20 @@ export function runExplore(
 }
 
 // ---------------------------------------------------------------------------
-// Auto-patrol: champions assigned (mode 'patrol') to a zone auto-battle a
-// fresh monster group there every ENCOUNTER_INTERVAL of game time. This runs
+// Auto-Explore: champions assigned (mode 'auto-explore') to a zone auto-battle
+// a fresh monster group there every ENCOUNTER_INTERVAL of game time. This runs
 // inside engine.tick, so a single big offline dt replays the same fixed-step
 // loop — champions earn XP/loot and take injuries while the player is away.
+// Gated behind the 'auto-explore' guild upgrade (see guild.ts assignAdventurer).
 // ---------------------------------------------------------------------------
 
-/** Champions currently auto-patrolling a given zone. */
-function patrolAssigned(state: GameState, locationId: string): Adventurer[] {
-  return state.adventurers.filter(
-    (a) => a.assignment?.mode === 'patrol' && a.assignment.locationId === locationId,
-  );
-}
-
-/** Advance every patrol-assigned champion at `locationId` to a new encounter
+/** Advance every auto-exploring champion at `locationId` to a new encounter
  * clock, whether or not they fought this step (keeps the group in sync). */
-function setPatrolClock(state: GameState, locationId: string, at: number): GameState {
+function setAutoExploreClock(state: GameState, locationId: string, at: number): GameState {
   return {
     ...state,
     adventurers: state.adventurers.map((a) =>
-      a.assignment?.mode === 'patrol' && a.assignment.locationId === locationId
+      a.assignment?.mode === 'auto-explore' && a.assignment.locationId === locationId
         ? { ...a, assignment: { ...a.assignment, lastEncounterAt: at } }
         : a,
     ),
@@ -438,9 +432,9 @@ function setPatrolClock(state: GameState, locationId: string, at: number): GameS
 }
 
 /**
- * Process all pending auto-patrol encounters up to state.runTimeSeconds. Pure
+ * Process all pending Auto-Explore encounters up to state.runTimeSeconds. Pure
  * and dt-agnostic: called once per tick with time already advanced, it steps
- * each patrolled zone forward in fixed ENCOUNTER_INTERVAL beats (capped by
+ * each auto-exploring zone forward in fixed ENCOUNTER_INTERVAL beats (capped by
  * MAX_ENCOUNTERS_PER_TICK across all zones so a huge offline gap stays bounded).
  *
  * Each beat forms a party of up to EXPLORE_MAX_PARTY_SIZE *healthy* members at
@@ -449,11 +443,11 @@ function setPatrolClock(state: GameState, locationId: string, at: number): GameS
  * applies the result. Knocked-out members stay assigned but rest until healed
  * — no permadeath, no manual re-assign needed.
  */
-export function processPatrols(state: GameState, rng: Rng): GameState {
+export function processAutoExplore(state: GameState, rng: Rng): GameState {
   const locationIds = Array.from(
     new Set(
       state.adventurers
-        .filter((a) => a.assignment?.mode === 'patrol')
+        .filter((a) => a.assignment?.mode === 'auto-explore')
         .map((a) => a.assignment!.locationId),
     ),
   );
@@ -464,7 +458,7 @@ export function processPatrols(state: GameState, rng: Rng): GameState {
 
   for (const locationId of locationIds) {
     while (budget > 0) {
-      const assigned = patrolAssigned(s, locationId);
+      const assigned = autoExploreMembers(s, locationId);
       if (assigned.length === 0) break;
       const clock = Math.max(...assigned.map((a) => a.assignment!.lastEncounterAt));
       const stepTime = clock + ENCOUNTER_INTERVAL;
@@ -481,7 +475,7 @@ export function processPatrols(state: GameState, rng: Rng): GameState {
         s = applyBattleResult(s, result, rng, logKind);
       }
       // Advance the whole group's clock (fighters and resting injured alike).
-      s = setPatrolClock(s, locationId, stepTime);
+      s = setAutoExploreClock(s, locationId, stepTime);
       budget--;
     }
   }

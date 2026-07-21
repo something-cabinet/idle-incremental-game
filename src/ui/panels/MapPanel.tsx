@@ -11,13 +11,14 @@ import {
 } from '../../game/config';
 import { formatDuration } from '../../game/format';
 import {
+  autoExploreMembers,
+  autoExploreUnlocked,
   clampBatchSize,
   isZoneUnlocked,
-  patrolMembers,
   postQuest,
   previewBatchSummary,
   recallAdventurer,
-  sendPartyOnPatrol,
+  sendPartyOnAutoExplore,
   targetsForLocation,
   zones,
 } from '../../game/guild';
@@ -165,9 +166,9 @@ function ExploreDialog({ zone, onClose }: { zone: LocationDef; onClose: () => vo
     runNextFight();
   }
 
-  function sendOnPatrol() {
+  function sendOnAutoExplore() {
     if (partyIds.length === 0) return;
-    store.dispatch((s) => sendPartyOnPatrol(s, partyIds, zone.id));
+    store.dispatch((s) => sendPartyOnAutoExplore(s, partyIds, zone.id));
     onClose();
   }
 
@@ -199,8 +200,9 @@ function ExploreDialog({ zone, onClose }: { zone: LocationDef; onClose: () => vo
     );
   }
 
-  const patrolling = patrolMembers(state, zone.id);
-  const patrolSlotsLeft = EXPLORE_MAX_PARTY_SIZE - patrolling.length;
+  const autoExploring = autoExploreMembers(state, zone.id);
+  const autoExploreSlotsLeft = EXPLORE_MAX_PARTY_SIZE - autoExploring.length;
+  const unlocked = autoExploreUnlocked(state);
 
   return (
     <div className="story-overlay" onClick={onClose}>
@@ -211,21 +213,31 @@ function ExploreDialog({ zone, onClose }: { zone: LocationDef; onClose: () => vo
         </div>
         <p className="detail-sub">
           Pick up to {EXPLORE_MAX_PARTY_SIZE} champions. <strong>Begin Explore</strong> fights
-          right now, turn-by-turn. <strong>Send on Patrol</strong> posts them here to auto-battle
-          on their own — they keep earning XP and loot while you're away, and rest to recover if a
-          fight goes badly. No permadeath.
+          right now, turn-by-turn.{' '}
+          {unlocked ? (
+            <>
+              <strong>Send on Auto-Explore</strong> posts them here to auto-battle on their own —
+              they keep earning XP and loot while you're away, and rest to recover if a fight goes
+              badly.
+            </>
+          ) : (
+            <>Auto-Explore is locked — unlock it in Guild → Upgrades.</>
+          )}{' '}
+          No permadeath.
         </p>
 
-        {patrolling.length > 0 && (
+        {autoExploring.length > 0 && (
           <div className="rows">
-            <h3 className="section-title">🗺️ Patrolling here ({patrolling.length}/{EXPLORE_MAX_PARTY_SIZE})</h3>
-            {patrolling.map((adv) => (
+            <h3 className="section-title">
+              🗺️ Auto-Exploring here ({autoExploring.length}/{EXPLORE_MAX_PARTY_SIZE})
+            </h3>
+            {autoExploring.map((adv) => (
               <div key={adv.id} className="row item-common">
                 <div className="row-info">
                   <span className="row-name">{adv.name}</span>
                   <span className="row-desc">
                     Lv {adv.level}
-                    {isInjured(adv, state.runTimeSeconds) ? ' · 🩹 resting' : ' · on patrol'}
+                    {isInjured(adv, state.runTimeSeconds) ? ' · 🩹 resting' : ' · auto-exploring'}
                   </span>
                 </div>
                 <button
@@ -275,10 +287,11 @@ function ExploreDialog({ zone, onClose }: { zone: LocationDef; onClose: () => vo
           </button>
           <button
             className="small-button"
-            disabled={partyIds.length === 0 || patrolSlotsLeft <= 0}
-            onClick={sendOnPatrol}
+            disabled={!unlocked || partyIds.length === 0 || autoExploreSlotsLeft <= 0}
+            onClick={sendOnAutoExplore}
+            title={!unlocked ? 'Unlock Auto-Explore in Guild → Upgrades' : undefined}
           >
-            🗺️ Send on Patrol
+            🗺️ Send on Auto-Explore
           </button>
         </div>
       </div>

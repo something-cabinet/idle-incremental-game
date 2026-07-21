@@ -132,6 +132,18 @@ export function hireCandidate(state: GameState, candidateId: number): GameState 
   };
 }
 
+/** Permanently remove a champion from the roster: unequips all their gear
+ * back to the shared inventory first (nothing is lost), then drops them.
+ * Refuses while on an expedition, same rule as recallAdventurer. */
+export function fireAdventurer(state: GameState, advId: number): GameState {
+  const adv = state.adventurers.find((a) => a.id === advId);
+  if (!adv) return state;
+  if (adv.assignment?.mode === 'expedition') return state;
+  let s = state;
+  for (const slot of EQUIP_SLOTS) s = unequipItem(s, advId, slot);
+  return { ...s, adventurers: s.adventurers.filter((a) => a.id !== advId) };
+}
+
 // ---------------------------------------------------------------------------
 // Guild upgrades (gold + material sink)
 // ---------------------------------------------------------------------------
@@ -139,9 +151,9 @@ export function hireCandidate(state: GameState, candidateId: number): GameState 
 export function guildUpgradeCost(
   state: GameState,
   upgradeId: string,
-): { gold: number; materials: Record<string, number> } {
+): { gold: number; materials: Record<string, number>; reputation: number } {
   const def = GUILD_UPGRADES.find((u) => u.id === upgradeId);
-  if (!def) return { gold: Infinity, materials: {} };
+  if (!def) return { gold: Infinity, materials: {}, reputation: Infinity };
   const level = state.guildUpgrades[upgradeId] ?? 0;
   const scale = Math.pow(def.costGrowth, level);
   const costMult = computeModifiers(state).costMult;
@@ -150,6 +162,8 @@ export function guildUpgradeCost(
     materials: Object.fromEntries(
       Object.entries(def.materials).map(([id, n]) => [id, Math.ceil(n * scale)]),
     ),
+    // A gate, not spent — same semantics as a zone's repRequired.
+    reputation: def.repRequired ?? 0,
   };
 }
 
@@ -159,6 +173,7 @@ export function canBuyGuildUpgrade(state: GameState, upgradeId: string): boolean
   if ((state.guildUpgrades[upgradeId] ?? 0) >= def.maxLevel) return false;
   const cost = guildUpgradeCost(state, upgradeId);
   if (state.gold < cost.gold) return false;
+  if (state.reputation < cost.reputation) return false;
   return Object.entries(cost.materials).every(
     ([id, n]) => (state.materials[id] ?? 0) >= n,
   );
@@ -309,6 +324,11 @@ export function forgeUnlocked(state: GameState): boolean {
   return (state.guildUpgrades['forge'] ?? 0) > 0;
 }
 
+/** Gates sending champions on Auto-Explore — see GUILD_UPGRADES 'auto-explore'. */
+export function autoExploreUnlocked(state: GameState): boolean {
+  return (state.guildUpgrades['auto-explore'] ?? 0) > 0;
+}
+
 /** Highest tier craftable right now: the highest zone tier reputation has
  * unlocked (0 before any zone is), same gate used for posting quests there. */
 export function maxCraftableTier(state: GameState): number {
@@ -414,27 +434,29 @@ export function canAssign(state: GameState, advId: number): boolean {
   return !isInjured(adv, state.runTimeSeconds) && adv.assignment === null;
 }
 
-/** Champions currently auto-patrolling a given zone (up to EXPLORE_MAX_PARTY_SIZE). */
-export function patrolMembers(state: GameState, locationId: string): Adventurer[] {
+/** Champions currently auto-exploring a given zone (up to EXPLORE_MAX_PARTY_SIZE). */
+export function autoExploreMembers(state: GameState, locationId: string): Adventurer[] {
   return state.adventurers.filter(
-    (a) => a.assignment?.mode === 'patrol' && a.assignment.locationId === locationId,
+    (a) => a.assignment?.mode === 'auto-explore' && a.assignment.locationId === locationId,
   );
 }
 
-/** Send an adventurer to a zone on patrol or quest. A zone holds at most
- * EXPLORE_MAX_PARTY_SIZE patrolling champions (they fight together as a party). */
+/** Send an adventurer to a zone on Auto-Explore or quest. A zone holds at most
+ * EXPLORE_MAX_PARTY_SIZE auto-exploring champions (they fight together as a
+ * party). Auto-Explore itself is gated behind the 'auto-explore' guild upgrade. */
 export function assignAdventurer(
   state: GameState,
   advId: number,
   locationId: string,
-  mode: 'patrol' | 'quest',
+  mode: 'auto-explore' | 'quest',
 ): GameState {
   const loc = locationDef(locationId);
   if (!loc || loc.kind !== 'zone') return state;
   if (state.act < 2 || !isZoneUnlocked(state, locationId)) return state;
   if (!canAssign(state, advId)) return state;
-  if (mode === 'patrol' && patrolMembers(state, locationId).length >= EXPLORE_MAX_PARTY_SIZE) {
-    return state;
+  if (mode === 'auto-explore') {
+    if (!autoExploreUnlocked(state)) return state;
+    if (autoExploreMembers(state, locationId).length >= EXPLORE_MAX_PARTY_SIZE) return state;
   }
   return updateAdventurer(state, advId, (a) => ({
     ...a,
@@ -449,15 +471,16 @@ export function assignAdventurer(
   }));
 }
 
-/** Assign several champions to patrol a zone at once (respects the per-zone
- * cap; ids already busy/injured are skipped). Used by the Explore dialog. */
-export function sendPartyOnPatrol(
+/** Assign several champions to Auto-Explore a zone at once (respects the
+ * per-zone cap and the unlock gate; ids already busy/injured are skipped).
+ * Used by the Explore dialog's "Send on Auto-Explore". */
+export function sendPartyOnAutoExplore(
   state: GameState,
   advIds: number[],
   locationId: string,
 ): GameState {
   let s = state;
-  for (const id of advIds) s = assignAdventurer(s, id, locationId, 'patrol');
+  for (const id of advIds) s = assignAdventurer(s, id, locationId, 'auto-explore');
   return s;
 }
 

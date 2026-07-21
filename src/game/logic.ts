@@ -124,11 +124,20 @@ function migrateEquipment(item: Equipment): Equipment {
   return { ...item, tier: item.tier ?? 1 };
 }
 
+/** v13 renamed the 'patrol' assignment mode to 'auto-explore'. */
+function migrateAssignment<T extends { mode: string } | null | undefined>(assignment: T): T {
+  if (!assignment) return assignment;
+  return (assignment as { mode: string }).mode === 'patrol'
+    ? ({ ...assignment, mode: 'auto-explore' } as T)
+    : assignment;
+}
+
 function migrateAdventurer(a: Adventurer, preV5: boolean): Adventurer {
   const patched: Adventurer = {
     ...a,
     injuredDuration: a.injuredDuration ?? 0,
-    lastAssignment: 'lastAssignment' in a ? a.lastAssignment : null,
+    lastAssignment: migrateAssignment('lastAssignment' in a ? a.lastAssignment : null),
+    assignment: migrateAssignment(a.assignment),
     enemiesDefeated: a.enemiesDefeated ?? 0,
     totalDamageDealt: a.totalDamageDealt ?? 0,
   };

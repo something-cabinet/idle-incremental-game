@@ -46,7 +46,7 @@ export const AUTOSAVE_INTERVAL_MS = 10_000;
  * interval firing on schedule — see useGameLoop's visibility listeners.
  */
 export const BACKGROUND_CATCHUP_GAP_MS = 3_000;
-export const SAVE_VERSION = 12;
+export const SAVE_VERSION = 13;
 
 // ---------------------------------------------------------------------------
 // Act 1 — town income (low numbers by design)
@@ -465,6 +465,14 @@ export const GUILD_UPGRADES: GuildUpgradeDef[] = [
     description: 'Unlocks the Crafting tab — forge your own equipment from gold and materials.',
     baseCostGold: 4_000, costGrowth: 1, materials: { 'iron-ore': 15 },
   },
+  {
+    id: 'auto-explore', name: 'Auto-Explore Charter', maxLevel: 1,
+    description:
+      'Unlocks Auto-Explore — post champions to a zone and they fight it on their own, ' +
+      'earning XP and loot even while you\'re away.',
+    baseCostGold: 6_000, costGrowth: 1, materials: { 'beast-pelt': 10, 'iron-ore': 10 },
+    repRequired: 500,
+  },
   // ---- Job unlocks (one-time) ----
   {
     id: 'unlock-caravan', name: 'Trade Routes', maxLevel: 1,
@@ -487,7 +495,7 @@ export const GUILD_UPGRADES: GuildUpgradeDef[] = [
 // Combat / drops tuning
 // ---------------------------------------------------------------------------
 
-/** Game seconds between patrol encounters. */
+/** Game seconds between auto-explore encounters. */
 export const ENCOUNTER_INTERVAL = 20;
 /** Safety cap on encounters processed per adventurer per tick (offline catch-up). */
 export const MAX_ENCOUNTERS_PER_TICK = 2000;

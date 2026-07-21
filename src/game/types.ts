@@ -95,14 +95,14 @@ export interface Equipment {
   attrs: Partial<Attributes>;
 }
 
-export type AssignmentMode = 'patrol' | 'quest' | 'expedition';
+export type AssignmentMode = 'auto-explore' | 'quest' | 'expedition';
 
 export interface Assignment {
   locationId: string;
   mode: AssignmentMode;
   /** runTimeSeconds at which a quest resolves (quests only) */
   questEndsAt?: number;
-  /** runTimeSeconds of the last processed patrol encounter */
+  /** runTimeSeconds of the last processed auto-explore encounter */
   lastEncounterAt: number;
 }
 
@@ -147,7 +147,7 @@ export interface LocationDef {
   questDuration: number;
   /** Chance per encounter to find a time shard (act 3 zones are higher) */
   shardChance: number;
-  /** 'zone' = patrol/quest farming; 'boss' = expedition target (act 3) */
+  /** 'zone' = auto-explore/quest farming; 'boss' = expedition target (act 3) */
   kind: 'zone' | 'boss';
   /** Shards awarded when a boss is defeated */
   bossShardReward?: number;
@@ -224,6 +224,9 @@ export interface GuildUpgradeDef {
   costGrowth: number;
   /** Material cost: id -> amount at level 1 (scales with costGrowth) */
   materials: Record<string, number>;
+  /** Reputation threshold required to buy (gate, not spent — like a zone's
+   * repRequired). Omitted = no reputation gate. */
+  repRequired?: number;
 }
 
 export interface Expedition {
@@ -282,7 +285,7 @@ export interface TownSkillBonuses {
 }
 
 // ---------------------------------------------------------------------------
-// Activity log (quest/patrol results shown in the Guild tab)
+// Activity log (quest/auto-explore results shown in the Guild tab)
 // ---------------------------------------------------------------------------
 
 export type LogKind = 'quest' | 'patrol' | 'injury' | 'expedition' | 'explore';

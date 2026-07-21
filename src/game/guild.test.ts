@@ -31,6 +31,7 @@ import {
   batchGold,
   batchTimeSolo,
   buyGuildUpgrade,
+  canBuyGuildUpgrade,
   canStartCraft,
   craftDurationSeconds,
   craftGoldCost,
@@ -40,8 +41,10 @@ import {
   disassembleItems,
   equipItem,
   essenceYield,
+  fireAdventurer,
   forgeUnlocked,
   goldUnitDifficulty,
+  guildUpgradeCost,
   hireAdventurer,
   isBossUnlocked,
   isZoneUnlocked,
@@ -100,6 +103,26 @@ describe('roster', () => {
   it('cannot hire in act 1', () => {
     const s = withAdventurer({ ...createInitialState(0), gold: 100_000 });
     expect(s.adventurers).toHaveLength(0);
+  });
+});
+
+describe('firing a champion', () => {
+  it('removes them from the roster and returns equipped gear to inventory', () => {
+    let s = withAdventurer(guildState());
+    const adv = s.adventurers[0];
+    const item = generateEquipment(99, 1, mid);
+    s = { ...s, inventory: [item] };
+    s = equipItem(s, adv.id, 99);
+    expect(s.adventurers[0].equipment.weapon ?? s.adventurers[0].equipment.armor ?? s.adventurers[0].equipment.trinket).toBeTruthy();
+
+    s = fireAdventurer(s, adv.id);
+    expect(s.adventurers).toHaveLength(0);
+    expect(s.inventory.some((i) => i.id === 99)).toBe(true); // gear recovered, not lost
+  });
+
+  it('is a no-op for an unknown id', () => {
+    const s = withAdventurer(guildState());
+    expect(fireAdventurer(s, 999)).toBe(s);
   });
 });
 
@@ -738,6 +761,34 @@ describe('expeditions & prestige', () => {
     const a30 = { ...a1, level: 30 };
     const s = createInitialState(0);
     expect(adventurerPower(s, a30)).toBeGreaterThan(adventurerPower(s, a1));
+  });
+});
+
+describe('reputation-gated guild upgrades (auto-explore)', () => {
+  function richState(materials: Record<string, number>): GameState {
+    return { ...guildState(), materials };
+  }
+
+  it('guildUpgradeCost reports the reputation threshold as a gate, not a spend', () => {
+    const s = guildState();
+    const cost = guildUpgradeCost(s, 'auto-explore');
+    expect(cost.reputation).toBeGreaterThan(0);
+  });
+
+  it('cannot buy below the reputation threshold even with enough gold/materials', () => {
+    const s = richState({ 'beast-pelt': 1_000, 'iron-ore': 1_000 });
+    expect(s.reputation).toBe(0);
+    expect(canBuyGuildUpgrade(s, 'auto-explore')).toBe(false);
+    expect(buyGuildUpgrade(s, 'auto-explore')).toBe(s); // no-op
+  });
+
+  it('reputation is a gate, not consumed on purchase', () => {
+    let s = richState({ 'beast-pelt': 1_000, 'iron-ore': 1_000 });
+    s = { ...s, reputation: 10_000 };
+    expect(canBuyGuildUpgrade(s, 'auto-explore')).toBe(true);
+    s = buyGuildUpgrade(s, 'auto-explore');
+    expect(s.guildUpgrades['auto-explore']).toBe(1);
+    expect(s.reputation).toBe(10_000); // untouched
   });
 });
 

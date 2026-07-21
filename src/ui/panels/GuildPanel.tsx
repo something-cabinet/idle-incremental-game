@@ -9,6 +9,7 @@ import {
   canBuyGuildUpgrade,
   deleteQuest,
   equipItem,
+  fireAdventurer,
   guildUpgradeCost,
   hireCandidate,
   hireCost,
@@ -200,9 +201,9 @@ function ChampionCard({ adv, onOpen }: { adv: Adventurer; onOpen: () => void }) 
         <span className="row-sub">
           ATK {stats.atk} · DEF {stats.def} · HP {Math.round(adv.hp)}/{hpMax}
         </span>
-        {adv.assignment?.mode === 'patrol' && (
+        {adv.assignment?.mode === 'auto-explore' && (
           <span className="row-good">
-            🗺️ Patrolling {locationDef(adv.assignment.locationId)?.name ?? adv.assignment.locationId}
+            🗺️ Auto-Exploring {locationDef(adv.assignment.locationId)?.name ?? adv.assignment.locationId}
           </span>
         )}
         {injured && (
@@ -363,21 +364,53 @@ function ChampionDetailModal({ adv, onClose }: { adv: Adventurer; onClose: () =>
   const store = useGameStore();
   const state = useGameState();
   const [pickerSlot, setPickerSlot] = useState<EquipSlot | null>(null);
+  const [confirmFire, setConfirmFire] = useState(false);
   const stats = adventurerStats(adv);
   const attrs = effectiveAttributes(adv);
   const hpMax = maxHp(adv);
   const xpPct = Math.floor((adv.xp / xpToNext(adv.level)) * 100);
+  const onExpedition = adv.assignment?.mode === 'expedition';
+
+  function handleFire() {
+    store.dispatch((s) => fireAdventurer(s, adv.id));
+    onClose();
+  }
 
   return (
     <div className="story-overlay" onClick={onClose}>
       <div className="story-modal detail-modal" onClick={(e) => e.stopPropagation()}>
         <div className="detail-header">
           <h2 className="story-title">{adv.name}</h2>
-          <button className="small-button" onClick={onClose}>✕</button>
+          <div className="zone-actions">
+            <button
+              className="small-button danger"
+              disabled={onExpedition}
+              onClick={() => setConfirmFire(true)}
+            >
+              🔥 Fire
+            </button>
+            <button className="small-button" onClick={onClose}>✕</button>
+          </div>
         </div>
         <p className="detail-sub">
           {CLASS_ICON[adv.className]} Level {adv.level} {CLASS_LABEL[adv.className]}
         </p>
+
+        {confirmFire && (
+          <div className="row row-bad">
+            <div className="row-info">
+              <span className="row-name">Fire {adv.name}?</span>
+              <span className="row-desc">
+                They leave the guild for good — no permadeath, but this can't be undone.
+                Equipped gear returns to your inventory first.
+              </span>
+            </div>
+            <div className="equip-detail-actions">
+              <button className="small-button danger" onClick={handleFire}>Confirm</button>
+              <button className="small-button" onClick={() => setConfirmFire(false)}>Cancel</button>
+            </div>
+          </div>
+        )}
 
         <div className="progress-line">
           <div className="progress-track">
@@ -653,6 +686,7 @@ function UpgradesSection() {
         const maxed = level >= def.maxLevel;
         const cost = guildUpgradeCost(state, def.id);
         const affordable = canBuyGuildUpgrade(state, def.id);
+        const repLocked = !maxed && state.reputation < cost.reputation;
         return (
           <button
             key={def.id}
@@ -665,6 +699,11 @@ function UpgradesSection() {
                 {def.name} <span className="row-sub">Lv {level}/{def.maxLevel}</span>
               </span>
               <span className="row-desc">{def.description}</span>
+              {repLocked && (
+                <span className="row-bad">
+                  🔒 Requires ★ {fmt(cost.reputation)} reputation ({fmt(Math.floor(state.reputation))} so far)
+                </span>
+              )}
             </div>
             <div className="row-cost">
               {maxed ? (
