@@ -8,13 +8,14 @@ import {
   CLASS_DEFS,
   DEF_PER_CON,
   DEF_PER_RES,
+  EQUIP_BUDGET_BASE,
+  EQUIP_TIER_RATE,
   EQUIP_TYPES,
   EXALTED_MIN_TIER,
   EXALTED_PREFIXES,
   EXALTED_WEIGHT,
   HIRE_ATTR_VARIANCE,
   HP_BASE,
-  HP_BONUS_PER_TIER,
   HP_PER_CON,
   ITEM_PREFIXES,
   LCK_FIND_PER_POINT,
@@ -44,6 +45,7 @@ import type {
 
 const CLASSES: AdventurerClass[] = ['warrior', 'ranger', 'mage'];
 const SLOTS: EquipSlot[] = ['weapon', 'armor', 'trinket'];
+const RARITY_ORDER: Rarity[] = ['common', 'rare', 'epic', 'exalted'];
 
 function pick<T>(items: T[], rng: Rng): T {
   return items[Math.floor(rng() * items.length)];
@@ -53,8 +55,13 @@ function pick<T>(items: T[], rng: Rng): T {
  * Below EXALTED_MIN_TIER, rarity odds are exactly RARITY_WEIGHTS (unchanged).
  * At/above it, exalted gets a small shot carved out of epic's slice, so low
  * and mid-tier drop rates for common/rare/epic are untouched either way.
+ *
+ * `maxRarity` caps the roll (used by crafting — see CRAFT_MAX_RARITY): the
+ * weight table is filtered down and renormalized over just the allowed
+ * rarities, rather than clamping a roll that landed above the cap, so the
+ * relative odds among the allowed rarities are unchanged by the cap.
  */
-export function rollRarity(tier: number, rng: Rng): Rarity {
+export function rollRarity(tier: number, rng: Rng, maxRarity: Rarity = 'exalted'): Rarity {
   const weights: [Rarity, number][] =
     tier >= EXALTED_MIN_TIER
       ? [
@@ -65,12 +72,15 @@ export function rollRarity(tier: number, rng: Rng): Rarity {
           ['exalted', EXALTED_WEIGHT],
         ]
       : RARITY_WEIGHTS;
-  let roll = rng();
-  for (const [rarity, weight] of weights) {
+  const cap = RARITY_ORDER.indexOf(maxRarity);
+  const allowed = weights.filter(([rarity]) => RARITY_ORDER.indexOf(rarity) <= cap);
+  const total = allowed.reduce((sum, [, weight]) => sum + weight, 0);
+  let roll = rng() * total;
+  for (const [rarity, weight] of allowed) {
     roll -= weight;
     if (roll <= 0) return rarity;
   }
-  return 'common';
+  return allowed[allowed.length - 1]?.[0] ?? 'common';
 }
 
 // ---------------------------------------------------------------------------
@@ -103,18 +113,32 @@ function attrPointsForTier(tier: number): number {
  * Generate a piece of equipment scaled to a location tier. `forcedSlot` pins
  * the slot instead of rolling one at random — used by crafting (guild.ts
  * startCraft/engine.ts processCrafting), where the player picks the slot.
+ * `maxRarity` caps what can roll (see rollRarity) — crafting uses this to
+ * keep the Forge to common/rare (see CRAFT_MAX_RARITY).
  */
-export function generateEquipment(id: number, tier: number, rng: Rng, forcedSlot?: EquipSlot): Equipment {
+export function generateEquipment(
+  id: number,
+  tier: number,
+  rng: Rng,
+  forcedSlot?: EquipSlot,
+  maxRarity: Rarity = 'exalted',
+): Equipment {
   const slot = forcedSlot ?? pick(SLOTS, rng);
   const type = pick(EQUIP_TYPES.filter((t) => t.slot === slot), rng);
-  const rarity = rollRarity(tier, rng);
+  const rarity = rollRarity(tier, rng, maxRarity);
   const prefix = rollPrefix(rarity, rng);
   const mult = RARITY_MULT[rarity];
-  const budget = (4 + tier * 4) * mult * type.budgetMult * (0.8 + rng() * 0.4);
+  const budget =
+    EQUIP_BUDGET_BASE * Math.pow(1 + EQUIP_TIER_RATE, tier - 1) * mult * type.budgetMult *
+    (0.8 + rng() * 0.4);
 
-  let atk = budget * type.atkShare;
-  let def = budget * (1 - type.atkShare);
-  let hp = 0;
+  // HP is carved out of the same tier/rarity-scaled budget as atk/def
+  // (hpShare of the whole), not a separate stepped bonus — see EquipTypeDef.
+  const hpShare = type.hpShare ?? 0;
+  const combatBudget = budget * (1 - hpShare);
+  let atk = combatBudget * type.atkShare;
+  let def = combatBudget * (1 - type.atkShare);
+  let hp = budget * hpShare;
   const attrs: Partial<Attributes> = {};
 
   // Prefix effects are deterministic per prefix id.
@@ -131,16 +155,13 @@ export function generateEquipment(id: number, tier: number, rng: Rng, forcedSlot
     const attr = pick(type.bonusAttrs, rng);
     attrs[attr] = (attrs[attr] ?? 0) + attrPointsForTier(tier);
   }
-  if (type.bonusHp && rarity !== 'common') {
-    const hpTierMult = rarity === 'exalted' ? 3 : rarity === 'epic' ? 2 : 1;
-    hp += HP_BONUS_PER_TIER * tier * hpTierMult;
-  }
 
   return {
     id,
     slot,
     typeId: type.id,
     rarity,
+    tier,
     name: `${prefix.name} ${pick(type.names, rng)}`,
     atk: Math.round(atk),
     def: Math.round(def),

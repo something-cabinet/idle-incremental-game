@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { MATERIALS, RARITY_SELL_GOLD } from '../../game/config';
-import { sellItem, sellItems } from '../../game/guild';
+import { MATERIALS } from '../../game/config';
+import { disassembleItem, disassembleItems, essenceMaterialId, essenceYield } from '../../game/guild';
 import type { EquipSlot, Equipment, Rarity } from '../../game/types';
 import { useFormat } from '../../hooks/useFormat';
 import { useGameState, useGameStore } from '../../hooks/useGame';
@@ -18,7 +18,15 @@ const MATERIAL_ICON: Record<string, string> = {
   timber: '🪵',
   silk: '🕸️',
   crystal: '💎',
+  'common-essence': '🧪',
+  'rare-essence': '💠',
+  'epic-essence': '🌟',
+  'exalted-essence': '☄️',
 };
+
+function materialName(id: string): string {
+  return MATERIALS.find((m) => m.id === id)?.name ?? id;
+}
 
 export function InventoryPanel() {
   const [section, setSection] = useState<Section>('materials');
@@ -105,16 +113,31 @@ function sortInventory(items: Equipment[], mode: SortMode): Equipment[] {
   return sorted;
 }
 
+/** materialId -> total amount, summed across a set of items being disassembled. */
+function essencePreview(items: Equipment[]): Record<string, number> {
+  const totals: Record<string, number> = {};
+  for (const item of items) {
+    const id = essenceMaterialId(item.rarity);
+    totals[id] = (totals[id] ?? 0) + essenceYield(item);
+  }
+  return totals;
+}
+
+function essencePreviewLabel(totals: Record<string, number>): string {
+  return Object.entries(totals)
+    .map(([id, n]) => `${n} ${materialName(id)}`)
+    .join(' · ');
+}
+
 function EquipmentSection() {
   const state = useGameState();
   const store = useGameStore();
-  const fmt = useFormat();
   const [selected, setSelected] = useState<Equipment | null>(null);
   const [sortMode, setSortMode] = useState<SortMode>('newest');
   const [rarityFilter, setRarityFilter] = useState<Rarity | 'all'>('all');
   const [slotFilter, setSlotFilter] = useState<EquipSlot | 'all'>('all');
   const [openMenu, setOpenMenu] = useState<'sort' | 'filter' | null>(null);
-  const [confirmBulkSell, setConfirmBulkSell] = useState(false);
+  const [confirmBulkDisassemble, setConfirmBulkDisassemble] = useState(false);
 
   const visibleItems = sortInventory(
     state.inventory.filter(
@@ -125,18 +148,18 @@ function EquipmentSection() {
     sortMode,
   );
   const filterActive = rarityFilter !== 'all' || slotFilter !== 'all';
-  const bulkSellGold = visibleItems.reduce((sum, item) => sum + RARITY_SELL_GOLD[item.rarity], 0);
+  const bulkEssence = essencePreview(visibleItems);
 
-  function handleSell(item: Equipment) {
-    store.dispatch((s) => sellItem(s, item.id));
+  function handleDisassemble(item: Equipment) {
+    store.dispatch((s) => disassembleItem(s, item.id));
     setSelected(null);
   }
 
-  function handleBulkSell() {
+  function handleBulkDisassemble() {
     const ids = visibleItems.map((i) => i.id);
-    store.dispatch((s) => sellItems(s, ids));
+    store.dispatch((s) => disassembleItems(s, ids));
     if (selected && ids.includes(selected.id)) setSelected(null);
-    setConfirmBulkSell(false);
+    setConfirmBulkDisassemble(false);
   }
 
   return (
@@ -211,9 +234,9 @@ function EquipmentSection() {
         <button
           className="small-button danger"
           disabled={visibleItems.length === 0}
-          onClick={() => setConfirmBulkSell(true)}
+          onClick={() => setConfirmBulkDisassemble(true)}
         >
-          Sell {filterActive ? 'filtered' : 'all'} ({visibleItems.length})
+          Disassemble {filterActive ? 'filtered' : 'all'} ({visibleItems.length})
         </button>
       </div>
 
@@ -256,26 +279,27 @@ function EquipmentSection() {
                 <span key={part}>{part}</span>
               ))}
             </div>
-            <button className="small-button" onClick={() => handleSell(selected)}>
-              Sell for {fmt(RARITY_SELL_GOLD[selected.rarity])} 🪙
+            <button className="small-button" onClick={() => handleDisassemble(selected)}>
+              Disassemble for {essenceYield(selected)} {materialName(essenceMaterialId(selected.rarity))}
             </button>
           </div>
         </div>
       )}
 
-      {confirmBulkSell && (
-        <div className="story-overlay" onClick={() => setConfirmBulkSell(false)}>
+      {confirmBulkDisassemble && (
+        <div className="story-overlay" onClick={() => setConfirmBulkDisassemble(false)}>
           <div className="story-modal" onClick={(e) => e.stopPropagation()}>
-            <h2 className="story-title">Sell {visibleItems.length} items?</h2>
+            <h2 className="story-title">Disassemble {visibleItems.length} items?</h2>
             <p className="story-text">
-              This will sell {filterActive ? 'every item matching the current filters' : 'your entire equipment inventory'}{' '}
-              for {fmt(bulkSellGold)} 🪙. This cannot be undone.
+              This will break down{' '}
+              {filterActive ? 'every item matching the current filters' : 'your entire equipment inventory'}{' '}
+              into {essencePreviewLabel(bulkEssence)}. This cannot be undone.
             </p>
             <div className="equip-detail-actions">
-              <button className="small-button danger" onClick={handleBulkSell}>
-                Sell for {fmt(bulkSellGold)} 🪙
+              <button className="small-button danger" onClick={handleBulkDisassemble}>
+                Disassemble for {essencePreviewLabel(bulkEssence)}
               </button>
-              <button className="small-button" onClick={() => setConfirmBulkSell(false)}>
+              <button className="small-button" onClick={() => setConfirmBulkDisassemble(false)}>
                 Cancel
               </button>
             </div>

@@ -1,5 +1,5 @@
 import { generateEquipment } from './adventurers';
-import { ACTIVITY_LOG_MAX } from './config';
+import { ACTIVITY_LOG_MAX, CRAFT_MAX_RARITY } from './config';
 import {
   allocateAdventurers,
   questRequiredWork,
@@ -181,7 +181,7 @@ function processCrafting(state: GameState, rng: Rng): CraftOutput {
   let nextId = state.nextEntityId;
   const items: Equipment[] = [];
   for (let i = 0; i < job.quantity; i++) {
-    items.push(generateEquipment(nextId++, job.tier, rng, job.slot));
+    items.push(generateEquipment(nextId++, job.tier, rng, job.slot, CRAFT_MAX_RARITY));
   }
   return { crafting: null, inventory: [...state.inventory, ...items], nextEntityId: nextId };
 }

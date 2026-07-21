@@ -12,6 +12,7 @@ import {
   CRAFT_TIME_QTY_EXP,
   CRAFT_TIME_TIER_EXP,
   DEMON_KING_ID,
+  ESSENCE_TIER_DIV,
   GENERAL_IDS,
   GUILD_UPGRADES,
   HIRE_BASE_COST,
@@ -29,7 +30,7 @@ import {
   QUEST_REP_BASE,
   QUEST_TARGETS,
   QUEST_TIME_EXP,
-  RARITY_SELL_GOLD,
+  RARITY_ESSENCE_BASE,
   REROLL_BASE_COST,
   REROLL_COST_GROWTH,
 } from './config';
@@ -38,6 +39,7 @@ import { computeModifiers } from './perks';
 import type {
   Adventurer,
   EquipSlot,
+  Equipment,
   GameState,
   LocationDef,
   Quest,
@@ -255,27 +257,45 @@ export function unequipItem(state: GameState, advId: number, slot: EquipSlot): G
   );
 }
 
-export function sellItem(state: GameState, itemId: number): GameState {
+/** Material id an item's essence lands in — one essence tier per rarity. */
+export function essenceMaterialId(rarity: Equipment['rarity']): string {
+  return `${rarity}-essence`;
+}
+
+/** Essence yield from disassembling one item: stronger (higher-tier) items
+ * of the same rarity break down into more essence than weak ones. */
+export function essenceYield(item: Equipment): number {
+  return RARITY_ESSENCE_BASE[item.rarity] * (1 + Math.floor(item.tier / ESSENCE_TIER_DIV));
+}
+
+/** Break an item down into essence material instead of selling it for gold. */
+export function disassembleItem(state: GameState, itemId: number): GameState {
   const item = state.inventory.find((i) => i.id === itemId);
   if (!item) return state;
+  const materialId = essenceMaterialId(item.rarity);
   return {
     ...state,
     inventory: state.inventory.filter((i) => i.id !== itemId),
-    gold: state.gold + RARITY_SELL_GOLD[item.rarity],
-    totalGoldEarned: state.totalGoldEarned + RARITY_SELL_GOLD[item.rarity],
+    materials: {
+      ...state.materials,
+      [materialId]: (state.materials[materialId] ?? 0) + essenceYield(item),
+    },
   };
 }
 
-export function sellItems(state: GameState, itemIds: number[]): GameState {
+export function disassembleItems(state: GameState, itemIds: number[]): GameState {
   const ids = new Set(itemIds);
   const sold = state.inventory.filter((i) => ids.has(i.id));
   if (sold.length === 0) return state;
-  const gold = sold.reduce((sum, i) => sum + RARITY_SELL_GOLD[i.rarity], 0);
+  const materials = { ...state.materials };
+  for (const item of sold) {
+    const materialId = essenceMaterialId(item.rarity);
+    materials[materialId] = (materials[materialId] ?? 0) + essenceYield(item);
+  }
   return {
     ...state,
     inventory: state.inventory.filter((i) => !ids.has(i.id)),
-    gold: state.gold + gold,
-    totalGoldEarned: state.totalGoldEarned + gold,
+    materials,
   };
 }
 

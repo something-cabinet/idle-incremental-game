@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CRAFT_QUANTITIES, EXALTED_MIN_TIER, MATERIALS } from '../../game/config';
+import { CRAFT_QUANTITIES, MATERIALS } from '../../game/config';
 import { formatDuration } from '../../game/format';
 import {
   canStartCraft,
@@ -57,8 +57,9 @@ export function CraftingPanel() {
         <h3 className="section-title">The Forge</h3>
         <p className="detail-sub">
           Spend gold and materials to forge equipment. Higher tiers need more — and
-          rarer — materials, but tier never changes your odds of common/rare/epic; it
-          only unlocks a shot at ✦ Exalted from tier {EXALTED_MIN_TIER} up.
+          rarer — materials, and roll a bigger stat budget, but never change your
+          common/rare odds. The Forge can only produce common and rare gear —
+          epic and ✦ exalted only drop from monsters your champions defeat.
         </p>
 
         {job ? (
@@ -89,7 +90,6 @@ export function CraftingPanel() {
                   onClick={() => setTier(t)}
                 >
                   T{t}
-                  {t >= EXALTED_MIN_TIER ? ' ✦' : ''}
                 </button>
               ))}
             </div>

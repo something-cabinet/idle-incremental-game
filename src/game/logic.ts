@@ -15,7 +15,7 @@ import {
 } from './config';
 import { computeModifiers } from './perks';
 import { computeTownSkillBonuses } from './skills';
-import type { Adventurer, Attributes, GameState, SaveData, Settings } from './types';
+import type { Adventurer, Attributes, Equipment, GameState, SaveData, Settings } from './types';
 
 /** Town economy + state lifecycle. Every function is pure: (state) => state. */
 
@@ -108,12 +108,20 @@ export function migrateSave(data: SaveData, now = Date.now()): GameState {
     // v5 introduced the attribute/HP combat model and typed equipment. Old
     // items can't map to the new equipment types, so pre-v5 inventory and
     // equipped gear are dropped; adventurers gain fresh attributes + HP.
-    inventory: preV5 ? [] : (s.inventory ?? []),
+    inventory: preV5 ? [] : (s.inventory ?? []).map(migrateEquipment),
     adventurers: (s.adventurers ?? []).map((a) => migrateAdventurer(a, preV5)),
     // v10 added the Forge's single craft job (`crafting`); `base` already
     // defaults it to null, and older saves simply lack the key, so the
     // `...base, ...s` spread above backfills it with no extra code needed.
+    // v11 added `tier` to Equipment (drives its stat budget and essence
+    // yield); pre-v11 items default to tier 1, same as pre-v11 equipment
+    // that never had that stat scaling in the first place.
   };
+}
+
+/** Pre-v11 saved items lack `tier` — see migrateSave. */
+function migrateEquipment(item: Equipment): Equipment {
+  return { ...item, tier: item.tier ?? 1 };
 }
 
 function migrateAdventurer(a: Adventurer, preV5: boolean): Adventurer {
@@ -122,11 +130,19 @@ function migrateAdventurer(a: Adventurer, preV5: boolean): Adventurer {
     injuredDuration: a.injuredDuration ?? 0,
     lastAssignment: 'lastAssignment' in a ? a.lastAssignment : null,
   };
-  if (!preV5) return patched;
-  const attributes = { ...CLASS_DEFS[patched.className].base } as Attributes;
-  for (const { id } of ATTRIBUTES) attributes[id] = attributes[id] ?? 1;
-  const migrated: Adventurer = { ...patched, attributes, equipment: {}, hp: 0 };
-  return { ...migrated, hp: maxHp(migrated) };
+  if (preV5) {
+    const attributes = { ...CLASS_DEFS[patched.className].base } as Attributes;
+    for (const { id } of ATTRIBUTES) attributes[id] = attributes[id] ?? 1;
+    const migrated: Adventurer = { ...patched, attributes, equipment: {}, hp: 0 };
+    return { ...migrated, hp: maxHp(migrated) };
+  }
+  const equipment = Object.fromEntries(
+    Object.entries(patched.equipment).map(([slot, item]) => [
+      slot,
+      item ? migrateEquipment(item) : item,
+    ]),
+  ) as Adventurer['equipment'];
+  return { ...patched, equipment };
 }
 
 // ---------------------------------------------------------------------------

@@ -13,7 +13,9 @@ import {
 import {
   ADVENTURER_BASE,
   ADVENTURER_MAX,
+  CRAFT_MAX_RARITY,
   DEMON_KING_ID,
+  EQUIP_TIER_RATE,
   EXALTED_MIN_TIER,
   EXALTED_PREFIXES,
   GENERAL_IDS,
@@ -34,7 +36,10 @@ import {
   craftGoldCost,
   craftMaterialsCost,
   deleteQuest,
+  disassembleItem,
+  disassembleItems,
   equipItem,
+  essenceYield,
   forgeUnlocked,
   goldUnitDifficulty,
   hireAdventurer,
@@ -49,8 +54,6 @@ import {
   questRequiredWork,
   questTargetDef,
   rosterCap,
-  sellItem,
-  sellItems,
   startCraft,
   unitDifficulty,
 } from './guild';
@@ -144,24 +147,30 @@ describe('equipment', () => {
     expect(autoEquipBest(s, advId)).toBe(s);
   });
 
-  it('selling an item grants gold', () => {
+  it('disassembling an item grants essence of its own rarity, not gold', () => {
     let s = guildState();
-    const item = generateEquipment(99, 1, mid);
+    const item = { ...generateEquipment(99, 1, mid), rarity: 'rare' as const, tier: 3 };
     s = { ...s, inventory: [item], gold: 0 };
-    s = sellItem(s, 99);
+    s = disassembleItem(s, 99);
     expect(s.inventory).toHaveLength(0);
-    expect(s.gold).toBeGreaterThan(0);
+    expect(s.gold).toBe(0);
+    expect(s.materials['rare-essence']).toBe(essenceYield(item));
+    expect(s.materials['rare-essence']).toBeGreaterThan(0);
   });
 
-  it('bulk selling removes only the given items and sums the gold', () => {
+  it('bulk disassembling removes only the given items and sums essence per rarity', () => {
     let s = guildState();
-    const items = [generateEquipment(1, 1, mid), generateEquipment(2, 1, mid), generateEquipment(3, 1, mid)];
-    s = { ...s, inventory: items, gold: 0 };
-    const single = sellItem(s, 1).gold + sellItem(s, 2).gold;
-    s = sellItems(s, [1, 2, 999]);
+    const items = [
+      { ...generateEquipment(1, 1, mid), rarity: 'common' as const, tier: 1 },
+      { ...generateEquipment(2, 1, mid), rarity: 'common' as const, tier: 1 },
+      { ...generateEquipment(3, 1, mid), rarity: 'epic' as const, tier: 2 },
+    ];
+    s = { ...s, inventory: items, materials: {} };
+    s = disassembleItems(s, [1, 2, 999]);
     expect(s.inventory.map((i) => i.id)).toEqual([3]);
-    expect(s.gold).toBe(single);
-    expect(sellItems(s, [999])).toBe(s);
+    expect(s.materials['common-essence']).toBe(essenceYield(items[0]) + essenceYield(items[1]));
+    expect(s.materials['epic-essence'] ?? 0).toBe(0); // item 3 wasn't in the batch
+    expect(disassembleItems(s, [999])).toBe(s);
   });
 });
 
@@ -209,6 +218,29 @@ describe('attributes, HP & equipment', () => {
     expect(b).toEqual(a);
   });
 
+  it('tier scales stat budget geometrically at EQUIP_TIER_RATE per tier', () => {
+    // Fixed rng (mid) → identical slot/type/rarity/prefix roll regardless of
+    // tier, isolating the budget's tier scaling from everything else. Compare
+    // atk (not hp): prefixes can add a separate flat tier-linear HP bonus on
+    // top of the budget (see ITEM_PREFIXES hpPerTier), so only atk/def stay
+    // exactly proportional to the geometric budget curve.
+    const t1 = generateEquipment(1, 1, mid);
+    const t4 = generateEquipment(1, 4, mid); // 3 tiers higher
+    expect(t4.slot).toBe(t1.slot);
+    expect(t4.typeId).toBe(t1.typeId);
+    expect(t4.rarity).toBe(t1.rarity);
+    const expectedRatio = Math.pow(1 + EQUIP_TIER_RATE, 4 - 1);
+    expect(t4.atk / t1.atk).toBeCloseTo(expectedRatio, 1);
+  });
+
+  it('bonus HP now scales off the tier/rarity budget, so even common gear gets some', () => {
+    // rng() === 0 throughout: lands on the first armor type (plate) and the
+    // lowest rarity (common) — previously that meant hp forced to exactly 0.
+    const item = generateEquipment(1, 6, () => 0, 'armor');
+    expect(item.rarity).toBe('common');
+    expect(item.hp).toBeGreaterThan(0);
+  });
+
   it('epic items carry bonus attributes; equipping applies them', () => {
     let item = generateEquipment(77, 6, mid);
     // Coerce to an attribute-bearing epic for a deterministic assertion.
@@ -228,6 +260,14 @@ describe('attributes, HP & equipment', () => {
     const highRoll = () => 0.999; // lands in the last weight slice
     expect(rollRarity(EXALTED_MIN_TIER - 1, highRoll)).toBe('epic');
     expect(rollRarity(EXALTED_MIN_TIER, highRoll)).toBe('exalted');
+  });
+
+  it('maxRarity caps the roll by filtering/renormalizing, not clamping', () => {
+    const highRoll = () => 0.999; // would land epic/exalted uncapped
+    expect(rollRarity(EXALTED_MIN_TIER, highRoll, 'rare')).toBe('rare');
+    expect(rollRarity(1, highRoll, 'common')).toBe('common');
+    // Low roll still lands common even when higher rarities are allowed.
+    expect(rollRarity(EXALTED_MIN_TIER, () => 0, 'rare')).toBe('common');
   });
 
   it('exalted items roll exclusively from EXALTED_PREFIXES, never mixing with normal prefixes', () => {
@@ -788,6 +828,17 @@ describe('crafting (the Forge)', () => {
     expect(done.crafting).toBeNull();
     expect(done.inventory).toHaveLength(10);
     for (const item of done.inventory) expect(item.slot).toBe('trinket');
+  });
+
+  it('crafted items never exceed CRAFT_MAX_RARITY, even at exalted-eligible tiers', () => {
+    expect(CRAFT_MAX_RARITY).toBe('rare'); // sanity: pin the assumption this test relies on
+    let s = { ...forgeState(), reputation: 1e12 }; // frontier-pass (tier 6, exalted-eligible) unlocked
+    s = startCraft(s, 'weapon', 6, 100);
+    const done = tick(s, craftDurationSeconds(6, 100) + 1, 0, mulberry32(7));
+    expect(done.inventory).toHaveLength(100);
+    for (const item of done.inventory) {
+      expect(['common', 'rare']).toContain(item.rarity);
+    }
   });
 
   it('offline catch-up resolves a finished craft job the same as a live tick', () => {

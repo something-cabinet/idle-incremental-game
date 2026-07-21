@@ -46,7 +46,7 @@ export const AUTOSAVE_INTERVAL_MS = 10_000;
  * interval firing on schedule — see useGameLoop's visibility listeners.
  */
 export const BACKGROUND_CATCHUP_GAP_MS = 3_000;
-export const SAVE_VERSION = 10;
+export const SAVE_VERSION = 11;
 
 // ---------------------------------------------------------------------------
 // Act 1 — town income (low numbers by design)
@@ -291,6 +291,11 @@ export const MATERIALS: MaterialDef[] = [
   { id: 'timber', name: 'Timber' },
   { id: 'silk', name: 'Spider Silk' },
   { id: 'crystal', name: 'Crystal Shard' },
+  // ---- Disassembly byproducts (see guild.ts disassembleItem) ----
+  { id: 'common-essence', name: 'Common Essence' },
+  { id: 'rare-essence', name: 'Rare Essence' },
+  { id: 'epic-essence', name: 'Epic Essence' },
+  { id: 'exalted-essence', name: 'Exalted Essence' },
 ];
 
 /**
@@ -536,14 +541,32 @@ export const EXALTED_MIN_TIER = 5;
 export const EXALTED_WEIGHT = 0.015;
 
 export const RARITY_MULT: Record<Rarity, number> = { common: 1, rare: 1.6, epic: 2.5, exalted: 4 };
-export const RARITY_SELL_GOLD: Record<Rarity, number> = { common: 25, rare: 100, epic: 400, exalted: 1_500 };
 
 /** Number of bonus attributes rolled from the type's pool, by rarity. */
 export const RARITY_BONUS_ATTRS: Record<Rarity, number> = { common: 0, rare: 1, epic: 2, exalted: 3 };
 /** Bonus attribute points per roll: 1 + floor(tier / 2). */
 export const BONUS_ATTR_TIER_DIV = 2;
-/** Bonus max HP per tier on hp-capable types (rare = 1x, epic = 2x). */
-export const HP_BONUS_PER_TIER = 4;
+
+/**
+ * Overall stat budget an item's atk/def/hp are carved from:
+ * budget = EQUIP_BUDGET_BASE * (1 + EQUIP_TIER_RATE)^(tier - 1) * RARITY_MULT
+ *          * type.budgetMult * (0.8-1.2 variance).
+ * Geometric in tier so every tier is a flat percentage stronger than the
+ * last (rather than the old linear `4 + tier * 4`, which flattened out at
+ * high tiers) — tier and rarity are independent multiplicative factors, same
+ * as everywhere else costs/rewards scale in this game.
+ */
+export const EQUIP_BUDGET_BASE = 8;
+export const EQUIP_TIER_RATE = 0.25;
+
+/**
+ * Disassembling an item (guild.ts disassembleItem) grants essence of its own
+ * rarity, not gold: amount = RARITY_ESSENCE_BASE[rarity] * (1 + floor(tier /
+ * ESSENCE_TIER_DIV)) — a stronger (higher-tier) item of the same rarity
+ * yields more essence than a weak one.
+ */
+export const RARITY_ESSENCE_BASE: Record<Rarity, number> = { common: 1, rare: 2, epic: 4, exalted: 8 };
+export const ESSENCE_TIER_DIV = 2;
 
 // ---------------------------------------------------------------------------
 // Equipment types & name prefixes
@@ -569,26 +592,26 @@ export const EQUIP_TYPES: EquipTypeDef[] = [
     scaling: 'int', atkShare: 0.85, budgetMult: 0.95, bonusAttrs: ['int', 'lck'] },
   { id: 'staff', slot: 'weapon', names: ['Staff', 'Warstaff', 'Greatstaff'], icon: '🦯',
     scaling: 'int', atkShare: 0.9, budgetMult: 1.15, bonusAttrs: ['int', 'res'] },
-  // ---- Armor: def-heavy ----
+  // ---- Armor: def-heavy, biggest HP share ----
   { id: 'plate', slot: 'armor', names: ['Plate Armor', 'Breastplate', 'Full Plate'], icon: '🛡️',
-    atkShare: 0.1, budgetMult: 1.25, bonusAttrs: ['con', 'str'], bonusHp: true },
+    atkShare: 0.1, budgetMult: 1.25, bonusAttrs: ['con', 'str'], hpShare: 0.35 },
   { id: 'mail', slot: 'armor', names: ['Chainmail', 'Hauberk', 'Scale Mail'], icon: '⛓️',
-    atkShare: 0.15, budgetMult: 1.1, bonusAttrs: ['con', 'res'], bonusHp: true },
+    atkShare: 0.15, budgetMult: 1.1, bonusAttrs: ['con', 'res'], hpShare: 0.35 },
   { id: 'leather', slot: 'armor', names: ['Leather Armor', 'Brigandine', 'Jerkin'], icon: '🥋',
-    atkShare: 0.2, budgetMult: 1.0, bonusAttrs: ['dex', 'con'], bonusHp: true },
+    atkShare: 0.2, budgetMult: 1.0, bonusAttrs: ['dex', 'con'], hpShare: 0.35 },
   { id: 'cloak', slot: 'armor', names: ['Cloak', 'Mantle', 'Shroud'], icon: '🧥',
-    atkShare: 0.25, budgetMult: 0.85, bonusAttrs: ['dex', 'lck'], bonusHp: true },
+    atkShare: 0.25, budgetMult: 0.85, bonusAttrs: ['dex', 'lck'], hpShare: 0.35 },
   { id: 'robe', slot: 'armor', names: ['Robe', 'Vestment', 'Raiment'], icon: '👘',
-    atkShare: 0.2, budgetMult: 0.9, bonusAttrs: ['int', 'res'], bonusHp: true },
-  // ---- Trinkets: balanced, lean on stat/HP bonuses ----
+    atkShare: 0.2, budgetMult: 0.9, bonusAttrs: ['int', 'res'], hpShare: 0.35 },
+  // ---- Trinkets: balanced, smaller HP share ----
   { id: 'ring', slot: 'trinket', names: ['Ring', 'Signet', 'Band'], icon: '💍',
-    atkShare: 0.5, budgetMult: 0.7, bonusAttrs: ['dex', 'lck'], bonusHp: true },
+    atkShare: 0.5, budgetMult: 0.7, bonusAttrs: ['dex', 'lck'], hpShare: 0.2 },
   { id: 'amulet', slot: 'trinket', names: ['Amulet', 'Pendant', 'Locket'], icon: '📿',
-    atkShare: 0.4, budgetMult: 0.7, bonusAttrs: ['int', 'res'], bonusHp: true },
+    atkShare: 0.4, budgetMult: 0.7, bonusAttrs: ['int', 'res'], hpShare: 0.2 },
   { id: 'charm', slot: 'trinket', names: ['Charm', 'Fetish', 'Keepsake'], icon: '🧿',
-    atkShare: 0.5, budgetMult: 0.7, bonusAttrs: ['lck', 'int'], bonusHp: true },
+    atkShare: 0.5, budgetMult: 0.7, bonusAttrs: ['lck', 'int'], hpShare: 0.2 },
   { id: 'idol', slot: 'trinket', names: ['Idol', 'Totem', 'Effigy'], icon: '🗿',
-    atkShare: 0.45, budgetMult: 0.7, bonusAttrs: ['con', 'str'], bonusHp: true },
+    atkShare: 0.45, budgetMult: 0.7, bonusAttrs: ['con', 'str'], hpShare: 0.2 },
 ];
 
 /**
@@ -639,6 +662,11 @@ export const EXALTED_PREFIXES: ItemPrefixDef[] = [
  * guild's reputation has unlocked (see guild.ts maxCraftableTier) — this is
  * just the ceiling on that, matching LOCATIONS' highest zone tier. */
 export const CRAFT_MAX_TIER = 6;
+
+/** The Forge can only ever roll common/rare gear — epic/exalted are reserved
+ * for monster drops brought back by the managed Champion roster (dormant
+ * until that combat loop is built; see types.ts). */
+export const CRAFT_MAX_RARITY: Rarity = 'rare';
 
 /** Materials consumed per single crafted item, by tier. Later tiers ask for
  * more units and pull in materials that only drop in higher-tier zones. */

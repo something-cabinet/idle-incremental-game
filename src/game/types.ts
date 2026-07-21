@@ -52,14 +52,15 @@ export interface EquipTypeDef {
   icon: string;
   /** Weapons only: the attribute this weapon's damage scales with */
   scaling?: AttributeId;
-  /** Share of the stat budget that goes to atk (rest goes to def) */
+  /** Share of the non-HP stat budget that goes to atk (rest goes to def) */
   atkShare: number;
   /** Multiplier on the overall stat budget */
   budgetMult: number;
   /** Attributes this type may roll as rarity bonuses */
   bonusAttrs: AttributeId[];
-  /** Whether this type may roll bonus max HP */
-  bonusHp?: boolean;
+  /** Share of the total stat budget diverted to bonus max HP instead of
+   * atk/def (0/omitted = no bonus HP, e.g. weapons). */
+  hpShare?: number;
 }
 
 /** Deterministic name prefix: same prefix always modifies stats the same way. */
@@ -83,6 +84,9 @@ export interface Equipment {
   typeId: string;
   name: string;
   rarity: Rarity;
+  /** Location/craft tier this item was generated at — drives its stat
+   * budget (see generateEquipment) and, on disassembly, its essence yield. */
+  tier: number;
   atk: number;
   def: number;
   /** Bonus max HP */
