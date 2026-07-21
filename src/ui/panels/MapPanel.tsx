@@ -1,5 +1,9 @@
 import { useState } from 'react';
+import { adventurerStats, isInjured } from '../../game/adventurers';
+import { canExplore, runExplore } from '../../game/combat';
+import type { BattleOutcome } from '../../game/combat';
 import {
+  EXPLORE_MAX_PARTY_SIZE,
   MATERIALS,
   QUEST_DEFAULT_MAX_ADVENTURERS,
   QUEST_MAX_REPEATS_INPUT,
@@ -14,8 +18,9 @@ import {
   targetsForLocation,
   zones,
 } from '../../game/guild';
-import type { LocationDef, QuestRequirement, QuestTargetDef } from '../../game/types';
+import type { Adventurer, LocationDef, QuestRequirement, QuestTargetDef } from '../../game/types';
 import { useGameState, useGameStore } from '../../hooks/useGame';
+import { BattleModal } from '../BattleModal';
 
 function materialName(id: string): string {
   return MATERIALS.find((m) => m.id === id)?.name ?? id;
@@ -50,6 +55,7 @@ function ZoneCard({ zone }: { zone: LocationDef }) {
   const state = useGameState();
   const [open, setOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [exploreOpen, setExploreOpen] = useState(false);
   const unlocked = isZoneUnlocked(state, zone.id);
 
   if (!unlocked) {
@@ -78,9 +84,14 @@ function ZoneCard({ zone }: { zone: LocationDef }) {
         <div className="zone-detail">
           <div className="section-title-row">
             <h4 className="section-title">👹 Monsters</h4>
-            <button className="small-button" onClick={() => setDialogOpen(true)}>
-              + Post Quest
-            </button>
+            <div className="zone-actions">
+              <button className="small-button" onClick={() => setExploreOpen(true)}>
+                ⚔ Explore
+              </button>
+              <button className="small-button" onClick={() => setDialogOpen(true)}>
+                + Post Quest
+              </button>
+            </div>
           </div>
           {monsters.map((t) => (
             <TargetCatalogRow key={t.id} target={t} />
@@ -93,6 +104,119 @@ function ZoneCard({ zone }: { zone: LocationDef }) {
       )}
 
       {dialogOpen && <QuestCreationDialog zone={zone} onClose={() => setDialogOpen(false)} />}
+      {exploreOpen && <ExploreDialog zone={zone} onClose={() => setExploreOpen(false)} />}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Explore — pick up to EXPLORE_MAX_PARTY_SIZE champions, then fight an
+// instant turn-based battle against a rolled monster group from this zone.
+// The battle resolves (and its rewards commit) the moment "Begin Explore" is
+// clicked; BattleModal just plays the already-decided log back for the
+// player to watch, and blocks going elsewhere until it finishes.
+// ---------------------------------------------------------------------------
+
+function ExploreDialog({ zone, onClose }: { zone: LocationDef; onClose: () => void }) {
+  const store = useGameStore();
+  const state = useGameState();
+  const [partyIds, setPartyIds] = useState<number[]>([]);
+  const [battle, setBattle] = useState<BattleOutcome | null>(null);
+
+  function toggle(id: number) {
+    setPartyIds((prev) => {
+      if (prev.includes(id)) return prev.filter((p) => p !== id);
+      if (prev.length >= EXPLORE_MAX_PARTY_SIZE) return prev;
+      return [...prev, id];
+    });
+  }
+
+  function begin() {
+    let outcome: BattleOutcome | null = null;
+    store.dispatch((s) => {
+      const { state: next, result } = runExplore(s, zone.id, partyIds, Math.random);
+      outcome = result;
+      return next;
+    });
+    if (outcome) setBattle(outcome);
+  }
+
+  if (battle) {
+    return (
+      <BattleModal
+        result={battle}
+        locationName={zone.name}
+        reducedMotion={state.settings.reducedMotion}
+        onClose={onClose}
+      />
+    );
+  }
+
+  return (
+    <div className="story-overlay" onClick={onClose}>
+      <div className="story-modal detail-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="detail-header">
+          <h2 className="story-title">Explore — {zone.name}</h2>
+          <button className="small-button" onClick={onClose}>✕</button>
+        </div>
+        <p className="detail-sub">
+          Pick up to {EXPLORE_MAX_PARTY_SIZE} champions to send in — the fight plays out
+          turn-by-turn on the spot. A loss knocks out and injures whoever's still
+          standing when it ends; no permadeath.
+        </p>
+
+        <div className="rows">
+          {state.adventurers.length === 0 && (
+            <div className="row locked">Recruit champions in the Guild tab first.</div>
+          )}
+          {state.adventurers.map((adv) => (
+            <ExplorePartyRow
+              key={adv.id}
+              adv={adv}
+              selected={partyIds.includes(adv.id)}
+              disabled={!canExplore(state, adv) && !partyIds.includes(adv.id)}
+              injured={isInjured(adv, state.runTimeSeconds)}
+              onToggle={() => toggle(adv.id)}
+            />
+          ))}
+        </div>
+
+        <button className="small-button" disabled={partyIds.length === 0} onClick={begin}>
+          ⚔ Begin Explore ({partyIds.length}/{EXPLORE_MAX_PARTY_SIZE})
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ExplorePartyRow({
+  adv,
+  selected,
+  disabled,
+  injured,
+  onToggle,
+}: {
+  adv: Adventurer;
+  selected: boolean;
+  disabled: boolean;
+  injured: boolean;
+  onToggle: () => void;
+}) {
+  const stats = adventurerStats(adv);
+  const unavailableReason = injured ? 'Injured — recovering' : adv.assignment ? 'Busy' : null;
+  return (
+    <div
+      className={`row quest-checklist-row ${disabled ? 'disabled' : ''}`}
+      onClick={() => !disabled && onToggle()}
+    >
+      <input type="checkbox" checked={selected} disabled={disabled} readOnly />
+      <div className="row-info">
+        <span className="row-name">{adv.name}</span>
+        <span className="row-desc">
+          Lv {adv.level} · ATK {stats.atk} · DEF {stats.def} · HP {stats.maxHp}
+        </span>
+        {unavailableReason && <span className="row-bad">{unavailableReason}</span>}
+      </div>
     </div>
   );
 }

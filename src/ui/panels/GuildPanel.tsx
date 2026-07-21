@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { adventurerStats, effectiveAttributes, equipDelta, maxHp } from '../../game/adventurers';
+import { adventurerStats, effectiveAttributes, equipDelta, isInjured, maxHp } from '../../game/adventurers';
 import { ATTRIBUTES, GUILD_UPGRADES, MATERIALS, xpToNext } from '../../game/config';
 import { formatDuration } from '../../game/format';
 import {
@@ -182,9 +182,11 @@ function AdventurersSection() {
 }
 
 function ChampionCard({ adv, onOpen }: { adv: Adventurer; onOpen: () => void }) {
+  const state = useGameState();
   const stats = adventurerStats(adv);
   const hpMax = maxHp(adv);
   const hpPct = Math.min(100, Math.max(0, (adv.hp / hpMax) * 100));
+  const injured = isInjured(adv, state.runTimeSeconds);
   return (
     <button className="row candidate-row adventurer-card" onClick={onOpen}>
       <div className="row-info">
@@ -197,6 +199,11 @@ function ChampionCard({ adv, onOpen }: { adv: Adventurer; onOpen: () => void }) 
         <span className="row-sub">
           ATK {stats.atk} · DEF {stats.def} · HP {Math.round(adv.hp)}/{hpMax}
         </span>
+        {injured && (
+          <span className="row-bad">
+            🩹 Recovering — {formatDuration(Math.max(0, adv.injuredUntil - state.runTimeSeconds))} left
+          </span>
+        )}
         <div className="progress-line">
           <div className="progress-track">
             <div className="progress-fill hp" style={{ width: `${hpPct}%` }} />

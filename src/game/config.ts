@@ -510,6 +510,47 @@ export const QUEST = {
 
 /** Injury duration in game seconds per location tier (before infirmary/perks). */
 export const INJURY_SECONDS_PER_TIER = 180;
+/** A knocked-out party member's injury is at least this fraction of the full
+ * per-tier duration, scaling up to the full duration the harder they were
+ * overkilled (see combat.ts injurySecondsFor). */
+export const INJURY_MIN_FRACTION = 0.3;
+
+// ---------------------------------------------------------------------------
+// Explore: manual, on-demand turn-based battles for the named Champion
+// roster (separate from the auto-resolving quest board above — see combat.ts)
+// ---------------------------------------------------------------------------
+
+/** Max champions in one Explore party. */
+export const EXPLORE_MAX_PARTY_SIZE = 3;
+/** Safety cap on individual attacks in one battle (extreme edge case only —
+ * damage always exceeds 0, so real fights resolve in a handful of rounds). */
+export const EXPLORE_MAX_TURNS = 300;
+
+/** Monster group size scales with location tier: 1 at tier 1-2, up to 3 at tier 5+. */
+export function exploreMonsterCount(tier: number): number {
+  return Math.min(3, 1 + Math.floor((tier - 1) / 2));
+}
+
+// Monster combat stats are derived from location tier * the monster's own
+// QuestTargetDef.difficulty, mirroring how adventurer stats derive from
+// attributes rather than being hand-authored per monster.
+export const MONSTER_HP_BASE = 15;
+export const MONSTER_HP_PER_TIER = 18;
+export const MONSTER_ATK_BASE = 3;
+export const MONSTER_ATK_PER_TIER = 4;
+export const MONSTER_DEF_BASE = 1;
+export const MONSTER_DEF_PER_TIER = 2;
+export const MONSTER_SPEED_BASE = 6;
+export const MONSTER_SPEED_PER_TIER = 0.6;
+export const MONSTER_XP_PER_TIER = 10; // fed through tierXp()
+export const MONSTER_GOLD_PER_TIER = 6;
+export const MONSTER_MATERIAL_CHANCE = 0.5;
+export const MONSTER_EQUIPMENT_CHANCE = 0.05;
+
+/** Damage formula: atk mitigated by the defender's def, K / (K + def), with
+ * +/- variance so identical match-ups don't play out identically every time. */
+export const COMBAT_DEF_MITIGATION_K = 50;
+export const COMBAT_DAMAGE_VARIANCE = 0.3; // roll spans base * [0.85, 1.15]
 
 // ---------------------------------------------------------------------------
 // Activity log

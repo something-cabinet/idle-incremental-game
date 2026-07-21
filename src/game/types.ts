@@ -281,7 +281,7 @@ export interface TownSkillBonuses {
 // Activity log (quest/patrol results shown in the Guild tab)
 // ---------------------------------------------------------------------------
 
-export type LogKind = 'quest' | 'patrol' | 'injury' | 'expedition';
+export type LogKind = 'quest' | 'patrol' | 'injury' | 'expedition' | 'explore';
 
 export interface LogEntry {
   id: number;
