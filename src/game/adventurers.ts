@@ -206,6 +206,8 @@ export function generateAdventurer(id: number, rng: Rng): Adventurer {
     injuredUntil: 0,
     injuredDuration: 0,
     lastAssignment: null,
+    enemiesDefeated: 0,
+    totalDamageDealt: 0,
   };
   return { ...adv, hp: maxHp(adv) };
 }

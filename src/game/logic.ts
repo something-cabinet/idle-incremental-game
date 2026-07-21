@@ -129,6 +129,8 @@ function migrateAdventurer(a: Adventurer, preV5: boolean): Adventurer {
     ...a,
     injuredDuration: a.injuredDuration ?? 0,
     lastAssignment: 'lastAssignment' in a ? a.lastAssignment : null,
+    enemiesDefeated: a.enemiesDefeated ?? 0,
+    totalDamageDealt: a.totalDamageDealt ?? 0,
   };
   if (preV5) {
     const attributes = { ...CLASS_DEFS[patched.className].base } as Attributes;

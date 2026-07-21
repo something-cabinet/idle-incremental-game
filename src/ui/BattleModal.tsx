@@ -57,11 +57,13 @@ export function BattleModal({
   locationName,
   reducedMotion,
   onClose,
+  continueLabel,
 }: {
   result: BattleOutcome;
   locationName: string;
   reducedMotion: boolean;
   onClose: () => void;
+  continueLabel?: string;
 }) {
   const [revealed, setRevealed] = useState(reducedMotion ? result.log.length : 0);
   const [fighters, setFighters] = useState<FighterView[]>(() => initialFighters(result));
@@ -119,7 +121,7 @@ export function BattleModal({
           {visibleLog.length === 0 && <div className="battle-log-line">The battle begins...</div>}
         </div>
 
-        {done && <BattleSummary result={result} onClose={onClose} />}
+        {done && <BattleSummary result={result} onClose={onClose} continueLabel={continueLabel} />}
       </div>
     </div>
   );
@@ -159,7 +161,7 @@ function BattleSide({
   );
 }
 
-function BattleSummary({ result, onClose }: { result: BattleOutcome; onClose: () => void }) {
+function BattleSummary({ result, onClose, continueLabel }: { result: BattleOutcome; onClose: () => void; continueLabel?: string }) {
   const win = result.outcome === 'win';
   const injured = result.party.filter((p) => p.knockedOut);
   return (
@@ -182,7 +184,7 @@ function BattleSummary({ result, onClose }: { result: BattleOutcome; onClose: ()
           <span className="row-bad">{injured.map((p) => p.name).join(', ')} knocked out — recovering at town.</span>
         )}
         <button className="small-button" onClick={onClose} style={{ marginTop: 8 }}>
-          Continue
+          {continueLabel ?? 'Continue'}
         </button>
       </div>
     </div>

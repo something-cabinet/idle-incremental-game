@@ -18,13 +18,19 @@ import {
   targetsForLocation,
   zones,
 } from '../../game/guild';
-import type { Adventurer, LocationDef, QuestRequirement, QuestTargetDef } from '../../game/types';
+import type { Adventurer, AdventurerClass, LocationDef, QuestRequirement, QuestTargetDef } from '../../game/types';
 import { useGameState, useGameStore } from '../../hooks/useGame';
 import { BattleModal } from '../BattleModal';
 
 function materialName(id: string): string {
   return MATERIALS.find((m) => m.id === id)?.name ?? id;
 }
+
+const CLASS_LABEL: Record<AdventurerClass, string> = {
+  warrior: 'Warrior',
+  ranger: 'Ranger',
+  mage: 'Mage',
+};
 
 /** Compact rate number: 12.3, 0.45, 1,240. */
 function rate(n: number): string {
@@ -122,6 +128,10 @@ function ExploreDialog({ zone, onClose }: { zone: LocationDef; onClose: () => vo
   const state = useGameState();
   const [partyIds, setPartyIds] = useState<number[]>([]);
   const [battle, setBattle] = useState<BattleOutcome | null>(null);
+  const [repeatInput, setRepeatInput] = useState('');
+  const [fightsRemaining, setFightsRemaining] = useState(0);
+
+  const repeatCount = Number(repeatInput) || 0;
 
   function toggle(id: number) {
     setPartyIds((prev) => {
@@ -131,23 +141,51 @@ function ExploreDialog({ zone, onClose }: { zone: LocationDef; onClose: () => vo
     });
   }
 
-  function begin() {
+  function runNextFight() {
     let outcome: BattleOutcome | null = null;
     store.dispatch((s) => {
       const { state: next, result } = runExplore(s, zone.id, partyIds, Math.random);
       outcome = result;
       return next;
     });
-    if (outcome) setBattle(outcome);
+    if (outcome) {
+      setBattle(outcome);
+    }
+  }
+
+  function begin() {
+    if (repeatCount > 0) {
+      setFightsRemaining(repeatCount - 1);
+    } else {
+      setFightsRemaining(0);
+    }
+    runNextFight();
+  }
+
+  function handleBattleClose() {
+    const more = repeatCount === 0 || fightsRemaining > 0;
+    if (more) {
+      if (repeatCount > 0) {
+        setFightsRemaining((r) => r - 1);
+      }
+      runNextFight();
+    } else {
+      onClose();
+    }
   }
 
   if (battle) {
+    const label =
+      repeatCount === 0
+        ? 'Continue'
+        : `Continue (${fightsRemaining} left)`;
     return (
       <BattleModal
         result={battle}
         locationName={zone.name}
         reducedMotion={state.settings.reducedMotion}
-        onClose={onClose}
+        onClose={handleBattleClose}
+        continueLabel={label}
       />
     );
   }
@@ -181,8 +219,22 @@ function ExploreDialog({ zone, onClose }: { zone: LocationDef; onClose: () => vo
           ))}
         </div>
 
+        <div className="quest-post">
+          <label className="field-label">
+            repeats
+            <input
+              type="number"
+              min={0}
+              placeholder="∞"
+              value={repeatInput}
+              onChange={(e) => setRepeatInput(e.target.value)}
+            />
+          </label>
+        </div>
+
         <button className="small-button" disabled={partyIds.length === 0} onClick={begin}>
           ⚔ Begin Explore ({partyIds.length}/{EXPLORE_MAX_PARTY_SIZE})
+          {repeatCount > 0 ? ` ×${repeatCount}` : ' ∞'}
         </button>
       </div>
     </div>
@@ -213,7 +265,7 @@ function ExplorePartyRow({
       <div className="row-info">
         <span className="row-name">{adv.name}</span>
         <span className="row-desc">
-          Lv {adv.level} · ATK {stats.atk} · DEF {stats.def} · HP {stats.maxHp}
+          {CLASS_LABEL[adv.className]} · Lv {adv.level} · ATK {stats.atk} · DEF {stats.def} · HP {stats.maxHp}
         </span>
         {unavailableReason && <span className="row-bad">{unavailableReason}</span>}
       </div>

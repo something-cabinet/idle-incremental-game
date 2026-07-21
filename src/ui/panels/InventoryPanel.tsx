@@ -124,10 +124,9 @@ function essencePreview(items: Equipment[]): Record<string, number> {
   return totals;
 }
 
-function essencePreviewLabel(totals: Record<string, number>): string {
-  return Object.entries(totals)
-    .map(([id, n]) => `${n} ${materialName(id)}`)
-    .join(' · ');
+function essencePreviewLines(items: Equipment[]): { id: string; label: string }[] {
+  const totals = essencePreview(items);
+  return Object.entries(totals).map(([id, n]) => ({ id, label: `${n} ${materialName(id)}` }));
 }
 
 function EquipmentSection() {
@@ -149,7 +148,7 @@ function EquipmentSection() {
     sortMode,
   );
   const filterActive = rarityFilter !== 'all' || slotFilter !== 'all';
-  const bulkEssence = essencePreview(visibleItems);
+  const bulkEssenceLines = essencePreviewLines(visibleItems);
 
   function handleDisassemble(item: Equipment) {
     store.dispatch((s) => disassembleItem(s, item.id));
@@ -294,11 +293,19 @@ function EquipmentSection() {
             <p className="story-text">
               This will break down{' '}
               {filterActive ? 'every item matching the current filters' : 'your entire equipment inventory'}{' '}
-              into {essencePreviewLabel(bulkEssence)}. This cannot be undone.
+              into:
             </p>
+            <div className="materials-list">
+              {bulkEssenceLines.map((line) => (
+                <div key={line.id} className="materials-list-item">
+                  <span className="materials-list-name">{line.label}</span>
+                </div>
+              ))}
+            </div>
+            <p className="story-text">This cannot be undone.</p>
             <div className="equip-detail-actions">
               <button className="small-button danger" onClick={handleBulkDisassemble}>
-                Disassemble for {essencePreviewLabel(bulkEssence)}
+                Disassemble
               </button>
               <button className="small-button" onClick={() => setConfirmBulkDisassemble(false)}>
                 Cancel

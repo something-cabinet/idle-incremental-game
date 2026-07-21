@@ -399,6 +399,23 @@ function ChampionDetailModal({ adv, onClose }: { adv: Adventurer; onClose: () =>
 
         <AttributeBars attributes={attrs} />
 
+        {(adv.enemiesDefeated > 0 || adv.totalDamageDealt > 0) && (
+          <div className="detail-stats">
+            {adv.enemiesDefeated > 0 && (
+              <div className="stat">
+                <span className="stat-value">{adv.enemiesDefeated}</span>
+                <span className="stat-label">Enemies Defeated</span>
+              </div>
+            )}
+            {adv.totalDamageDealt > 0 && (
+              <div className="stat">
+                <span className="stat-value">{adv.totalDamageDealt}</span>
+                <span className="stat-label">Total Damage</span>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="section-title-row">
           <h3 className="section-title">Equipment</h3>
           <button

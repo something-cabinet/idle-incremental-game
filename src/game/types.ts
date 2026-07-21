@@ -128,6 +128,10 @@ export interface Adventurer {
   /** The assignment the adventurer had before being injured, so they can
    *  auto-reassign to the same location/mode when they recover. */
   lastAssignment: Assignment | null;
+  /** Total enemies defeated in Explore battles */
+  enemiesDefeated: number;
+  /** Total damage dealt in Explore battles */
+  totalDamageDealt: number;
 }
 
 export interface LocationDef {

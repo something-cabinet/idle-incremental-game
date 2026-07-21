@@ -9,7 +9,9 @@ import {
 import {
   COMBAT_DAMAGE_VARIANCE,
   COMBAT_DEF_MITIGATION_K,
+  EXPLORE_EQUIPMENT_CHANCE,
   EXPLORE_MAX_TURNS,
+  EXPLORE_RARITY_TIER_BOOST,
   INFIRMARY_HEAL_BONUS,
   INJURY_MIN_FRACTION,
   INJURY_SECONDS_PER_TIER,
@@ -18,7 +20,6 @@ import {
   MONSTER_ATK_PER_TIER,
   MONSTER_DEF_BASE,
   MONSTER_DEF_PER_TIER,
-  MONSTER_EQUIPMENT_CHANCE,
   MONSTER_GOLD_PER_TIER,
   MONSTER_HP_BASE,
   MONSTER_HP_PER_TIER,
@@ -80,6 +81,8 @@ export interface PartyBattleResult {
   maxHp: number;
   knockedOut: boolean;
   injurySeconds: number;
+  enemiesDefeated: number;
+  damageDealt: number;
 }
 
 export interface BattleOutcome {
@@ -233,6 +236,25 @@ export function simulateBattle(
   const healSpeedMult =
     computeModifiers(state).healSpeedMult * (1 + INFIRMARY_HEAL_BONUS * (state.guildUpgrades.infirmary ?? 0));
 
+  // Track damage dealt and kills per party member
+  const partyDamage: Record<number, number> = {};
+  const partyKills: Record<number, number> = {};
+  for (const entry of log) {
+    if (entry.attackerSide === 'party') {
+      const adv = party.find((a) => a.name === entry.attackerName);
+      if (adv) {
+        partyDamage[adv.id] = (partyDamage[adv.id] ?? 0) + entry.damage;
+      }
+    }
+    if (entry.defenderDefeated && entry.defenderSide === 'monsters') {
+      // Find who landed the killing blow
+      const killer = party.find((a) => a.name === entry.attackerName);
+      if (killer) {
+        partyKills[killer.id] = (partyKills[killer.id] ?? 0) + 1;
+      }
+    }
+  }
+
   const partyResults: PartyBattleResult[] = combatants
     .filter((c): c is Combatant => c.side === 'party')
     .map((c) => {
@@ -244,6 +266,8 @@ export function simulateBattle(
         maxHp: c.maxHp,
         knockedOut,
         injurySeconds: knockedOut ? injurySecondsFor(-c.hp, c.maxHp, tier, healSpeedMult) : 0,
+        enemiesDefeated: partyKills[c.refId] ?? 0,
+        damageDealt: partyDamage[c.refId] ?? 0,
       };
     });
 
@@ -253,6 +277,9 @@ export function simulateBattle(
   const equipment: Equipment[] = [];
   let timeShards = 0;
   let nextId = state.nextEntityId;
+  // Explore uses boosted equipment chance and rarity tier
+  const equipChance = EXPLORE_EQUIPMENT_CHANCE;
+  const rarityTier = tier + EXPLORE_RARITY_TIER_BOOST;
   if (outcome === 'win') {
     for (const m of monsters) {
       gold += m.goldReward;
@@ -260,8 +287,8 @@ export function simulateBattle(
       if (rng() < MONSTER_MATERIAL_CHANCE) {
         materials[m.materialId] = (materials[m.materialId] ?? 0) + 1;
       }
-      if (rng() < MONSTER_EQUIPMENT_CHANCE) {
-        equipment.push(generateEquipment(nextId++, tier, rng));
+      if (rng() < equipChance) {
+        equipment.push(generateEquipment(nextId++, rarityTier, rng));
       }
     }
     if (loc && rng() < loc.shardChance) timeShards += 1;
@@ -299,6 +326,12 @@ export function applyBattleResult(state: GameState, result: BattleOutcome, rng: 
     }
     if (result.outcome === 'win' && result.rewards.xp > 0) {
       next = gainXp(next, result.rewards.xp);
+    }
+    if (pr.enemiesDefeated > 0) {
+      next = { ...next, enemiesDefeated: next.enemiesDefeated + pr.enemiesDefeated };
+    }
+    if (pr.damageDealt > 0) {
+      next = { ...next, totalDamageDealt: next.totalDamageDealt + pr.damageDealt };
     }
     return next;
   });

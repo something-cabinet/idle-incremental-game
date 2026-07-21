@@ -46,7 +46,7 @@ export const AUTOSAVE_INTERVAL_MS = 10_000;
  * interval firing on schedule — see useGameLoop's visibility listeners.
  */
 export const BACKGROUND_CATCHUP_GAP_MS = 3_000;
-export const SAVE_VERSION = 11;
+export const SAVE_VERSION = 12;
 
 // ---------------------------------------------------------------------------
 // Act 1 — town income (low numbers by design)
@@ -551,6 +551,11 @@ export const MONSTER_EQUIPMENT_CHANCE = 0.05;
  * +/- variance so identical match-ups don't play out identically every time. */
 export const COMBAT_DEF_MITIGATION_K = 50;
 export const COMBAT_DAMAGE_VARIANCE = 0.3; // roll spans base * [0.85, 1.15]
+
+/** Explore fights get boosted equipment drop chance vs regular monster drops. */
+export const EXPLORE_EQUIPMENT_CHANCE = 0.1;
+/** Rarity boost for Explore: location tier offset applied to rarity rolls. */
+export const EXPLORE_RARITY_TIER_BOOST = 1;
 
 // ---------------------------------------------------------------------------
 // Activity log
