@@ -11,7 +11,6 @@ import {
   COMBAT_DEF_MITIGATION_K,
   EXPLORE_EQUIPMENT_CHANCE,
   EXPLORE_MAX_TURNS,
-  EXPLORE_RARITY_TIER_BOOST,
   INFIRMARY_HEAL_BONUS,
   INJURY_MIN_FRACTION,
   INJURY_SECONDS_PER_TIER,
@@ -277,9 +276,8 @@ export function simulateBattle(
   const equipment: Equipment[] = [];
   let timeShards = 0;
   let nextId = state.nextEntityId;
-  // Explore uses boosted equipment chance and rarity tier
+  // Explore uses boosted equipment drop chance
   const equipChance = EXPLORE_EQUIPMENT_CHANCE;
-  const rarityTier = tier + EXPLORE_RARITY_TIER_BOOST;
   if (outcome === 'win') {
     for (const m of monsters) {
       gold += m.goldReward;
@@ -288,7 +286,7 @@ export function simulateBattle(
         materials[m.materialId] = (materials[m.materialId] ?? 0) + 1;
       }
       if (rng() < equipChance) {
-        equipment.push(generateEquipment(nextId++, rarityTier, rng));
+        equipment.push(generateEquipment(nextId++, tier, rng));
       }
     }
     if (loc && rng() < loc.shardChance) timeShards += 1;

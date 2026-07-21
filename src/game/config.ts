@@ -554,8 +554,6 @@ export const COMBAT_DAMAGE_VARIANCE = 0.3; // roll spans base * [0.85, 1.15]
 
 /** Explore fights get boosted equipment drop chance vs regular monster drops. */
 export const EXPLORE_EQUIPMENT_CHANCE = 0.1;
-/** Rarity boost for Explore: location tier offset applied to rarity rolls. */
-export const EXPLORE_RARITY_TIER_BOOST = 1;
 
 // ---------------------------------------------------------------------------
 // Activity log
@@ -577,8 +575,8 @@ export const SUCCESS_CHANCE_MIN = 0.1;
 export const SUCCESS_CHANCE_MAX = 0.95;
 
 export const RARITY_WEIGHTS: [Rarity, number][] = [
-  ['common', 0.7],
-  ['rare', 0.25],
+  ['common', 0.75],
+  ['rare', 0.2],
   ['epic', 0.05],
 ];
 /** Zone tier at/above which drops get a shot at exalted (Sunken Ruins onward). */
