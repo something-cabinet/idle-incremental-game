@@ -13,6 +13,7 @@ import {
   CRAFT_TIME_TIER_EXP,
   DEMON_KING_ID,
   ESSENCE_TIER_DIV,
+  EXPLORE_MAX_PARTY_SIZE,
   GENERAL_IDS,
   GUILD_UPGRADES,
   HIRE_BASE_COST,
@@ -413,7 +414,15 @@ export function canAssign(state: GameState, advId: number): boolean {
   return !isInjured(adv, state.runTimeSeconds) && adv.assignment === null;
 }
 
-/** Send an adventurer to a zone on patrol or quest. */
+/** Champions currently auto-patrolling a given zone (up to EXPLORE_MAX_PARTY_SIZE). */
+export function patrolMembers(state: GameState, locationId: string): Adventurer[] {
+  return state.adventurers.filter(
+    (a) => a.assignment?.mode === 'patrol' && a.assignment.locationId === locationId,
+  );
+}
+
+/** Send an adventurer to a zone on patrol or quest. A zone holds at most
+ * EXPLORE_MAX_PARTY_SIZE patrolling champions (they fight together as a party). */
 export function assignAdventurer(
   state: GameState,
   advId: number,
@@ -424,6 +433,9 @@ export function assignAdventurer(
   if (!loc || loc.kind !== 'zone') return state;
   if (state.act < 2 || !isZoneUnlocked(state, locationId)) return state;
   if (!canAssign(state, advId)) return state;
+  if (mode === 'patrol' && patrolMembers(state, locationId).length >= EXPLORE_MAX_PARTY_SIZE) {
+    return state;
+  }
   return updateAdventurer(state, advId, (a) => ({
     ...a,
     assignment: {
@@ -435,6 +447,18 @@ export function assignAdventurer(
     },
     lastAssignment: null, // manual assignment overrides any auto-reassign memory
   }));
+}
+
+/** Assign several champions to patrol a zone at once (respects the per-zone
+ * cap; ids already busy/injured are skipped). Used by the Explore dialog. */
+export function sendPartyOnPatrol(
+  state: GameState,
+  advIds: number[],
+  locationId: string,
+): GameState {
+  let s = state;
+  for (const id of advIds) s = assignAdventurer(s, id, locationId, 'patrol');
+  return s;
 }
 
 export function recallAdventurer(state: GameState, advId: number): GameState {

@@ -1,4 +1,5 @@
 import { generateEquipment } from './adventurers';
+import { processPatrols } from './combat';
 import { ACTIVITY_LOG_MAX, CRAFT_MAX_RARITY } from './config';
 import {
   allocateAdventurers,
@@ -25,10 +26,11 @@ import type { CraftJob, Equipment, GameState, Quest, Rng } from './types';
  *    elapses (see processCrafting) — gold/materials are spent up front when
  *    the job starts (guild.ts startCraft), not here.
  *
- * The managed Champion roster can now be recruited and equipped (see
- * guild.ts), but combat assignment/expeditions are still dormant (see
- * types.ts) — this roster is not otherwise processed here; Act 3 expeditions
- * are parked until it is built out.
+ * The managed Champion roster is also processed here now: champions posted to
+ * a zone on patrol (guild.ts assignAdventurer) auto-battle it every
+ * ENCOUNTER_INTERVAL via processPatrols (combat.ts), earning XP/loot and
+ * taking injuries — online and, through the same replayed loop, offline. Act 3
+ * expeditions remain parked until that system is built out.
  */
 export function tick(
   state: GameState,
@@ -61,11 +63,16 @@ export function tick(
   next.inventory = craft.inventory;
   next.nextEntityId = craft.nextEntityId;
 
-  if (next.activityLog.length > ACTIVITY_LOG_MAX) {
-    next.activityLog = next.activityLog.slice(-ACTIVITY_LOG_MAX);
+  // Auto-patrol: assigned champions fight the zone they're posted to. Returns a
+  // fresh state (roster/gold/materials/inventory/shards/log all updated), so
+  // reassign rather than mutate. Offline catch-up replays this same loop.
+  let out = processPatrols(next, rng);
+
+  if (out.activityLog.length > ACTIVITY_LOG_MAX) {
+    out = { ...out, activityLog: out.activityLog.slice(-ACTIVITY_LOG_MAX) };
   }
 
-  return checkStoryTriggers(next);
+  return checkStoryTriggers(out);
 }
 
 // ---------------------------------------------------------------------------

@@ -13,8 +13,11 @@ import { formatDuration } from '../../game/format';
 import {
   clampBatchSize,
   isZoneUnlocked,
+  patrolMembers,
   postQuest,
   previewBatchSummary,
+  recallAdventurer,
+  sendPartyOnPatrol,
   targetsForLocation,
   zones,
 } from '../../game/guild';
@@ -162,6 +165,12 @@ function ExploreDialog({ zone, onClose }: { zone: LocationDef; onClose: () => vo
     runNextFight();
   }
 
+  function sendOnPatrol() {
+    if (partyIds.length === 0) return;
+    store.dispatch((s) => sendPartyOnPatrol(s, partyIds, zone.id));
+    onClose();
+  }
+
   function handleBattleClose() {
     const more = repeatCount === 0 || fightsRemaining > 0;
     if (more) {
@@ -190,6 +199,9 @@ function ExploreDialog({ zone, onClose }: { zone: LocationDef; onClose: () => vo
     );
   }
 
+  const patrolling = patrolMembers(state, zone.id);
+  const patrolSlotsLeft = EXPLORE_MAX_PARTY_SIZE - patrolling.length;
+
   return (
     <div className="story-overlay" onClick={onClose}>
       <div className="story-modal detail-modal" onClick={(e) => e.stopPropagation()}>
@@ -198,10 +210,34 @@ function ExploreDialog({ zone, onClose }: { zone: LocationDef; onClose: () => vo
           <button className="small-button" onClick={onClose}>✕</button>
         </div>
         <p className="detail-sub">
-          Pick up to {EXPLORE_MAX_PARTY_SIZE} champions to send in — the fight plays out
-          turn-by-turn on the spot. A loss knocks out and injures whoever's still
-          standing when it ends; no permadeath.
+          Pick up to {EXPLORE_MAX_PARTY_SIZE} champions. <strong>Begin Explore</strong> fights
+          right now, turn-by-turn. <strong>Send on Patrol</strong> posts them here to auto-battle
+          on their own — they keep earning XP and loot while you're away, and rest to recover if a
+          fight goes badly. No permadeath.
         </p>
+
+        {patrolling.length > 0 && (
+          <div className="rows">
+            <h3 className="section-title">🗺️ Patrolling here ({patrolling.length}/{EXPLORE_MAX_PARTY_SIZE})</h3>
+            {patrolling.map((adv) => (
+              <div key={adv.id} className="row item-common">
+                <div className="row-info">
+                  <span className="row-name">{adv.name}</span>
+                  <span className="row-desc">
+                    Lv {adv.level}
+                    {isInjured(adv, state.runTimeSeconds) ? ' · 🩹 resting' : ' · on patrol'}
+                  </span>
+                </div>
+                <button
+                  className="small-button danger"
+                  onClick={() => store.dispatch((s) => recallAdventurer(s, adv.id))}
+                >
+                  Recall
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
         <div className="rows">
           {state.adventurers.length === 0 && (
@@ -232,10 +268,19 @@ function ExploreDialog({ zone, onClose }: { zone: LocationDef; onClose: () => vo
           </label>
         </div>
 
-        <button className="small-button" disabled={partyIds.length === 0} onClick={begin}>
-          ⚔ Begin Explore ({partyIds.length}/{EXPLORE_MAX_PARTY_SIZE})
-          {repeatCount > 0 ? ` ×${repeatCount}` : ' ∞'}
-        </button>
+        <div className="zone-actions">
+          <button className="small-button" disabled={partyIds.length === 0} onClick={begin}>
+            ⚔ Begin Explore ({partyIds.length}/{EXPLORE_MAX_PARTY_SIZE})
+            {repeatCount > 0 ? ` ×${repeatCount}` : ' ∞'}
+          </button>
+          <button
+            className="small-button"
+            disabled={partyIds.length === 0 || patrolSlotsLeft <= 0}
+            onClick={sendOnPatrol}
+          >
+            🗺️ Send on Patrol
+          </button>
+        </div>
       </div>
     </div>
   );

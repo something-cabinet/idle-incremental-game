@@ -9,7 +9,9 @@ import {
 import {
   COMBAT_DAMAGE_VARIANCE,
   COMBAT_DEF_MITIGATION_K,
+  ENCOUNTER_INTERVAL,
   EXPLORE_EQUIPMENT_CHANCE,
+  EXPLORE_MAX_PARTY_SIZE,
   EXPLORE_MAX_TURNS,
   INFIRMARY_HEAL_BONUS,
   INJURY_MIN_FRACTION,
@@ -23,6 +25,7 @@ import {
   MONSTER_HP_BASE,
   MONSTER_HP_PER_TIER,
   MONSTER_MATERIAL_CHANCE,
+  MAX_ENCOUNTERS_PER_TICK,
   MONSTER_SPEED_BASE,
   MONSTER_SPEED_PER_TIER,
   MONSTER_XP_PER_TIER,
@@ -31,7 +34,7 @@ import {
 } from './config';
 import { locationDef, targetsForLocation } from './guild';
 import { computeModifiers } from './perks';
-import type { Adventurer, Equipment, GameState, LogEntry, QuestTargetDef, Rng } from './types';
+import type { Adventurer, Equipment, GameState, LogEntry, LogKind, QuestTargetDef, Rng } from './types';
 
 /** Pure turn-based Explore combat: party vs a location's monsters, resolved
  * with speed-ordered initiative until one side is fully defeated. Separate
@@ -303,10 +306,26 @@ export function simulateBattle(
 }
 
 /** Apply a resolved battle to GameState: grants rewards on a win, injures any
- * knocked-out champion regardless of outcome, and appends an activity log
- * entry. Pure — does not touch React/UI state. */
-export function applyBattleResult(state: GameState, result: BattleOutcome, rng: Rng): GameState {
+ * knocked-out champion regardless of outcome, and (optionally) appends an
+ * activity log entry. Pure — does not touch React/UI state.
+ *
+ * Gold, materials, equipment and shards are shared guild spoils. XP is the
+ * exception: the monster group's total XP is split *evenly* across the party,
+ * so a lone champion earns the whole pot (harder fight, faster leveling) while
+ * a full trio each get a third — see docs discussion / user design intent.
+ *
+ * `logKind` controls the activity-log entry: 'explore' (default) for a manual
+ * Explore fight, 'injury' for an auto-patrol encounter that hurt someone, or
+ * null to stay silent (routine patrol wins, to avoid flooding the log). */
+export function applyBattleResult(
+  state: GameState,
+  result: BattleOutcome,
+  rng: Rng,
+  logKind: LogKind | null = 'explore',
+): GameState {
   const loc = locationDef(result.locationId);
+  const xpEach =
+    result.party.length > 0 ? Math.floor(result.rewards.xp / result.party.length) : 0;
 
   const adventurers = state.adventurers.map((a) => {
     const pr = result.party.find((p) => p.advId === a.id);
@@ -322,8 +341,8 @@ export function applyBattleResult(state: GameState, result: BattleOutcome, rng: 
     } else {
       next = { ...next, hp: maxHp(next) };
     }
-    if (result.outcome === 'win' && result.rewards.xp > 0) {
-      next = gainXp(next, result.rewards.xp);
+    if (result.outcome === 'win' && xpEach > 0) {
+      next = gainXp(next, xpEach);
     }
     if (pr.enemiesDefeated > 0) {
       next = { ...next, enemiesDefeated: next.enemiesDefeated + pr.enemiesDefeated };
@@ -339,18 +358,27 @@ export function applyBattleResult(state: GameState, result: BattleOutcome, rng: 
     materials[id] = (materials[id] ?? 0) + amount;
   }
 
-  const names = result.party.map((p) => p.name).join(', ');
-  const phrase =
-    result.outcome === 'win'
-      ? LOG_PHRASES.questSuccess[Math.floor(rng() * LOG_PHRASES.questSuccess.length)]
-      : LOG_PHRASES.questFail[Math.floor(rng() * LOG_PHRASES.questFail.length)];
-  const entry: LogEntry = {
-    id: state.nextEntityId + result.rewards.equipment.length,
-    at: state.runTimeSeconds,
-    kind: 'explore',
-    text: `${names} ${phrase} ${loc?.name ?? result.locationId}.`,
-  };
-  const activityLog = [...state.activityLog, entry];
+  const equipCount = result.rewards.equipment.length;
+  const logId = state.nextEntityId + equipCount;
+  let activityLog = state.activityLog;
+  if (logKind) {
+    const locName = loc?.name ?? result.locationId;
+    let text: string;
+    if (logKind === 'injury') {
+      const hurt = result.party.filter((p) => p.knockedOut).map((p) => p.name).join(', ');
+      const phrase = LOG_PHRASES.questFail[Math.floor(rng() * LOG_PHRASES.questFail.length)];
+      text = `${hurt} ${phrase} ${locName}.`;
+    } else {
+      const names = result.party.map((p) => p.name).join(', ');
+      const phrase =
+        result.outcome === 'win'
+          ? LOG_PHRASES.questSuccess[Math.floor(rng() * LOG_PHRASES.questSuccess.length)]
+          : LOG_PHRASES.questFail[Math.floor(rng() * LOG_PHRASES.questFail.length)];
+      text = `${names} ${phrase} ${locName}.`;
+    }
+    const entry: LogEntry = { id: logId, at: state.runTimeSeconds, kind: logKind, text };
+    activityLog = [...state.activityLog, entry];
+  }
 
   return {
     ...state,
@@ -360,13 +388,14 @@ export function applyBattleResult(state: GameState, result: BattleOutcome, rng: 
     materials,
     inventory: [...state.inventory, ...result.rewards.equipment],
     timeShards: state.timeShards + result.rewards.timeShards,
-    nextEntityId: entry.id + 1,
+    // Equipment consumed [nextEntityId .. logId); the log entry (if any) takes logId.
+    nextEntityId: logKind ? logId + 1 : logId,
     activityLog,
   };
 }
 
 /** Roll a monster group, simulate the battle, and apply its result to state
- * in one step — the single entry point the UI calls. */
+ * in one step — the single entry point the manual Explore UI calls. */
 export function runExplore(
   state: GameState,
   locationId: string,
@@ -379,4 +408,83 @@ export function runExplore(
   const monsters = rollMonsterGroup(locationId, rng);
   const result = simulateBattle(state, party, monsters, locationId, rng);
   return { state: applyBattleResult(state, result, rng), result };
+}
+
+// ---------------------------------------------------------------------------
+// Auto-patrol: champions assigned (mode 'patrol') to a zone auto-battle a
+// fresh monster group there every ENCOUNTER_INTERVAL of game time. This runs
+// inside engine.tick, so a single big offline dt replays the same fixed-step
+// loop — champions earn XP/loot and take injuries while the player is away.
+// ---------------------------------------------------------------------------
+
+/** Champions currently auto-patrolling a given zone. */
+function patrolAssigned(state: GameState, locationId: string): Adventurer[] {
+  return state.adventurers.filter(
+    (a) => a.assignment?.mode === 'patrol' && a.assignment.locationId === locationId,
+  );
+}
+
+/** Advance every patrol-assigned champion at `locationId` to a new encounter
+ * clock, whether or not they fought this step (keeps the group in sync). */
+function setPatrolClock(state: GameState, locationId: string, at: number): GameState {
+  return {
+    ...state,
+    adventurers: state.adventurers.map((a) =>
+      a.assignment?.mode === 'patrol' && a.assignment.locationId === locationId
+        ? { ...a, assignment: { ...a.assignment, lastEncounterAt: at } }
+        : a,
+    ),
+  };
+}
+
+/**
+ * Process all pending auto-patrol encounters up to state.runTimeSeconds. Pure
+ * and dt-agnostic: called once per tick with time already advanced, it steps
+ * each patrolled zone forward in fixed ENCOUNTER_INTERVAL beats (capped by
+ * MAX_ENCOUNTERS_PER_TICK across all zones so a huge offline gap stays bounded).
+ *
+ * Each beat forms a party of up to EXPLORE_MAX_PARTY_SIZE *healthy* members at
+ * that zone (a member injured earlier in the same offline window is skipped
+ * until their injury elapses, then auto-rejoins), fights a rolled group, and
+ * applies the result. Knocked-out members stay assigned but rest until healed
+ * — no permadeath, no manual re-assign needed.
+ */
+export function processPatrols(state: GameState, rng: Rng): GameState {
+  const locationIds = Array.from(
+    new Set(
+      state.adventurers
+        .filter((a) => a.assignment?.mode === 'patrol')
+        .map((a) => a.assignment!.locationId),
+    ),
+  );
+  if (locationIds.length === 0) return state;
+
+  let s = state;
+  let budget = MAX_ENCOUNTERS_PER_TICK;
+
+  for (const locationId of locationIds) {
+    while (budget > 0) {
+      const assigned = patrolAssigned(s, locationId);
+      if (assigned.length === 0) break;
+      const clock = Math.max(...assigned.map((a) => a.assignment!.lastEncounterAt));
+      const stepTime = clock + ENCOUNTER_INTERVAL;
+      if (stepTime > s.runTimeSeconds) break; // no full interval elapsed yet
+
+      const party = assigned
+        .filter((a) => !isInjured(a, stepTime))
+        .slice(0, EXPLORE_MAX_PARTY_SIZE);
+
+      if (party.length > 0) {
+        const monsters = rollMonsterGroup(locationId, rng);
+        const result = simulateBattle(s, party, monsters, locationId, rng);
+        const logKind = result.party.some((p) => p.knockedOut) ? 'injury' : null;
+        s = applyBattleResult(s, result, rng, logKind);
+      }
+      // Advance the whole group's clock (fighters and resting injured alike).
+      s = setPatrolClock(s, locationId, stepTime);
+      budget--;
+    }
+  }
+
+  return s;
 }

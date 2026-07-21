@@ -12,6 +12,7 @@ import {
   guildUpgradeCost,
   hireCandidate,
   hireCost,
+  locationDef,
   questBatchSummary,
   questProgress,
   questRates,
@@ -199,6 +200,11 @@ function ChampionCard({ adv, onOpen }: { adv: Adventurer; onOpen: () => void }) 
         <span className="row-sub">
           ATK {stats.atk} · DEF {stats.def} · HP {Math.round(adv.hp)}/{hpMax}
         </span>
+        {adv.assignment?.mode === 'patrol' && (
+          <span className="row-good">
+            🗺️ Patrolling {locationDef(adv.assignment.locationId)?.name ?? adv.assignment.locationId}
+          </span>
+        )}
         {injured && (
           <span className="row-bad">
             🩹 Recovering — {formatDuration(Math.max(0, adv.injuredUntil - state.runTimeSeconds))} left
