@@ -20,6 +20,7 @@ import { canFoundGuild, foundGuild, guildFoundingCost } from '../../game/story';
 import type { TownSkillDef } from '../../game/types';
 import { useFormat } from '../../hooks/useFormat';
 import { useGameState, useGameStore } from '../../hooks/useGame';
+import { usePanelSection } from '../../hooks/usePanelSection';
 
 const BUY_AMOUNTS = [1, 5, 10, 100] as const;
 
@@ -27,7 +28,7 @@ export function TownPanel() {
   const store = useGameStore();
   const state = useGameState();
   const fmt = useFormat();
-  const [section, setSection] = useState<'jobs' | 'skills'>('jobs');
+  const [section, setSection] = usePanelSection<'jobs' | 'skills'>('town', 'jobs');
   const [buyAmount, setBuyAmount] = useState<number>(1);
 
   return (

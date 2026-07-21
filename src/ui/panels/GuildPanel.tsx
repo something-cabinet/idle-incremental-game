@@ -27,6 +27,7 @@ import {
 import type { Adventurer, AdventurerClass, Attributes, EquipSlot, Quest } from '../../game/types';
 import { useFormat } from '../../hooks/useFormat';
 import { useGameState, useGameStore } from '../../hooks/useGame';
+import { usePanelSection } from '../../hooks/usePanelSection';
 import { itemIcon, itemStatParts, itemTypeLabel } from '../itemDisplay';
 
 type Section = 'adventurers' | 'quests' | 'upgrades';
@@ -69,7 +70,7 @@ function rate(n: number): string {
 }
 
 export function GuildPanel() {
-  const [section, setSection] = useState<Section>('adventurers');
+  const [section, setSection] = usePanelSection<Section>('guild', 'adventurers');
 
   return (
     <div className="panel">

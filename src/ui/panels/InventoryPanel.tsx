@@ -4,6 +4,7 @@ import { disassembleItem, disassembleItems, essenceMaterialId, essenceYield } fr
 import type { EquipSlot, Equipment, Rarity } from '../../game/types';
 import { useFormat } from '../../hooks/useFormat';
 import { useGameState, useGameStore } from '../../hooks/useGame';
+import { usePanelSection } from '../../hooks/usePanelSection';
 import { itemIcon, itemStatParts, itemTypeLabel } from '../itemDisplay';
 
 type Section = 'materials' | 'equipment';
@@ -29,7 +30,7 @@ function materialName(id: string): string {
 }
 
 export function InventoryPanel() {
-  const [section, setSection] = useState<Section>('materials');
+  const [section, setSection] = usePanelSection<Section>('inventory', 'materials');
 
   return (
     <div className="panel">
