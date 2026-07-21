@@ -857,6 +857,7 @@ button.row:disabled {
 
 .equip-menu-wrap {
   position: relative;
+  z-index: 6;
 }
 
 .equip-menu-backdrop {

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { MATERIALS, RARITY_SELL_GOLD } from '../../game/config';
-import { sellItem } from '../../game/guild';
+import { sellItem, sellItems } from '../../game/guild';
+import type { EquipSlot, Equipment, Rarity } from '../../game/types';
 import { useFormat } from '../../hooks/useFormat';
 import { useGameState, useGameStore } from '../../hooks/useGame';
 import { itemIcon, itemStatParts, itemTypeLabel } from '../itemDisplay';
@@ -72,37 +73,215 @@ function MaterialsSection() {
   );
 }
 
+type SortMode = 'newest' | 'rarity' | 'atk' | 'def';
+
+const SORT_LABEL: Record<SortMode, string> = {
+  newest: 'Newest',
+  rarity: 'Rarity',
+  atk: 'Attack',
+  def: 'Defense',
+};
+
+const RARITY_ORDER: Record<Rarity, number> = { common: 0, rare: 1, epic: 2, exalted: 3 };
+const RARITIES: Rarity[] = ['common', 'rare', 'epic', 'exalted'];
+const SLOTS: EquipSlot[] = ['weapon', 'armor', 'trinket'];
+
+function sortInventory(items: Equipment[], mode: SortMode): Equipment[] {
+  const sorted = [...items];
+  switch (mode) {
+    case 'rarity':
+      sorted.sort((a, b) => RARITY_ORDER[b.rarity] - RARITY_ORDER[a.rarity]);
+      break;
+    case 'atk':
+      sorted.sort((a, b) => b.atk - a.atk);
+      break;
+    case 'def':
+      sorted.sort((a, b) => b.def - a.def);
+      break;
+    case 'newest':
+      sorted.reverse();
+      break;
+  }
+  return sorted;
+}
+
 function EquipmentSection() {
   const state = useGameState();
   const store = useGameStore();
   const fmt = useFormat();
+  const [selected, setSelected] = useState<Equipment | null>(null);
+  const [sortMode, setSortMode] = useState<SortMode>('newest');
+  const [rarityFilter, setRarityFilter] = useState<Rarity | 'all'>('all');
+  const [slotFilter, setSlotFilter] = useState<EquipSlot | 'all'>('all');
+  const [openMenu, setOpenMenu] = useState<'sort' | 'filter' | null>(null);
+  const [confirmBulkSell, setConfirmBulkSell] = useState(false);
+
+  const visibleItems = sortInventory(
+    state.inventory.filter(
+      (item) =>
+        (rarityFilter === 'all' || item.rarity === rarityFilter) &&
+        (slotFilter === 'all' || item.slot === slotFilter),
+    ),
+    sortMode,
+  );
+  const filterActive = rarityFilter !== 'all' || slotFilter !== 'all';
+  const bulkSellGold = visibleItems.reduce((sum, item) => sum + RARITY_SELL_GOLD[item.rarity], 0);
+
+  function handleSell(item: Equipment) {
+    store.dispatch((s) => sellItem(s, item.id));
+    setSelected(null);
+  }
+
+  function handleBulkSell() {
+    const ids = visibleItems.map((i) => i.id);
+    store.dispatch((s) => sellItems(s, ids));
+    if (selected && ids.includes(selected.id)) setSelected(null);
+    setConfirmBulkSell(false);
+  }
 
   return (
     <section className="rows">
       <h3 className="section-title">Equipment ({state.inventory.length})</h3>
-      {state.inventory.length === 0 && (
+
+      <div className="equip-toolbar">
+        <div className="equip-menu-wrap">
+          <button
+            className={`small-button ${sortMode !== 'newest' ? 'active' : ''}`}
+            onClick={() => setOpenMenu(openMenu === 'sort' ? null : 'sort')}
+          >
+            Sort: {SORT_LABEL[sortMode]} ▾
+          </button>
+          {openMenu === 'sort' && (
+            <>
+              <div className="equip-menu-backdrop" onClick={() => setOpenMenu(null)} />
+              <div className="equip-menu">
+                {(Object.keys(SORT_LABEL) as SortMode[]).map((mode) => (
+                  <button
+                    key={mode}
+                    className={`equip-menu-option ${sortMode === mode ? 'active' : ''}`}
+                    onClick={() => {
+                      setSortMode(mode);
+                      setOpenMenu(null);
+                    }}
+                  >
+                    {SORT_LABEL[mode]}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="equip-menu-wrap">
+          <button
+            className={`small-button ${filterActive ? 'active' : ''}`}
+            onClick={() => setOpenMenu(openMenu === 'filter' ? null : 'filter')}
+          >
+            Filter{filterActive ? ' ●' : ''} ▾
+          </button>
+          {openMenu === 'filter' && (
+            <>
+              <div className="equip-menu-backdrop" onClick={() => setOpenMenu(null)} />
+              <div className="equip-menu">
+                <div className="equip-menu-group">Rarity</div>
+                {(['all', ...RARITIES] as const).map((r) => (
+                  <button
+                    key={r}
+                    className={`equip-menu-option ${rarityFilter === r ? 'active' : ''}`}
+                    onClick={() => setRarityFilter(r)}
+                  >
+                    {r === 'all' ? 'All rarities' : r}
+                  </button>
+                ))}
+                <div className="equip-menu-group">Slot</div>
+                {(['all', ...SLOTS] as const).map((s) => (
+                  <button
+                    key={s}
+                    className={`equip-menu-option ${slotFilter === s ? 'active' : ''}`}
+                    onClick={() => setSlotFilter(s)}
+                  >
+                    {s === 'all' ? 'All slots' : s}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        <button
+          className="small-button danger"
+          disabled={visibleItems.length === 0}
+          onClick={() => setConfirmBulkSell(true)}
+        >
+          Sell {filterActive ? 'filtered' : 'all'} ({visibleItems.length})
+        </button>
+      </div>
+
+      {visibleItems.length > 0 ? (
+        <div className="equip-grid">
+          {visibleItems.map((item) => (
+            <button
+              key={item.id}
+              className={`equip-grid-item item-${item.rarity}`}
+              onClick={() => setSelected(item)}
+            >
+              <span className="equip-grid-slot">{itemIcon(item)}</span>
+              <span className="equip-grid-name">{item.name}</span>
+            </button>
+          ))}
+        </div>
+      ) : state.inventory.length > 0 ? (
+        <div className="row locked">No equipment matches the current filters.</div>
+      ) : (
         <div className="row locked">
           No equipment yet — forge some in the Crafting tab, or quest for a drop.
         </div>
       )}
-      {state.inventory.map((item) => (
-        <div key={item.id} className={`row item-${item.rarity}`}>
-          <div className="row-info">
-            <span className="row-name">
-              {itemIcon(item)} {item.name}
-            </span>
-            <span className="row-desc">
-              {item.rarity} {itemTypeLabel(item)} · {itemStatParts(item).join(' · ')}
-            </span>
+
+      {selected && (
+        <div className="story-overlay" onClick={() => setSelected(null)}>
+          <div className={`story-modal detail-modal item-${selected.rarity}`} onClick={(e) => e.stopPropagation()}>
+            <div className="detail-header">
+              <h2 className="story-title">
+                {itemIcon(selected)} {selected.name}
+              </h2>
+              <button className="small-button" onClick={() => setSelected(null)}>✕</button>
+            </div>
+            <p className="detail-sub">
+              <span className={`equip-detail-rarity rarity-${selected.rarity}`}>{selected.rarity}</span>{' '}
+              {itemTypeLabel(selected)} · {selected.slot}
+            </p>
+            <div className="equip-detail-stats">
+              {itemStatParts(selected).map((part) => (
+                <span key={part}>{part}</span>
+              ))}
+            </div>
+            <button className="small-button" onClick={() => handleSell(selected)}>
+              Sell for {fmt(RARITY_SELL_GOLD[selected.rarity])} 🪙
+            </button>
           </div>
-          <button
-            className="small-button"
-            onClick={() => store.dispatch((s) => sellItem(s, item.id))}
-          >
-            Sell {fmt(RARITY_SELL_GOLD[item.rarity])} 🪙
-          </button>
         </div>
-      ))}
+      )}
+
+      {confirmBulkSell && (
+        <div className="story-overlay" onClick={() => setConfirmBulkSell(false)}>
+          <div className="story-modal" onClick={(e) => e.stopPropagation()}>
+            <h2 className="story-title">Sell {visibleItems.length} items?</h2>
+            <p className="story-text">
+              This will sell {filterActive ? 'every item matching the current filters' : 'your entire equipment inventory'}{' '}
+              for {fmt(bulkSellGold)} 🪙. This cannot be undone.
+            </p>
+            <div className="equip-detail-actions">
+              <button className="small-button danger" onClick={handleBulkSell}>
+                Sell for {fmt(bulkSellGold)} 🪙
+              </button>
+              <button className="small-button" onClick={() => setConfirmBulkSell(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
