@@ -18,6 +18,7 @@ import {
   questProgress,
   questRates,
   questTargetDef,
+  recallAdventurer,
   refreshRecruits,
   rerollCost,
   rerollRecruits,
@@ -185,6 +186,7 @@ function AdventurersSection() {
 
 function ChampionCard({ adv, onOpen }: { adv: Adventurer; onOpen: () => void }) {
   const state = useGameState();
+  const store = useGameStore();
   const stats = adventurerStats(adv);
   const hpMax = maxHp(adv);
   const hpPct = Math.min(100, Math.max(0, (adv.hp / hpMax) * 100));
@@ -202,9 +204,22 @@ function ChampionCard({ adv, onOpen }: { adv: Adventurer; onOpen: () => void }) 
           ATK {stats.atk} · DEF {stats.def} · HP {Math.round(adv.hp)}/{hpMax}
         </span>
         {adv.assignment?.mode === 'auto-explore' && (
-          <span className="row-good">
-            🗺️ Auto-Exploring {locationDef(adv.assignment.locationId)?.name ?? adv.assignment.locationId}
-          </span>
+          <>
+            <span className="row-good">
+              🗺️ Auto-Exploring {locationDef(adv.assignment.locationId)?.name ?? adv.assignment.locationId}
+            </span>
+            <div className="equip-detail-actions">
+              <button
+                className="small-button danger"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  store.dispatch((s) => recallAdventurer(s, adv.id));
+                }}
+              >
+                Recall
+              </button>
+            </div>
+          </>
         )}
         {injured && (
           <span className="row-bad">
@@ -382,6 +397,14 @@ function ChampionDetailModal({ adv, onClose }: { adv: Adventurer; onClose: () =>
         <div className="detail-header">
           <h2 className="story-title">{adv.name}</h2>
           <div className="zone-actions">
+            {adv.assignment?.mode === 'auto-explore' && (
+              <button
+                className="small-button danger"
+                onClick={() => store.dispatch((s) => recallAdventurer(s, adv.id))}
+              >
+                Recall
+              </button>
+            )}
             <button
               className="small-button danger"
               disabled={onExpedition}
