@@ -42,13 +42,20 @@ export function BattleModal({
 
   // BattleModal stays mounted across a repeat/chain of fights (so the PixiJS
   // app underneath isn't torn down each time) — reset playback state whenever
-  // a new `result` comes in, or leftover `pixiDone`/`revealed` from the
-  // previous fight makes the summary appear instantly.
-  useEffect(() => {
+  // a new `result` comes in. This must happen *during render*, not in a
+  // useEffect: an effect-based reset lets one render of the new `result` pass
+  // through with the previous fight's stale `pixiDone`/`skippedRef` values
+  // first, and BattleViewer bakes that stale `skip` prop into the freshly
+  // built scene before the effect can correct it — silently auto-skipping
+  // the new fight and hiding the Skip button behind an already-true
+  // `pixiDone`.
+  const [prevResult, setPrevResult] = useState(result);
+  if (prevResult !== result) {
+    setPrevResult(result);
     setRevealed(reducedMotion ? result.log.length : 0);
     setPixiDone(false);
     skippedRef.current = reducedMotion;
-  }, [result, reducedMotion]);
+  }
 
   useEffect(() => {
     if (revealed >= result.log.length) return;
