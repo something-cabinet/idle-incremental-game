@@ -251,6 +251,109 @@ function spawnParticles(color: number): Particle[] {
 }
 
 // ---------------------------------------------------------------------------
+// Animation scene state
+// ---------------------------------------------------------------------------
+
+interface SceneState {
+  partySprites: FighterSpriteData[];
+  monsterSprites: FighterSpriteData[];
+  floaters: Floater[];
+  particles: Particle[];
+  shakeX: number;
+  shakeY: number;
+  shakeDecay: number;
+  logIndex: number;
+  animPhase: 'idle' | 'lunging' | 'impact' | 'recovering' | 'waiting';
+  phaseTimer: number;
+  currentEntry: BattleLogEntry | null;
+  attackerSprite: FighterSpriteData | null;
+  defenderSprite: FighterSpriteData | null;
+  lungeFromX: number;
+  lungeToX: number;
+  scene: Container;
+  floatLayer: Container;
+  particleLayer: Container;
+}
+
+function buildScene(app: Application, result: BattleOutcome, tier: number, w: number, h: number): SceneState {
+  const scene = new Container();
+  app.stage.addChild(scene);
+  const floatLayer = new Container();
+  app.stage.addChild(floatLayer);
+  const particleLayer = new Container();
+  app.stage.addChild(particleLayer);
+
+  const partySprites: FighterSpriteData[] = [];
+  const monsterSprites: FighterSpriteData[] = [];
+  const marginX = 70;
+  const partyX = marginX;
+  const monsterX = w - marginX;
+
+  const partyCount = result.party.length;
+  const monsterCount = result.monsters.length;
+  const totalH = partyCount > 1 ? (partyCount - 1) * (FIGHTER_H + GAP + 20) : 0;
+  const partyStartY = (h - totalH) / 2;
+
+  result.party.forEach((p, i) => {
+    const sprite = createFighterSprite(p.name, partyX, partyStartY + i * (FIGHTER_H + GAP + 20), p.maxHp, true, tier, p.className, '');
+    partySprites.push(sprite);
+    scene.addChild(sprite.container);
+  });
+
+  const totalHm = monsterCount > 1 ? (monsterCount - 1) * (FIGHTER_H + GAP + 20) : 0;
+  const monsterStartY = (h - totalHm) / 2;
+
+  result.monsters.forEach((m, i) => {
+    const sprite = createFighterSprite(m.name, monsterX, monsterStartY + i * (FIGHTER_H + GAP + 20), m.maxHp, false, tier, '', m.targetId);
+    monsterSprites.push(sprite);
+    scene.addChild(sprite.container);
+  });
+
+  // Initial HP
+  partySprites.forEach((s) => { s.hp = s.maxHp; updateHpBar(s); });
+  monsterSprites.forEach((s) => { s.hp = s.maxHp; updateHpBar(s); });
+
+  return {
+    partySprites,
+    monsterSprites,
+    floaters: [],
+    particles: [],
+    shakeX: 0,
+    shakeY: 0,
+    shakeDecay: 0,
+    logIndex: 0,
+    animPhase: 'idle',
+    phaseTimer: 0,
+    currentEntry: null,
+    attackerSprite: null,
+    defenderSprite: null,
+    lungeFromX: 0,
+    lungeToX: 0,
+    scene,
+    floatLayer,
+    particleLayer,
+  };
+}
+
+function clearScene(app: Application, st: SceneState): void {
+  for (const s of [...st.partySprites, ...st.monsterSprites]) {
+    s.container.destroy({ children: true });
+  }
+  for (const f of st.floaters) {
+    f.text.destroy();
+  }
+  for (const p of st.particles) {
+    p.g.destroy();
+  }
+  app.stage.removeChild(st.scene);
+  app.stage.removeChild(st.floatLayer);
+  app.stage.removeChild(st.particleLayer);
+  st.scene.destroy({ children: true });
+  st.floatLayer.destroy({ children: true });
+  st.particleLayer.destroy({ children: true });
+}
+
+// ---------------------------------------------------------------------------
 // BattleViewer — PixiJS canvas battle playback
 // ---------------------------------------------------------------------------
 
@@ -267,36 +370,15 @@ export function BattleViewer({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<Application | null>(null);
+  const sceneRef = useRef<SceneState | null>(null);
   const [ready, setReady] = useState(false);
   const skipRef = useRef(initialSkip);
   const onFinishRef = useRef(onFinish);
   onFinishRef.current = onFinish;
 
-  // Refs for animation state (not React state — avoid re-renders)
-  const stateRef = useRef<{
-    partySprites: FighterSpriteData[];
-    monsterSprites: FighterSpriteData[];
-    floaters: Floater[];
-    particles: Particle[];
-    shakeX: number;
-    shakeY: number;
-    shakeDecay: number;
-    logIndex: number;
-    animPhase: 'idle' | 'lunging' | 'impact' | 'recovering' | 'waiting';
-    phaseTimer: number;
-    currentEntry: BattleLogEntry | null;
-    attackerSprite: FighterSpriteData | null;
-    defenderSprite: FighterSpriteData | null;
-    lungeFromX: number;
-    lungeToX: number;
-    scene: Container;
-    floatLayer: Container;
-    particleLayer: Container;
-  } | null>(null);
-
   const findSprite = useCallback(
     (side: 'party' | 'monsters', name: string): FighterSpriteData | undefined => {
-      const st = stateRef.current;
+      const st = sceneRef.current;
       if (!st) return;
       const list = side === 'party' ? st.partySprites : st.monsterSprites;
       return list.find((s) => s.nameText.text === name);
@@ -304,15 +386,16 @@ export function BattleViewer({
     [],
   );
 
+  // Effect 1: Create PixiJS app once on mount, destroy on unmount
   useEffect(() => {
     const div = containerRef.current;
     if (!div) return;
 
     const w = div.clientWidth || 500;
     const h = div.clientHeight || 280;
+    let destroyed = false;
 
     const app = new Application();
-    let destroyed = false;
 
     (async () => {
       await app.init({
@@ -327,74 +410,7 @@ export function BattleViewer({
 
       div.appendChild(app.canvas);
       appRef.current = app;
-
-      // Layers
-      const scene = new Container();
-      app.stage.addChild(scene);
-      const floatLayer = new Container();
-      app.stage.addChild(floatLayer);
-      const particleLayer = new Container();
-      app.stage.addChild(particleLayer);
-
-      // Build fighters
-      const partySprites: FighterSpriteData[] = [];
-      const monsterSprites: FighterSpriteData[] = [];
-      const marginX = 70;
-      const partyX = marginX;
-      const monsterX = w - marginX;
-
-      const partyCount = result.party.length;
-      const monsterCount = result.monsters.length;
-      const totalH = partyCount > 1 ? (partyCount - 1) * (FIGHTER_H + GAP + 20) : 0;
-      const partyStartY = (h - totalH) / 2;
-
-      result.party.forEach((p, i) => {
-        const sprite = createFighterSprite(p.name, partyX, partyStartY + i * (FIGHTER_H + GAP + 20), p.maxHp, true, tier, p.className, '');
-        partySprites.push(sprite);
-        scene.addChild(sprite.container);
-      });
-
-      const totalHm = monsterCount > 1 ? (monsterCount - 1) * (FIGHTER_H + GAP + 20) : 0;
-      const monsterStartY = (h - totalHm) / 2;
-
-      result.monsters.forEach((m, i) => {
-        const sprite = createFighterSprite(m.name, monsterX, monsterStartY + i * (FIGHTER_H + GAP + 20), m.maxHp, false, tier, '', m.targetId);
-        monsterSprites.push(sprite);
-        scene.addChild(sprite.container);
-      });
-
-      stateRef.current = {
-        partySprites,
-        monsterSprites,
-        floaters: [],
-        particles: [],
-        shakeX: 0,
-        shakeY: 0,
-        shakeDecay: 0,
-        logIndex: 0,
-        animPhase: 'idle',
-        phaseTimer: 0,
-        currentEntry: null,
-        attackerSprite: null,
-        defenderSprite: null,
-        lungeFromX: 0,
-        lungeToX: 0,
-        scene,
-        floatLayer,
-        particleLayer,
-      };
-
       setReady(true);
-
-      // Initial HP
-      partySprites.forEach((s) => {
-        s.hp = s.maxHp;
-        updateHpBar(s);
-      });
-      monsterSprites.forEach((s) => {
-        s.hp = s.maxHp;
-        updateHpBar(s);
-      });
     })();
 
     return () => {
@@ -408,11 +424,37 @@ export function BattleViewer({
         appRef.current = null;
       }
     };
-  }, [result, tier]);
+  }, []);
 
-  // Animation ticker
+  // Effect 2: Rebuild scene when result changes (never destroy the app)
   useEffect(() => {
-    if (!ready || !appRef.current) return;
+    if (!appRef.current || !ready) return;
+
+    const div = containerRef.current;
+    const w = div?.clientWidth || 500;
+    const h = div?.clientHeight || 280;
+    const app = appRef.current;
+
+    // Clear old scene
+    if (sceneRef.current) {
+      clearScene(app, sceneRef.current);
+    }
+
+    // Reset stage position
+    app.stage.x = 0;
+    app.stage.y = 0;
+
+    // Build new scene
+    const st = buildScene(app, result, tier, w, h);
+    sceneRef.current = st;
+
+    // Reset skip
+    skipRef.current = initialSkip;
+  }, [result, tier, ready]);
+
+  // Effect 3: Animation ticker
+  useEffect(() => {
+    if (!ready || !appRef.current || !sceneRef.current) return;
 
     const app = appRef.current;
     const ticker = app.ticker;
@@ -421,7 +463,7 @@ export function BattleViewer({
     const LOG_DELAY = 500;
 
     function advanceLog() {
-      const st = stateRef.current;
+      const st = sceneRef.current;
       if (!st) return;
 
       if (st.logIndex >= result.log.length) {
@@ -450,10 +492,9 @@ export function BattleViewer({
     }
 
     function processPhase(dt: number) {
-      const st = stateRef.current;
+      const st = sceneRef.current;
       if (!st) return;
 
-      // Decay screen shake
       if (st.shakeDecay > 0) {
         st.shakeDecay = Math.max(0, st.shakeDecay - dt);
         const intensity = (st.shakeDecay / 300) * SHAKE_INTENSITY;
@@ -464,7 +505,6 @@ export function BattleViewer({
         st.shakeY = 0;
       }
 
-      // Update floaters
       for (let i = st.floaters.length - 1; i >= 0; i--) {
         const f = st.floaters[i];
         f.elapsed += dt;
@@ -479,7 +519,6 @@ export function BattleViewer({
         }
       }
 
-      // Update particles
       for (let i = st.particles.length - 1; i >= 0; i--) {
         const p = st.particles[i];
         p.life += dt;
@@ -495,7 +534,6 @@ export function BattleViewer({
         }
       }
 
-      // Idle breathing
       const breathe = Math.sin(performance.now() / 400) * 1.5;
       for (const s of st.partySprites) {
         if (!s.defeated) s.container.y = s.baseY + s.offsetY + breathe;
@@ -504,13 +542,11 @@ export function BattleViewer({
         if (!s.defeated) s.container.y = s.baseY + s.offsetY + breathe;
       }
 
-      // Apply shake
       app.stage.x = st.shakeX;
       app.stage.y = st.shakeY;
 
       if (st.animPhase === 'idle') {
         if (skipRef.current) {
-          // Fast-forward: jump to end
           for (const s of st.partySprites) {
             const pr = result.party.find((p) => p.name === s.nameText.text);
             if (pr) {
@@ -521,7 +557,6 @@ export function BattleViewer({
             }
           }
           for (const s of st.monsterSprites) {
-            // Monsters don't have final HP in the outcome, approximate from log
             const lastEntry = result.log[result.log.length - 1];
             if (lastEntry && lastEntry.defenderName === s.nameText.text) {
               s.hp = lastEntry.defenderHpAfter;
@@ -553,17 +588,13 @@ export function BattleViewer({
         if (t >= 1) {
           st.animPhase = 'impact';
           st.phaseTimer = 0;
-          // Impact effects
           if (st.defenderSprite) {
             st.defenderSprite.hitFlash = 1;
-            // Damage number
             const dmg = st.currentEntry?.damage ?? 0;
             const floater = createFloater(st.defenderSprite.container.x, st.defenderSprite.container.y - FIGHTER_H / 2 - 10, dmg);
             st.floaters.push(floater);
             st.floatLayer.addChild(floater.text);
-            // Screen shake
             st.shakeDecay = 200;
-            // Update HP
             if (st.currentEntry) {
               st.defenderSprite.hp = st.currentEntry.defenderHpAfter;
               updateHpBar(st.defenderSprite);
@@ -573,7 +604,6 @@ export function BattleViewer({
       } else if (st.animPhase === 'impact') {
         if (!st.attackerSprite || !st.defenderSprite) return;
         const t = Math.min(1, st.phaseTimer / IMPACT_MS);
-        // Flash decay
         st.defenderSprite.hitFlash = Math.max(0, 1 - t * 2);
         if (t >= 1) {
           st.animPhase = 'recovering';
@@ -587,13 +617,10 @@ export function BattleViewer({
         st.attackerSprite.container.x = lerp(st.lungeToX, st.lungeFromX, et);
         if (t >= 1) {
           st.attackerSprite.container.x = st.lungeFromX;
-          // Check if defender was defeated
           if (st.defenderSprite && st.currentEntry?.defenderDefeated) {
             st.defenderSprite.defeated = true;
             const color = st.defenderSprite.body.fill;
-            const particles = spawnParticles(
-              typeof color === 'number' ? color : 0x888888,
-            );
+            const particles = spawnParticles(typeof color === 'number' ? color : 0x888888);
             for (const p of particles) {
               p.g.x = st.defenderSprite.container.x;
               p.g.y = st.defenderSprite.container.y;
@@ -610,27 +637,26 @@ export function BattleViewer({
         }
       }
 
-      // Update hit flash visuals
       for (const s of [...st.partySprites, ...st.monsterSprites]) {
         s.flashOverlay.alpha = s.hitFlash > 0 ? s.hitFlash * 0.5 : 0;
       }
     }
 
-    ticker.add((tickerDt) => {
-      const dt = tickerDt.elapsedMS;
-      processPhase(dt);
-    });
+    const fn = (tickerDt: { elapsedMS: number }) => {
+      processPhase(tickerDt.elapsedMS);
+    };
+    ticker.add(fn);
 
     return () => {
-      ticker.destroy();
+      ticker.remove(fn);
     };
   }, [ready, result, findSprite]);
 
   // Skip handler
   useEffect(() => {
     skipRef.current = initialSkip;
-    if (initialSkip && stateRef.current) {
-      stateRef.current.animPhase = 'idle';
+    if (initialSkip && sceneRef.current) {
+      sceneRef.current.animPhase = 'idle';
     }
   }, [initialSkip]);
 
