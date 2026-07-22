@@ -1,0 +1,645 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Application, Container, Graphics, Text, TextStyle } from 'pixi.js';
+import type { BattleLogEntry, BattleOutcome } from '../game/combat';
+import type { AdventurerClass } from '../game/types';
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const FIGHTER_W = 56;
+const FIGHTER_H = 68;
+const HP_BAR_H = 6;
+const HP_BAR_W = 52;
+const GAP = 14;
+const LUNGE_DIST = 40;
+const LUNGE_MS = 180;
+const IMPACT_MS = 120;
+const RECOVER_MS = 160;
+const DAMAGE_FLOAT_MS = 700;
+const SHAKE_INTENSITY = 4;
+const PARTICLE_COUNT = 8;
+
+const CLASS_COLORS: Record<AdventurerClass, number> = {
+  warrior: 0xd4533a,
+  ranger: 0x3a8c3a,
+  mage: 0x3a5ccc,
+};
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function zoneBgColor(tier: number): number {
+  const colors = [0x1a2a1a, 0x1a222e, 0x1a1a1a, 0x221a2a, 0x0d1a2e, 0x2a1a1a];
+  return colors[Math.min(tier, colors.length) - 1] ?? 0x1a1a2e;
+}
+
+function monsterColor(tier: number): number {
+  const colors = [0x7cb342, 0xffb300, 0xe65100, 0x7b1fa2, 0x283593, 0xb71c1c];
+  return colors[Math.min(tier, colors.length) - 1] ?? 0x888888;
+}
+
+function monsterShape(key: string): 'circle' | 'triangle' | 'diamond' | 'pentagon' | 'hexagon' {
+  if (/wolf|boar|frog|leech|bear/i.test(key)) return 'circle';
+  if (/bandit|kobold|guardian|raider/i.test(key)) return 'triangle';
+  if (/wraith|spirit|ghost|shade/i.test(key)) return 'diamond';
+  if (/spider|crawler|scarab/i.test(key)) return 'pentagon';
+  return 'hexagon';
+}
+
+function easeOutCubic(t: number): number {
+  return 1 - Math.pow(1 - t, 3);
+}
+
+function easeInCubic(t: number): number {
+  return t * t * t;
+}
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+// ---------------------------------------------------------------------------
+// FighterSprite — a container with shape, name, and HP bar
+// ---------------------------------------------------------------------------
+
+interface FighterSpriteData {
+  container: Container;
+  nameText: Text;
+  hpFill: Graphics;
+  hpBg: Graphics;
+  body: Graphics;
+  flashOverlay: Graphics;
+  baseX: number;
+  baseY: number;
+  offsetX: number;
+  offsetY: number;
+  alpha: number;
+  scale: number;
+  hp: number;
+  maxHp: number;
+  hitFlash: number;
+  defeated: boolean;
+}
+
+function createFighterSprite(
+  name: string,
+  x: number,
+  y: number,
+  maxHp: number,
+  isParty: boolean,
+  tier: number,
+  className: string,
+  targetId: string,
+): FighterSpriteData {
+  const container = new Container();
+  container.x = x;
+  container.y = y;
+
+  const body = new Graphics();
+  const color = isParty ? CLASS_COLORS[className as AdventurerClass] ?? 0x888888 : monsterColor(tier);
+
+  if (isParty) {
+    body.roundRect(-FIGHTER_W / 2, -FIGHTER_H / 2, FIGHTER_W, FIGHTER_H, 8).fill({ color });
+  } else {
+    const shape = monsterShape(targetId);
+    const cx = 0;
+    const cy = 0;
+    const r = Math.min(FIGHTER_W, FIGHTER_H) / 2 - 4;
+    switch (shape) {
+      case 'circle':
+        body.circle(cx, cy, r).fill({ color });
+        break;
+      case 'triangle': {
+        const h = r * 1.5;
+        body.moveTo(cx, cy - h * 0.6).lineTo(cx + r, cy + h * 0.4).lineTo(cx - r, cy + h * 0.4).closePath().fill({ color });
+        break;
+      }
+      case 'diamond':
+        body.moveTo(cx, cy - r).lineTo(cx + r * 0.7, cy).lineTo(cx, cy + r).lineTo(cx - r * 0.7, cy).closePath().fill({ color });
+        break;
+      case 'pentagon': {
+        const pts = 5;
+        for (let i = 0; i < pts; i++) {
+          const a = (Math.PI * 2 * i) / pts - Math.PI / 2;
+          const px = cx + Math.cos(a) * r;
+          const py = cy + Math.sin(a) * r;
+          if (i === 0) body.moveTo(px, py);
+          else body.lineTo(px, py);
+        }
+        body.closePath().fill({ color });
+        break;
+      }
+      case 'hexagon': {
+        const pts = 6;
+        for (let i = 0; i < pts; i++) {
+          const a = (Math.PI * 2 * i) / pts - Math.PI / 2;
+          const px = cx + Math.cos(a) * r;
+          const py = cy + Math.sin(a) * r;
+          if (i === 0) body.moveTo(px, py);
+          else body.lineTo(px, py);
+        }
+        body.closePath().fill({ color });
+        break;
+      }
+    }
+  }
+  container.addChild(body);
+
+  const flashOverlay = new Graphics();
+  flashOverlay.rect(-FIGHTER_W / 2, -FIGHTER_H / 2, FIGHTER_W, FIGHTER_H).fill({ color: 0xffffff, alpha: 1 });
+  flashOverlay.alpha = 0;
+  container.addChild(flashOverlay);
+
+  const nameStyle = new TextStyle({ fill: 0xffffff, fontSize: 11, fontFamily: 'monospace' });
+  const nameText = new Text({ text: name, style: nameStyle });
+  nameText.anchor.set(0.5, 0);
+  nameText.y = FIGHTER_H / 2 + 4;
+  container.addChild(nameText);
+
+  const hpBarY = -FIGHTER_H / 2 - HP_BAR_H - 4;
+  const hpBg = new Graphics();
+  hpBg.roundRect(-HP_BAR_W / 2, hpBarY, HP_BAR_W, HP_BAR_H, 2).fill({ color: 0x333333 });
+  container.addChild(hpBg);
+
+  const hpFill = new Graphics();
+  hpFill.roundRect(-HP_BAR_W / 2, hpBarY, HP_BAR_W, HP_BAR_H, 2).fill({ color: 0x44cc44 });
+  container.addChild(hpFill);
+
+  return {
+    container,
+    nameText,
+    hpFill,
+    hpBg,
+    body,
+    flashOverlay,
+    baseX: x,
+    baseY: y,
+    offsetX: 0,
+    offsetY: 0,
+    alpha: 1,
+    scale: 1,
+    hp: maxHp,
+    maxHp,
+    hitFlash: 0,
+    defeated: false,
+  };
+}
+
+function updateHpBar(sprite: FighterSpriteData): void {
+  const pct = Math.max(0, sprite.hp / sprite.maxHp);
+  const w = HP_BAR_W * pct;
+  const hpBarY = -FIGHTER_H / 2 - HP_BAR_H - 4;
+  const color = pct > 0.5 ? 0x44cc44 : pct > 0.25 ? 0xccaa44 : 0xcc4444;
+  sprite.hpFill.clear();
+  if (w > 0) {
+    sprite.hpFill.roundRect(-HP_BAR_W / 2, hpBarY, w, HP_BAR_H, 2).fill({ color });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Floating damage number
+// ---------------------------------------------------------------------------
+
+interface Floater {
+  text: Text;
+  startY: number;
+  elapsed: number;
+}
+
+function createFloater(x: number, y: number, damage: number): Floater {
+  const style = new TextStyle({ fill: 0xffdd44, fontSize: 16, fontFamily: 'monospace', fontWeight: 'bold' });
+  const text = new Text({ text: String(damage), style });
+  text.anchor.set(0.5, 0.5);
+  text.x = x;
+  text.y = y;
+  return { text, startY: y, elapsed: 0 };
+}
+
+// ---------------------------------------------------------------------------
+// Particle
+// ---------------------------------------------------------------------------
+
+interface Particle {
+  g: Graphics;
+  vx: number;
+  vy: number;
+  life: number;
+  maxLife: number;
+  color: number;
+}
+
+function spawnParticles(color: number): Particle[] {
+  const particles: Particle[] = [];
+  for (let i = 0; i < PARTICLE_COUNT; i++) {
+    const g = new Graphics();
+    const size = 2 + Math.random() * 3;
+    const angle = (Math.PI * 2 * i) / PARTICLE_COUNT + (Math.random() - 0.5) * 0.5;
+    const speed = 1.5 + Math.random() * 2.5;
+    g.circle(0, 0, size).fill({ color });
+    particles.push({
+      g,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 1,
+      life: 0,
+      maxLife: 400 + Math.random() * 200,
+      color,
+    });
+  }
+  return particles;
+}
+
+// ---------------------------------------------------------------------------
+// BattleViewer — PixiJS canvas battle playback
+// ---------------------------------------------------------------------------
+
+export function BattleViewer({
+  result,
+  tier,
+  skip: initialSkip,
+  onFinish,
+}: {
+  result: BattleOutcome;
+  tier: number;
+  skip: boolean;
+  onFinish: () => void;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const appRef = useRef<Application | null>(null);
+  const [ready, setReady] = useState(false);
+  const skipRef = useRef(initialSkip);
+  const onFinishRef = useRef(onFinish);
+  onFinishRef.current = onFinish;
+
+  // Refs for animation state (not React state — avoid re-renders)
+  const stateRef = useRef<{
+    partySprites: FighterSpriteData[];
+    monsterSprites: FighterSpriteData[];
+    floaters: Floater[];
+    particles: Particle[];
+    shakeX: number;
+    shakeY: number;
+    shakeDecay: number;
+    logIndex: number;
+    animPhase: 'idle' | 'lunging' | 'impact' | 'recovering' | 'waiting';
+    phaseTimer: number;
+    currentEntry: BattleLogEntry | null;
+    attackerSprite: FighterSpriteData | null;
+    defenderSprite: FighterSpriteData | null;
+    lungeFromX: number;
+    lungeToX: number;
+    scene: Container;
+    floatLayer: Container;
+    particleLayer: Container;
+  } | null>(null);
+
+  const findSprite = useCallback(
+    (side: 'party' | 'monsters', name: string): FighterSpriteData | undefined => {
+      const st = stateRef.current;
+      if (!st) return;
+      const list = side === 'party' ? st.partySprites : st.monsterSprites;
+      return list.find((s) => s.nameText.text === name);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const div = containerRef.current;
+    if (!div) return;
+
+    const w = div.clientWidth || 500;
+    const h = div.clientHeight || 280;
+
+    const app = new Application();
+    let destroyed = false;
+
+    (async () => {
+      await app.init({
+        width: w,
+        height: h,
+        background: zoneBgColor(tier),
+        antialias: true,
+        resolution: window.devicePixelRatio || 1,
+        autoDensity: true,
+      });
+      if (destroyed) { app.destroy(); return; }
+
+      div.appendChild(app.canvas);
+      appRef.current = app;
+
+      // Layers
+      const scene = new Container();
+      app.stage.addChild(scene);
+      const floatLayer = new Container();
+      app.stage.addChild(floatLayer);
+      const particleLayer = new Container();
+      app.stage.addChild(particleLayer);
+
+      // Build fighters
+      const partySprites: FighterSpriteData[] = [];
+      const monsterSprites: FighterSpriteData[] = [];
+      const marginX = 70;
+      const partyX = marginX;
+      const monsterX = w - marginX;
+
+      const partyCount = result.party.length;
+      const monsterCount = result.monsters.length;
+      const totalH = partyCount > 1 ? (partyCount - 1) * (FIGHTER_H + GAP + 20) : 0;
+      const partyStartY = (h - totalH) / 2;
+
+      result.party.forEach((p, i) => {
+        const sprite = createFighterSprite(p.name, partyX, partyStartY + i * (FIGHTER_H + GAP + 20), p.maxHp, true, tier, p.className, '');
+        partySprites.push(sprite);
+        scene.addChild(sprite.container);
+      });
+
+      const totalHm = monsterCount > 1 ? (monsterCount - 1) * (FIGHTER_H + GAP + 20) : 0;
+      const monsterStartY = (h - totalHm) / 2;
+
+      result.monsters.forEach((m, i) => {
+        const sprite = createFighterSprite(m.name, monsterX, monsterStartY + i * (FIGHTER_H + GAP + 20), m.maxHp, false, tier, '', m.targetId);
+        monsterSprites.push(sprite);
+        scene.addChild(sprite.container);
+      });
+
+      stateRef.current = {
+        partySprites,
+        monsterSprites,
+        floaters: [],
+        particles: [],
+        shakeX: 0,
+        shakeY: 0,
+        shakeDecay: 0,
+        logIndex: 0,
+        animPhase: 'idle',
+        phaseTimer: 0,
+        currentEntry: null,
+        attackerSprite: null,
+        defenderSprite: null,
+        lungeFromX: 0,
+        lungeToX: 0,
+        scene,
+        floatLayer,
+        particleLayer,
+      };
+
+      setReady(true);
+
+      // Initial HP
+      partySprites.forEach((s) => {
+        s.hp = s.maxHp;
+        updateHpBar(s);
+      });
+      monsterSprites.forEach((s) => {
+        s.hp = s.maxHp;
+        updateHpBar(s);
+      });
+    })();
+
+    return () => {
+      destroyed = true;
+      if (appRef.current) {
+        appRef.current.destroy(true);
+        appRef.current = null;
+      }
+    };
+  }, [result, tier]);
+
+  // Animation ticker
+  useEffect(() => {
+    if (!ready || !appRef.current) return;
+
+    const app = appRef.current;
+    const ticker = app.ticker;
+
+    let logEntryTimer = 0;
+    const LOG_DELAY = 500;
+
+    function advanceLog() {
+      const st = stateRef.current;
+      if (!st) return;
+
+      if (st.logIndex >= result.log.length) {
+        onFinishRef.current();
+        return;
+      }
+
+      const entry = result.log[st.logIndex];
+      st.currentEntry = entry;
+      st.logIndex++;
+
+      const attacker = findSprite(entry.attackerSide, entry.attackerName);
+      const defender = findSprite(entry.defenderSide, entry.defenderName);
+      if (!attacker || !defender) {
+        advanceLog();
+        return;
+      }
+
+      st.attackerSprite = attacker;
+      st.defenderSprite = defender;
+      st.lungeFromX = attacker.baseX + attacker.offsetX;
+      const dir = attacker.container.x < defender.container.x ? 1 : -1;
+      st.lungeToX = st.lungeFromX + dir * LUNGE_DIST;
+      st.animPhase = 'lunging';
+      st.phaseTimer = 0;
+    }
+
+    function processPhase(dt: number) {
+      const st = stateRef.current;
+      if (!st) return;
+
+      // Decay screen shake
+      if (st.shakeDecay > 0) {
+        st.shakeDecay = Math.max(0, st.shakeDecay - dt);
+        const intensity = (st.shakeDecay / 300) * SHAKE_INTENSITY;
+        st.shakeX = (Math.random() - 0.5) * intensity * 2;
+        st.shakeY = (Math.random() - 0.5) * intensity * 2;
+      } else {
+        st.shakeX = 0;
+        st.shakeY = 0;
+      }
+
+      // Update floaters
+      for (let i = st.floaters.length - 1; i >= 0; i--) {
+        const f = st.floaters[i];
+        f.elapsed += dt;
+        if (f.elapsed >= DAMAGE_FLOAT_MS) {
+          st.floatLayer.removeChild(f.text);
+          f.text.destroy();
+          st.floaters.splice(i, 1);
+        } else {
+          const t = f.elapsed / DAMAGE_FLOAT_MS;
+          f.text.y = f.startY - 30 * t;
+          f.text.alpha = 1 - t;
+        }
+      }
+
+      // Update particles
+      for (let i = st.particles.length - 1; i >= 0; i--) {
+        const p = st.particles[i];
+        p.life += dt;
+        if (p.life >= p.maxLife) {
+          st.particleLayer.removeChild(p.g);
+          p.g.destroy();
+          st.particles.splice(i, 1);
+        } else {
+          p.g.x += p.vx;
+          p.g.y += p.vy;
+          p.vy += 0.05;
+          p.g.alpha = 1 - p.life / p.maxLife;
+        }
+      }
+
+      // Idle breathing
+      const breathe = Math.sin(performance.now() / 400) * 1.5;
+      for (const s of st.partySprites) {
+        if (!s.defeated) s.container.y = s.baseY + s.offsetY + breathe;
+      }
+      for (const s of st.monsterSprites) {
+        if (!s.defeated) s.container.y = s.baseY + s.offsetY + breathe;
+      }
+
+      // Apply shake
+      app.stage.x = st.shakeX;
+      app.stage.y = st.shakeY;
+
+      if (st.animPhase === 'idle') {
+        if (skipRef.current) {
+          // Fast-forward: jump to end
+          for (const s of st.partySprites) {
+            const pr = result.party.find((p) => p.name === s.nameText.text);
+            if (pr) {
+              s.hp = pr.finalHp;
+              s.defeated = pr.knockedOut;
+              s.container.alpha = pr.knockedOut ? 0.3 : 1;
+              updateHpBar(s);
+            }
+          }
+          for (const s of st.monsterSprites) {
+            // Monsters don't have final HP in the outcome, approximate from log
+            const lastEntry = result.log[result.log.length - 1];
+            if (lastEntry && lastEntry.defenderName === s.nameText.text) {
+              s.hp = lastEntry.defenderHpAfter;
+              s.defeated = lastEntry.defenderDefeated;
+              s.container.alpha = lastEntry.defenderDefeated ? 0.3 : 1;
+              updateHpBar(s);
+            }
+          }
+          onFinishRef.current();
+          return;
+        }
+        logEntryTimer += dt;
+        if (logEntryTimer >= LOG_DELAY && st.logIndex < result.log.length) {
+          logEntryTimer = 0;
+          advanceLog();
+        } else if (st.logIndex >= result.log.length) {
+          onFinishRef.current();
+        }
+        return;
+      }
+
+      st.phaseTimer += dt;
+
+      if (st.animPhase === 'lunging') {
+        if (!st.attackerSprite) return;
+        const t = Math.min(1, st.phaseTimer / LUNGE_MS);
+        const et = easeOutCubic(t);
+        st.attackerSprite.container.x = lerp(st.lungeFromX, st.lungeToX, et);
+        if (t >= 1) {
+          st.animPhase = 'impact';
+          st.phaseTimer = 0;
+          // Impact effects
+          if (st.defenderSprite) {
+            st.defenderSprite.hitFlash = 1;
+            // Damage number
+            const dmg = st.currentEntry?.damage ?? 0;
+            const floater = createFloater(st.defenderSprite.container.x, st.defenderSprite.container.y - FIGHTER_H / 2 - 10, dmg);
+            st.floaters.push(floater);
+            st.floatLayer.addChild(floater.text);
+            // Screen shake
+            st.shakeDecay = 200;
+            // Update HP
+            if (st.currentEntry) {
+              st.defenderSprite.hp = st.currentEntry.defenderHpAfter;
+              updateHpBar(st.defenderSprite);
+            }
+          }
+        }
+      } else if (st.animPhase === 'impact') {
+        if (!st.attackerSprite || !st.defenderSprite) return;
+        const t = Math.min(1, st.phaseTimer / IMPACT_MS);
+        // Flash decay
+        st.defenderSprite.hitFlash = Math.max(0, 1 - t * 2);
+        if (t >= 1) {
+          st.animPhase = 'recovering';
+          st.phaseTimer = 0;
+          st.defenderSprite.hitFlash = 0;
+        }
+      } else if (st.animPhase === 'recovering') {
+        if (!st.attackerSprite) return;
+        const t = Math.min(1, st.phaseTimer / RECOVER_MS);
+        const et = easeInCubic(t);
+        st.attackerSprite.container.x = lerp(st.lungeToX, st.lungeFromX, et);
+        if (t >= 1) {
+          st.attackerSprite.container.x = st.lungeFromX;
+          // Check if defender was defeated
+          if (st.defenderSprite && st.currentEntry?.defenderDefeated) {
+            st.defenderSprite.defeated = true;
+            const color = st.defenderSprite.body.fill;
+            const particles = spawnParticles(
+              typeof color === 'number' ? color : 0x888888,
+            );
+            for (const p of particles) {
+              p.g.x = st.defenderSprite.container.x;
+              p.g.y = st.defenderSprite.container.y;
+              st.particles.push(p);
+              st.particleLayer.addChild(p.g);
+            }
+          }
+          st.animPhase = 'idle';
+          st.phaseTimer = 0;
+          st.currentEntry = null;
+          st.attackerSprite = null;
+          st.defenderSprite = null;
+          logEntryTimer = 0;
+        }
+      }
+
+      // Update hit flash visuals
+      for (const s of [...st.partySprites, ...st.monsterSprites]) {
+        s.flashOverlay.alpha = s.hitFlash > 0 ? s.hitFlash * 0.5 : 0;
+      }
+    }
+
+    ticker.add((tickerDt) => {
+      const dt = tickerDt.elapsedMS;
+      processPhase(dt);
+    });
+
+    return () => {
+      ticker.destroy();
+    };
+  }, [ready, result, findSprite]);
+
+  // Skip handler
+  useEffect(() => {
+    skipRef.current = initialSkip;
+    if (initialSkip && stateRef.current) {
+      stateRef.current.animPhase = 'idle';
+    }
+  }, [initialSkip]);
+
+  return (
+    <div
+      ref={containerRef}
+      style={{
+        width: '100%',
+        height: 280,
+        borderRadius: 10,
+        overflow: 'hidden',
+        position: 'relative',
+      }}
+    />
+  );
+}

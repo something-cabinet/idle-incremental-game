@@ -1,60 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
-import type { BattleLogEntry, BattleOutcome } from '../game/combat';
+import type { BattleOutcome } from '../game/combat';
 import { itemIcon } from './itemDisplay';
-
-/** Real-time playback speed (ms per log line) — deliberately independent of
- * the debug game-speed multiplier, which only scales the simulation clock. */
-const TICK_MS = 550;
-
-interface FighterView {
-  side: 'party' | 'monsters';
-  refId: number;
-  name: string;
-  maxHp: number;
-  hp: number;
-  defeated: boolean;
-}
-
-function initialFighters(result: BattleOutcome): FighterView[] {
-  return [
-    ...result.party.map((p): FighterView => ({
-      side: 'party',
-      refId: p.advId,
-      name: p.name,
-      maxHp: p.maxHp,
-      hp: p.maxHp,
-      defeated: false,
-    })),
-    ...result.monsters.map((m): FighterView => ({
-      side: 'monsters',
-      refId: m.instanceId,
-      name: m.name,
-      maxHp: m.maxHp,
-      hp: m.maxHp,
-      defeated: false,
-    })),
-  ];
-}
-
-function applyEntry(fighters: FighterView[], entry: BattleLogEntry): FighterView[] {
-  let matched = false;
-  return fighters.map((f) => {
-    if (matched || f.side !== entry.defenderSide || f.name !== entry.defenderName || f.defeated) return f;
-    matched = true;
-    return { ...f, hp: entry.defenderHpAfter, defeated: entry.defenderDefeated };
-  });
-}
+import { BattleViewer } from './BattleViewer';
 
 /**
  * Blocking battle modal: no close button/overlay-dismiss until playback of
  * the (already-resolved) combat log finishes — the outcome and rewards are
  * committed to state the instant Explore was clicked, this just reveals it.
- * Playback runs on a plain setInterval (real time), so the debug game-speed
- * slider — which only scales the simulation tick — cannot fast-forward it.
+ * The battlefield is rendered by a PixiJS canvas with animated fighters.
  */
 export function BattleModal({
   result,
   locationName,
+  tier,
   reducedMotion,
   onClose,
   continueLabel,
@@ -62,55 +20,50 @@ export function BattleModal({
 }: {
   result: BattleOutcome;
   locationName: string;
+  tier: number;
   reducedMotion: boolean;
   onClose: () => void;
   continueLabel?: string;
   onStop?: () => void;
 }) {
   const [revealed, setRevealed] = useState(reducedMotion ? result.log.length : 0);
-  const [fighters, setFighters] = useState<FighterView[]>(() => initialFighters(result));
+  const [pixiDone, setPixiDone] = useState(false);
   const skippedRef = useRef(reducedMotion);
 
   useEffect(() => {
-    if (skippedRef.current) {
-      setFighters((prev) => result.log.reduce(applyEntry, prev));
-      return;
-    }
     if (revealed >= result.log.length) return;
     const t = setTimeout(() => {
-      setFighters((prev) => applyEntry(prev, result.log[revealed]));
       setRevealed((r) => r + 1);
-    }, TICK_MS);
+    }, 500);
     return () => clearTimeout(t);
   }, [revealed, result.log]);
 
   function skip() {
     skippedRef.current = true;
-    setFighters((prev) => result.log.reduce(applyEntry, prev));
     setRevealed(result.log.length);
   }
 
-  const done = revealed >= result.log.length;
+  const done = pixiDone && revealed >= result.log.length;
   const visibleLog = result.log.slice(0, revealed);
-  const lastEntry = visibleLog[visibleLog.length - 1];
 
   return (
     <div className="story-overlay battle-overlay">
       <div className="story-modal detail-modal battle-modal">
         <div className="detail-header">
           <h2 className="story-title">Exploring — {locationName}</h2>
-          {!done && (
+          {!pixiDone && (
             <button className="small-button" onClick={skip}>
               Skip ▶▶
             </button>
           )}
         </div>
 
-        <div className="battle-field">
-          <BattleSide title="Party" fighters={fighters.filter((f) => f.side === 'party')} flash={lastEntry} />
-          <div className="battle-vs">VS</div>
-          <BattleSide title="Monsters" fighters={fighters.filter((f) => f.side === 'monsters')} flash={lastEntry} />
-        </div>
+        <BattleViewer
+          result={result}
+          tier={tier}
+          skip={skippedRef.current || reducedMotion}
+          onFinish={() => setPixiDone(true)}
+        />
 
         <div className="battle-log">
           {visibleLog.map((entry, i) => (
@@ -125,40 +78,6 @@ export function BattleModal({
 
         {done && <BattleSummary result={result} onClose={onClose} continueLabel={continueLabel} onStop={onStop} />}
       </div>
-    </div>
-  );
-}
-
-function BattleSide({
-  title,
-  fighters,
-  flash,
-}: {
-  title: string;
-  fighters: FighterView[];
-  flash?: BattleLogEntry;
-}) {
-  return (
-    <div className="battle-side">
-      <h4 className="section-title">{title}</h4>
-      {fighters.map((f) => {
-        const pct = Math.max(0, Math.min(100, (f.hp / f.maxHp) * 100));
-        const isHit = flash && flash.defenderSide === f.side && flash.defenderName === f.name;
-        return (
-          <div
-            key={`${f.side}-${f.refId}`}
-            className={`battle-fighter ${f.defeated ? 'defeated' : ''} ${isHit ? 'hit-flash' : ''}`}
-          >
-            <span className="row-name">{f.defeated ? '💀' : f.side === 'party' ? '🧑‍🤝‍🧑' : '👹'} {f.name}</span>
-            <div className="progress-line">
-              <div className="progress-track">
-                <div className="progress-fill hp" style={{ width: `${pct}%` }} />
-              </div>
-              <span className="progress-time">{Math.round(f.hp)}/{f.maxHp}</span>
-            </div>
-          </div>
-        );
-      })}
     </div>
   );
 }

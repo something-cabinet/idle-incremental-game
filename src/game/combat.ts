@@ -34,7 +34,7 @@ import {
 } from './config';
 import { autoExploreMembers, locationDef, targetsForLocation } from './guild';
 import { computeModifiers } from './perks';
-import type { Adventurer, Equipment, GameState, LogEntry, LogKind, QuestTargetDef, Rng } from './types';
+import type { Adventurer, AdventurerClass, Equipment, GameState, LogEntry, LogKind, QuestTargetDef, Rng } from './types';
 
 /** Pure turn-based Explore combat: party vs a location's monsters, resolved
  * with speed-ordered initiative until one side is fully defeated. Separate
@@ -79,6 +79,7 @@ export interface BattleLogEntry {
 export interface PartyBattleResult {
   advId: number;
   name: string;
+  className: AdventurerClass;
   finalHp: number;
   maxHp: number;
   knockedOut: boolean;
@@ -260,10 +261,12 @@ export function simulateBattle(
   const partyResults: PartyBattleResult[] = combatants
     .filter((c): c is Combatant => c.side === 'party')
     .map((c) => {
+      const adv = party.find((a) => a.name === c.name);
       const knockedOut = c.hp <= 0;
       return {
         advId: c.refId,
         name: c.name,
+        className: adv?.className ?? 'warrior',
         finalHp: Math.max(0, c.hp),
         maxHp: c.maxHp,
         knockedOut,

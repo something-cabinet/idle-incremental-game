@@ -199,6 +199,7 @@ function ExploreDialog({ zone, onClose }: { zone: LocationDef; onClose: () => vo
       <BattleModal
         result={battle}
         locationName={zone.name}
+        tier={zone.tier}
         reducedMotion={state.settings.reducedMotion}
         onClose={handleBattleClose}
         continueLabel={label}
