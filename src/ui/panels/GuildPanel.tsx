@@ -189,7 +189,6 @@ function ChampionCard({ adv, onOpen }: { adv: Adventurer; onOpen: () => void }) 
   const store = useGameStore();
   const stats = adventurerStats(adv);
   const hpMax = maxHp(adv);
-  const hpPct = Math.min(100, Math.max(0, (adv.hp / hpMax) * 100));
   const injured = isInjured(adv, state.runTimeSeconds);
   return (
     <button className="row candidate-row adventurer-card" onClick={onOpen}>
@@ -201,7 +200,7 @@ function ChampionCard({ adv, onOpen }: { adv: Adventurer; onOpen: () => void }) 
           {CLASS_LABEL[adv.className]} · Lv {adv.level}
         </span>
         <span className="row-sub">
-          ATK {stats.atk} · DEF {stats.def} · HP {Math.round(adv.hp)}/{hpMax}
+          ATK {stats.atk} · DEF {stats.def} · HP {hpMax}
         </span>
         {adv.assignment?.mode === 'auto-explore' && (
           <>
@@ -226,11 +225,6 @@ function ChampionCard({ adv, onOpen }: { adv: Adventurer; onOpen: () => void }) 
             🩹 Recovering — {formatDuration(Math.max(0, adv.injuredUntil - state.runTimeSeconds))} left
           </span>
         )}
-        <div className="progress-line">
-          <div className="progress-track">
-            <div className="progress-fill hp" style={{ width: `${hpPct}%` }} />
-          </div>
-        </div>
       </div>
     </button>
   );
@@ -454,8 +448,8 @@ function ChampionDetailModal({ adv, onClose }: { adv: Adventurer; onClose: () =>
             <span className="stat-label">Defense</span>
           </div>
           <div className="stat">
-            <span className="stat-value">{Math.round(adv.hp)}/{hpMax}</span>
-            <span className="stat-label">Health</span>
+            <span className="stat-value">{hpMax}</span>
+            <span className="stat-label">Max HP</span>
           </div>
         </div>
 
