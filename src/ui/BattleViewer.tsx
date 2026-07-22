@@ -291,6 +291,14 @@ interface SceneState {
   scene: Container;
   floatLayer: Container;
   particleLayer: Container;
+  /** Guards onFinish so it fires exactly once per scene. Without this, every
+   * tick after the fight resolves calls onFinish again — harmless on its own
+   * since it's idempotent for *this* scene, but a stray tick from this scene's
+   * ticker callback can land after the next fight's scene has already been
+   * built and land on the new scene's onFinish closure instead (it always
+   * points at the latest one), instantly closing a fight that hasn't played
+   * yet. See BattleModal's "Continue" bug. */
+  finished: boolean;
 }
 
 function buildScene(app: Application, result: BattleOutcome, tier: number, w: number, h: number): SceneState {
@@ -350,6 +358,7 @@ function buildScene(app: Application, result: BattleOutcome, tier: number, w: nu
     scene,
     floatLayer,
     particleLayer,
+    finished: false,
   };
 }
 
@@ -485,7 +494,10 @@ export function BattleViewer({
       if (!st) return;
 
       if (st.logIndex >= result.log.length) {
-        onFinishRef.current();
+        if (!st.finished) {
+          st.finished = true;
+          onFinishRef.current();
+        }
         return;
       }
 
@@ -583,7 +595,10 @@ export function BattleViewer({
               updateHpBar(s);
             }
           }
-          onFinishRef.current();
+          if (!st.finished) {
+            st.finished = true;
+            onFinishRef.current();
+          }
           return;
         }
         logEntryTimer += dt;
@@ -591,7 +606,10 @@ export function BattleViewer({
           logEntryTimer = 0;
           advanceLog();
         } else if (st.logIndex >= result.log.length) {
-          onFinishRef.current();
+          if (!st.finished) {
+            st.finished = true;
+            onFinishRef.current();
+          }
         }
         return;
       }
