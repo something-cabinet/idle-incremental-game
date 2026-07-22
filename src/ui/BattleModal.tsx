@@ -58,12 +58,14 @@ export function BattleModal({
   reducedMotion,
   onClose,
   continueLabel,
+  onStop,
 }: {
   result: BattleOutcome;
   locationName: string;
   reducedMotion: boolean;
   onClose: () => void;
   continueLabel?: string;
+  onStop?: () => void;
 }) {
   const [revealed, setRevealed] = useState(reducedMotion ? result.log.length : 0);
   const [fighters, setFighters] = useState<FighterView[]>(() => initialFighters(result));
@@ -121,7 +123,7 @@ export function BattleModal({
           {visibleLog.length === 0 && <div className="battle-log-line">The battle begins...</div>}
         </div>
 
-        {done && <BattleSummary result={result} onClose={onClose} continueLabel={continueLabel} />}
+        {done && <BattleSummary result={result} onClose={onClose} continueLabel={continueLabel} onStop={onStop} />}
       </div>
     </div>
   );
@@ -161,7 +163,7 @@ function BattleSide({
   );
 }
 
-function BattleSummary({ result, onClose, continueLabel }: { result: BattleOutcome; onClose: () => void; continueLabel?: string }) {
+function BattleSummary({ result, onClose, continueLabel, onStop }: { result: BattleOutcome; onClose: () => void; continueLabel?: string; onStop?: () => void }) {
   const win = result.outcome === 'win';
   const injured = result.party.filter((p) => p.knockedOut);
   return (
@@ -183,9 +185,16 @@ function BattleSummary({ result, onClose, continueLabel }: { result: BattleOutco
         {injured.length > 0 && (
           <span className="row-bad">{injured.map((p) => p.name).join(', ')} knocked out — recovering at town.</span>
         )}
-        <button className="small-button" onClick={onClose} style={{ marginTop: 8 }}>
-          {continueLabel ?? 'Continue'}
-        </button>
+        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+          <button className="small-button" onClick={onClose}>
+            {continueLabel ?? 'Continue'}
+          </button>
+          {onStop && (
+            <button className="small-button danger" onClick={onStop}>
+              Stop
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

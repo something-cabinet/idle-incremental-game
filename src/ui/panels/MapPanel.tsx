@@ -6,6 +6,7 @@ import {
   EXPLORE_MAX_PARTY_SIZE,
   MATERIALS,
   QUEST_DEFAULT_MAX_ADVENTURERS,
+  QUEST_MAX_BATCH,
   QUEST_MAX_REPEATS_INPUT,
   QUEST_MAX_REQUIREMENTS,
 } from '../../game/config';
@@ -184,11 +185,16 @@ function ExploreDialog({ zone, onClose }: { zone: LocationDef; onClose: () => vo
     }
   }
 
+  function handleStop() {
+    setBattle(null);
+  }
+
   if (battle) {
     const label =
       repeatCount === 0
         ? 'Continue'
         : `Continue (${fightsRemaining} left)`;
+    const showStop = repeatCount === 0 || fightsRemaining > 0;
     return (
       <BattleModal
         result={battle}
@@ -196,6 +202,7 @@ function ExploreDialog({ zone, onClose }: { zone: LocationDef; onClose: () => vo
         reducedMotion={state.settings.reducedMotion}
         onClose={handleBattleClose}
         continueLabel={label}
+        onStop={showStop ? handleStop : undefined}
       />
     );
   }
@@ -407,7 +414,7 @@ function QuestCreationDialog({ zone, onClose }: { zone: LocationDef; onClose: ()
         </div>
         <p className="detail-sub">
           Check everything this quest requires (up to {QUEST_MAX_REQUIREMENTS}) — the whole
-          bundle must be fulfilled together before it pays out.
+          bundle must be fulfilled together before it pays out. Max {QUEST_MAX_BATCH} per material type.
         </p>
 
         <div className="rows">
@@ -437,7 +444,7 @@ function QuestCreationDialog({ zone, onClose }: { zone: LocationDef; onClose: ()
                   <input
                     type="number"
                     min={1}
-                    max={50}
+                    max={QUEST_MAX_BATCH}
                     disabled={!isSelected}
                     value={amounts[target.id] ?? String(DEFAULT_AMOUNT)}
                     onChange={(e) => setAmount(target.id, e.target.value)}

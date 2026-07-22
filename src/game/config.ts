@@ -413,7 +413,7 @@ export const QUEST_BATCH_TIME_BASE = 4; // solo seconds per batch at unitDiff 1,
 export const QUEST_TIME_EXP = 0.7; // <1: bigger batches are more time-efficient per unit
 export const QUEST_REP_BASE = 0.5; // reputation per batch at unitDiff 1, B 1
 export const QUEST_MIN_BATCH = 1;
-export const QUEST_MAX_BATCH = 50;
+export const QUEST_MAX_BATCH = 100;
 
 /**
  * Gold cost scales with target.difficulty * tier^QUEST_GOLD_TIER_EXP — a
@@ -438,7 +438,7 @@ export const ADVENTURER_MAX = 500;
 export const QUEST_UNLIMITED_REPEATS = 0;
 /** Highest repeatCount a player can type in when posting a quest (sanity cap; not a balance number). */
 export const QUEST_MAX_REPEATS_INPUT = 9_999;
-export const QUEST_DEFAULT_MAX_ADVENTURERS = 3;
+export const QUEST_DEFAULT_MAX_ADVENTURERS = ADVENTURER_MAX;
 export const QUEST_MIN_ADVENTURERS = 1;
 /** Sane UI cap on how many distinct targets one quest posting can bundle. */
 export const QUEST_MAX_REQUIREMENTS = 6;
