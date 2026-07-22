@@ -7,10 +7,10 @@ import type { AdventurerClass } from '../game/types';
 // Constants
 // ---------------------------------------------------------------------------
 
-const FIGHTER_W = 56;
-const FIGHTER_H = 68;
-const HP_BAR_H = 6;
-const HP_BAR_W = 52;
+const FIGHTER_W = 28;
+const FIGHTER_H = 34;
+const HP_BAR_H = 4;
+const HP_BAR_W = 26;
 const GAP = 14;
 const LUNGE_DIST = 40;
 const LUNGE_MS = 180;
@@ -152,7 +152,7 @@ function createFighterSprite(
   flashOverlay.alpha = 0;
   container.addChild(flashOverlay);
 
-  const nameStyle = new TextStyle({ fill: 0xffffff, fontSize: 11, fontFamily: 'monospace' });
+  const nameStyle = new TextStyle({ fill: 0xffffff, fontSize: 7, fontFamily: 'monospace' });
   const nameText = new Text({ text: name, style: nameStyle });
   nameText.anchor.set(0.5, 0);
   nameText.y = FIGHTER_H / 2 + 4;
