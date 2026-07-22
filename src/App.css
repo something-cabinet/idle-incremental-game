@@ -1400,6 +1400,16 @@ button.row:disabled {
   opacity: 0.4;
 }
 
+.field-label.checkbox-label {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
+.field-label.checkbox-label input {
+  width: auto;
+}
+
 /* ---- Quest creation dialog checklist ---- */
 .quest-checklist-row {
   cursor: pointer;

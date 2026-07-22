@@ -133,10 +133,11 @@ function ExploreDialog({ zone, onClose }: { zone: LocationDef; onClose: () => vo
   const state = useGameState();
   const [partyIds, setPartyIds] = useState<number[]>([]);
   const [battle, setBattle] = useState<BattleOutcome | null>(null);
-  const [repeatInput, setRepeatInput] = useState('');
-  const [fightsRemaining, setFightsRemaining] = useState(0);
-
-  const repeatCount = Number(repeatInput) || 0;
+  const [autoContinue, setAutoContinue] = useState(false);
+  // The subset of partyIds still fighting — knocked-out champions are pulled
+  // out (to recover in town) between fights instead of ending the whole run.
+  const [activeIds, setActiveIds] = useState<number[]>([]);
+  const [stopRequested, setStopRequested] = useState(false);
 
   function toggle(id: number) {
     setPartyIds((prev) => {
@@ -146,10 +147,10 @@ function ExploreDialog({ zone, onClose }: { zone: LocationDef; onClose: () => vo
     });
   }
 
-  function runNextFight() {
+  function runNextFight(ids: number[]) {
     let outcome: BattleOutcome | null = null;
     store.dispatch((s) => {
-      const { state: next, result } = runExplore(s, zone.id, partyIds, Math.random);
+      const { state: next, result } = runExplore(s, zone.id, ids, Math.random);
       outcome = result;
       return next;
     });
@@ -159,12 +160,9 @@ function ExploreDialog({ zone, onClose }: { zone: LocationDef; onClose: () => vo
   }
 
   function begin() {
-    if (repeatCount > 0) {
-      setFightsRemaining(repeatCount - 1);
-    } else {
-      setFightsRemaining(0);
-    }
-    runNextFight();
+    setStopRequested(false);
+    setActiveIds(partyIds);
+    runNextFight(partyIds);
   }
 
   function sendOnAutoExplore() {
@@ -173,28 +171,30 @@ function ExploreDialog({ zone, onClose }: { zone: LocationDef; onClose: () => vo
     onClose();
   }
 
+  // Explore runs unlimited fights until the player stops or the whole squad
+  // is knocked out — no repeat count. Champions knocked out in a fight are
+  // dropped from the squad (they're already sent to recovery by
+  // applyBattleResult) rather than ending the run for everyone else.
   function handleBattleClose() {
-    const more = repeatCount === 0 || fightsRemaining > 0;
-    if (more) {
-      if (repeatCount > 0) {
-        setFightsRemaining((r) => r - 1);
-      }
-      runNextFight();
-    } else {
+    if (!battle) return;
+    const knockedOutIds = new Set(
+      battle.party.filter((p) => p.knockedOut).map((p) => p.advId),
+    );
+    const survivors = activeIds.filter((id) => !knockedOutIds.has(id));
+    setActiveIds(survivors);
+    if (survivors.length === 0 || stopRequested) {
+      setBattle(null);
       onClose();
+      return;
     }
+    runNextFight(survivors);
   }
 
   function handleStop() {
-    setBattle(null);
+    setStopRequested(true);
   }
 
   if (battle) {
-    const label =
-      repeatCount === 0
-        ? 'Continue'
-        : `Continue (${fightsRemaining} left)`;
-    const showStop = repeatCount === 0 || fightsRemaining > 0;
     return (
       <BattleModal
         result={battle}
@@ -202,8 +202,8 @@ function ExploreDialog({ zone, onClose }: { zone: LocationDef; onClose: () => vo
         tier={zone.tier}
         reducedMotion={state.settings.reducedMotion}
         onClose={handleBattleClose}
-        continueLabel={label}
-        onStop={showStop ? handleStop : undefined}
+        autoAdvance={autoContinue || stopRequested}
+        onStop={handleStop}
       />
     );
   }
@@ -276,22 +276,19 @@ function ExploreDialog({ zone, onClose }: { zone: LocationDef; onClose: () => vo
         </div>
 
         <div className="quest-post">
-          <label className="field-label">
-            repeats
+          <label className="field-label checkbox-label">
             <input
-              type="number"
-              min={0}
-              placeholder="∞"
-              value={repeatInput}
-              onChange={(e) => setRepeatInput(e.target.value)}
+              type="checkbox"
+              checked={autoContinue}
+              onChange={(e) => setAutoContinue(e.target.checked)}
             />
+            auto continue
           </label>
         </div>
 
         <div className="zone-actions">
           <button className="small-button" disabled={partyIds.length === 0} onClick={begin}>
-            ⚔ Begin Explore ({partyIds.length}/{EXPLORE_MAX_PARTY_SIZE})
-            {repeatCount > 0 ? ` ×${repeatCount}` : ' ∞'}
+            ⚔ Begin Explore ({partyIds.length}/{EXPLORE_MAX_PARTY_SIZE}) ∞
           </button>
           <button
             className="small-button"

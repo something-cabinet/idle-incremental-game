@@ -8,6 +8,14 @@ import { BattleViewer } from './BattleViewer';
  * the (already-resolved) combat log finishes — the outcome and rewards are
  * committed to state the instant Explore was clicked, this just reveals it.
  * The battlefield is rendered by a PixiJS canvas with animated fighters.
+ *
+ * Explore chains fights back-to-back until the player stops it, so this modal
+ * stays mounted across many `result`s in a row (the PixiJS app persists —
+ * only the scene rebuilds). `autoAdvance` controls whether it waits for a
+ * manual "Continue" click between fights or, once a fight's playback
+ * finishes, proceeds on its own (used both for the auto-continue toggle and
+ * once the player has pressed Stop, so the in-flight fight still plays out
+ * to completion instead of cutting off mid-animation).
  */
 export function BattleModal({
   result,
@@ -15,7 +23,7 @@ export function BattleModal({
   tier,
   reducedMotion,
   onClose,
-  continueLabel,
+  autoAdvance,
   onStop,
 }: {
   result: BattleOutcome;
@@ -23,17 +31,19 @@ export function BattleModal({
   tier: number;
   reducedMotion: boolean;
   onClose: () => void;
-  continueLabel?: string;
-  onStop?: () => void;
+  autoAdvance: boolean;
+  onStop: () => void;
 }) {
   const [revealed, setRevealed] = useState(reducedMotion ? result.log.length : 0);
   const [pixiDone, setPixiDone] = useState(false);
   const skippedRef = useRef(reducedMotion);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   // BattleModal stays mounted across a repeat/chain of fights (so the PixiJS
   // app underneath isn't torn down each time) — reset playback state whenever
   // a new `result` comes in, or leftover `pixiDone`/`revealed` from the
-  // previous fight makes the summary + Continue/Stop buttons appear instantly.
+  // previous fight makes the summary appear instantly.
   useEffect(() => {
     setRevealed(reducedMotion ? result.log.length : 0);
     setPixiDone(false);
@@ -56,16 +66,31 @@ export function BattleModal({
   const done = pixiDone && revealed >= result.log.length;
   const visibleLog = result.log.slice(0, revealed);
 
+  // Auto-continue mode (or a pending Stop) proceeds on its own once playback
+  // finishes — brief pause so the summary is still readable. Uses a ref for
+  // onClose so the frequent game-tick re-renders of the parent don't reset
+  // this timer before it fires.
+  useEffect(() => {
+    if (!done || !autoAdvance) return;
+    const t = setTimeout(() => onCloseRef.current(), 600);
+    return () => clearTimeout(t);
+  }, [done, autoAdvance]);
+
   return (
     <div className="story-overlay battle-overlay">
       <div className="story-modal detail-modal battle-modal">
         <div className="detail-header">
           <h2 className="story-title">Exploring — {locationName}</h2>
-          {!pixiDone && (
-            <button className="small-button" onClick={skip}>
-              Skip ▶▶
+          <div style={{ display: 'flex', gap: 8 }}>
+            {!pixiDone && (
+              <button className="small-button" onClick={skip}>
+                Skip ▶▶
+              </button>
+            )}
+            <button className="small-button danger" onClick={onStop}>
+              Stop
             </button>
-          )}
+          </div>
         </div>
 
         <BattleViewer
@@ -86,13 +111,21 @@ export function BattleModal({
           {visibleLog.length === 0 && <div className="battle-log-line">The battle begins...</div>}
         </div>
 
-        {done && <BattleSummary result={result} onClose={onClose} continueLabel={continueLabel} onStop={onStop} />}
+        {done && <BattleSummary result={result} onClose={onClose} autoAdvance={autoAdvance} />}
       </div>
     </div>
   );
 }
 
-function BattleSummary({ result, onClose, continueLabel, onStop }: { result: BattleOutcome; onClose: () => void; continueLabel?: string; onStop?: () => void }) {
+function BattleSummary({
+  result,
+  onClose,
+  autoAdvance,
+}: {
+  result: BattleOutcome;
+  onClose: () => void;
+  autoAdvance: boolean;
+}) {
   const win = result.outcome === 'win';
   const injured = result.party.filter((p) => p.knockedOut);
   return (
@@ -115,12 +148,11 @@ function BattleSummary({ result, onClose, continueLabel, onStop }: { result: Bat
           <span className="row-bad">{injured.map((p) => p.name).join(', ')} knocked out — recovering at town.</span>
         )}
         <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-          <button className="small-button" onClick={onClose}>
-            {continueLabel ?? 'Continue'}
-          </button>
-          {onStop && (
-            <button className="small-button danger" onClick={onStop}>
-              Stop
+          {autoAdvance ? (
+            <span className="row-sub">Continuing…</span>
+          ) : (
+            <button className="small-button" onClick={onClose}>
+              Continue
             </button>
           )}
         </div>
