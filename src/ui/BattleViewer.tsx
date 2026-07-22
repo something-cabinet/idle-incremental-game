@@ -9,8 +9,12 @@ import type { AdventurerClass } from '../game/types';
 
 const FIGHTER_W = 28;
 const FIGHTER_H = 34;
+// Champions render 30% smaller than monsters to help distinguish the two sides.
+const PARTY_W = Math.round(FIGHTER_W * 0.7);
+const PARTY_H = Math.round(FIGHTER_H * 0.7);
 const HP_BAR_H = 4;
 const HP_BAR_W = 26;
+const HP_TEXT_SIZE = 7;
 const GAP = 14;
 const LUNGE_DIST = 40;
 const LUNGE_MS = 180;
@@ -67,6 +71,7 @@ function lerp(a: number, b: number, t: number): number {
 interface FighterSpriteData {
   container: Container;
   nameText: Text;
+  hpText: Text;
   hpFill: Graphics;
   hpBg: Graphics;
   body: Graphics;
@@ -77,6 +82,7 @@ interface FighterSpriteData {
   offsetY: number;
   alpha: number;
   scale: number;
+  height: number;
   hp: number;
   maxHp: number;
   hitFlash: number;
@@ -97,16 +103,19 @@ function createFighterSprite(
   container.x = x;
   container.y = y;
 
+  const w = isParty ? PARTY_W : FIGHTER_W;
+  const h = isParty ? PARTY_H : FIGHTER_H;
+
   const body = new Graphics();
   const color = isParty ? CLASS_COLORS[className as AdventurerClass] ?? 0x888888 : monsterColor(tier);
 
   if (isParty) {
-    body.roundRect(-FIGHTER_W / 2, -FIGHTER_H / 2, FIGHTER_W, FIGHTER_H, 8).fill({ color });
+    body.roundRect(-w / 2, -h / 2, w, h, 8).fill({ color });
   } else {
     const shape = monsterShape(targetId);
     const cx = 0;
     const cy = 0;
-    const r = Math.min(FIGHTER_W, FIGHTER_H) / 2 - 4;
+    const r = Math.min(w, h) / 2 - 4;
     switch (shape) {
       case 'circle':
         body.circle(cx, cy, r).fill({ color });
@@ -148,17 +157,17 @@ function createFighterSprite(
   container.addChild(body);
 
   const flashOverlay = new Graphics();
-  flashOverlay.rect(-FIGHTER_W / 2, -FIGHTER_H / 2, FIGHTER_W, FIGHTER_H).fill({ color: 0xffffff, alpha: 1 });
+  flashOverlay.rect(-w / 2, -h / 2, w, h).fill({ color: 0xffffff, alpha: 1 });
   flashOverlay.alpha = 0;
   container.addChild(flashOverlay);
 
   const nameStyle = new TextStyle({ fill: 0xffffff, fontSize: 7, fontFamily: 'monospace' });
   const nameText = new Text({ text: name, style: nameStyle });
   nameText.anchor.set(0.5, 0);
-  nameText.y = FIGHTER_H / 2 + 4;
+  nameText.y = h / 2 + 4;
   container.addChild(nameText);
 
-  const hpBarY = -FIGHTER_H / 2 - HP_BAR_H - 4;
+  const hpBarY = -h / 2 - HP_BAR_H - 4;
   const hpBg = new Graphics();
   hpBg.roundRect(-HP_BAR_W / 2, hpBarY, HP_BAR_W, HP_BAR_H, 2).fill({ color: 0x333333 });
   container.addChild(hpBg);
@@ -167,9 +176,16 @@ function createFighterSprite(
   hpFill.roundRect(-HP_BAR_W / 2, hpBarY, HP_BAR_W, HP_BAR_H, 2).fill({ color: 0x44cc44 });
   container.addChild(hpFill);
 
+  const hpTextStyle = new TextStyle({ fill: 0xffffff, fontSize: HP_TEXT_SIZE, fontFamily: 'monospace' });
+  const hpText = new Text({ text: String(maxHp), style: hpTextStyle });
+  hpText.anchor.set(0.5, 1);
+  hpText.y = hpBarY - 1;
+  container.addChild(hpText);
+
   return {
     container,
     nameText,
+    hpText,
     hpFill,
     hpBg,
     body,
@@ -180,6 +196,7 @@ function createFighterSprite(
     offsetY: 0,
     alpha: 1,
     scale: 1,
+    height: h,
     hp: maxHp,
     maxHp,
     hitFlash: 0,
@@ -190,12 +207,13 @@ function createFighterSprite(
 function updateHpBar(sprite: FighterSpriteData): void {
   const pct = Math.max(0, sprite.hp / sprite.maxHp);
   const w = HP_BAR_W * pct;
-  const hpBarY = -FIGHTER_H / 2 - HP_BAR_H - 4;
+  const hpBarY = -sprite.height / 2 - HP_BAR_H - 4;
   const color = pct > 0.5 ? 0x44cc44 : pct > 0.25 ? 0xccaa44 : 0xcc4444;
   sprite.hpFill.clear();
   if (w > 0) {
     sprite.hpFill.roundRect(-HP_BAR_W / 2, hpBarY, w, HP_BAR_H, 2).fill({ color });
   }
+  sprite.hpText.text = String(Math.max(0, Math.round(sprite.hp)));
 }
 
 // ---------------------------------------------------------------------------
@@ -291,11 +309,11 @@ function buildScene(app: Application, result: BattleOutcome, tier: number, w: nu
 
   const partyCount = result.party.length;
   const monsterCount = result.monsters.length;
-  const totalH = partyCount > 1 ? (partyCount - 1) * (FIGHTER_H + GAP + 20) : 0;
+  const totalH = partyCount > 1 ? (partyCount - 1) * (PARTY_H + GAP + 20) : 0;
   const partyStartY = (h - totalH) / 2;
 
   result.party.forEach((p, i) => {
-    const sprite = createFighterSprite(p.name, partyX, partyStartY + i * (FIGHTER_H + GAP + 20), p.maxHp, true, tier, p.className, '');
+    const sprite = createFighterSprite(p.name, partyX, partyStartY + i * (PARTY_H + GAP + 20), p.maxHp, true, tier, p.className, '');
     partySprites.push(sprite);
     scene.addChild(sprite.container);
   });
@@ -591,7 +609,7 @@ export function BattleViewer({
           if (st.defenderSprite) {
             st.defenderSprite.hitFlash = 1;
             const dmg = st.currentEntry?.damage ?? 0;
-            const floater = createFloater(st.defenderSprite.container.x, st.defenderSprite.container.y - FIGHTER_H / 2 - 10, dmg);
+            const floater = createFloater(st.defenderSprite.container.x, st.defenderSprite.container.y - st.defenderSprite.height / 2 - 10, dmg);
             st.floaters.push(floater);
             st.floatLayer.addChild(floater.text);
             st.shakeDecay = 200;

@@ -1485,24 +1485,3 @@ button.row:disabled {
   background: rgba(255, 139, 122, 0.25);
 }
 
-.battle-log {
-  display: flex;
-  flex-direction: column-reverse;
-  gap: 4px;
-  height: 180px;
-  overflow-y: auto;
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--panel);
-  font-size: 0.78rem;
-  line-height: 1.4;
-}
-
-.battle-log-line.good {
-  color: var(--text);
-}
-
-.battle-log-line.bad {
-  color: var(--red);
-}

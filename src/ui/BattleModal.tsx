@@ -7,7 +7,9 @@ import { BattleViewer } from './BattleViewer';
  * Blocking battle modal: no close button/overlay-dismiss until playback of
  * the (already-resolved) combat log finishes — the outcome and rewards are
  * committed to state the instant Explore was clicked, this just reveals it.
- * The battlefield is rendered by a PixiJS canvas with animated fighters.
+ * The battlefield is rendered by a PixiJS canvas with animated fighters
+ * (current HP is shown right on each fighter's sprite, so there's no
+ * separate text log here).
  *
  * Explore chains fights back-to-back until the player stops it, so this modal
  * stays mounted across many `result`s in a row (the PixiJS app persists —
@@ -34,91 +36,50 @@ export function BattleModal({
   autoAdvance: boolean;
   onStop: () => void;
 }) {
-  const [revealed, setRevealed] = useState(reducedMotion ? result.log.length : 0);
   const [pixiDone, setPixiDone] = useState(false);
-  const skippedRef = useRef(reducedMotion);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
   // BattleModal stays mounted across a repeat/chain of fights (so the PixiJS
   // app underneath isn't torn down each time) — reset playback state whenever
   // a new `result` comes in. This must happen *during render*, not in a
-  // useEffect: an effect-based reset lets one render of the new `result` pass
-  // through with the previous fight's stale `pixiDone`/`skippedRef` values
-  // first, and BattleViewer bakes that stale `skip` prop into the freshly
-  // built scene before the effect can correct it — silently auto-skipping
-  // the new fight and hiding the Skip button behind an already-true
-  // `pixiDone`.
+  // useEffect: an effect-based reset would let one render of the new `result`
+  // pass through with the previous fight's stale `pixiDone` first, briefly
+  // showing the summary for a fight that hasn't played yet.
   const [prevResult, setPrevResult] = useState(result);
   if (prevResult !== result) {
     setPrevResult(result);
-    setRevealed(reducedMotion ? result.log.length : 0);
     setPixiDone(false);
-    skippedRef.current = reducedMotion;
   }
-
-  useEffect(() => {
-    if (revealed >= result.log.length) return;
-    const t = setTimeout(() => {
-      setRevealed((r) => r + 1);
-    }, 500);
-    return () => clearTimeout(t);
-  }, [revealed, result.log]);
-
-  function skip() {
-    skippedRef.current = true;
-    setRevealed(result.log.length);
-  }
-
-  const done = pixiDone && revealed >= result.log.length;
-  const visibleLog = result.log.slice(0, revealed);
 
   // Auto-continue mode (or a pending Stop) proceeds on its own once playback
   // finishes — brief pause so the summary is still readable. Uses a ref for
   // onClose so the frequent game-tick re-renders of the parent don't reset
   // this timer before it fires.
   useEffect(() => {
-    if (!done || !autoAdvance) return;
+    if (!pixiDone || !autoAdvance) return;
     const t = setTimeout(() => onCloseRef.current(), 600);
     return () => clearTimeout(t);
-  }, [done, autoAdvance]);
+  }, [pixiDone, autoAdvance]);
 
   return (
     <div className="story-overlay battle-overlay">
       <div className="story-modal detail-modal battle-modal">
         <div className="detail-header">
           <h2 className="story-title">Exploring — {locationName}</h2>
-          <div style={{ display: 'flex', gap: 8 }}>
-            {!pixiDone && (
-              <button className="small-button" onClick={skip}>
-                Skip ▶▶
-              </button>
-            )}
-            <button className="small-button danger" onClick={onStop}>
-              Stop
-            </button>
-          </div>
+          <button className="small-button danger" onClick={onStop}>
+            Stop
+          </button>
         </div>
 
         <BattleViewer
           result={result}
           tier={tier}
-          skip={skippedRef.current || reducedMotion}
+          skip={reducedMotion}
           onFinish={() => setPixiDone(true)}
         />
 
-        <div className="battle-log">
-          {visibleLog.map((entry, i) => (
-            <div key={i} className={`battle-log-line ${entry.attackerSide === 'party' ? 'good' : 'bad'}`}>
-              <strong>{entry.attackerName}</strong> hits <strong>{entry.defenderName}</strong> for{' '}
-              {entry.damage} dmg{' '}
-              {entry.defenderDefeated ? '— defeated!' : `(${entry.defenderHpAfter}/${entry.defenderMaxHp} HP)`}
-            </div>
-          ))}
-          {visibleLog.length === 0 && <div className="battle-log-line">The battle begins...</div>}
-        </div>
-
-        {done && <BattleSummary result={result} onClose={onClose} autoAdvance={autoAdvance} />}
+        {pixiDone && <BattleSummary result={result} onClose={onClose} autoAdvance={autoAdvance} />}
       </div>
     </div>
   );
