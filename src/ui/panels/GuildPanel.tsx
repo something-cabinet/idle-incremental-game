@@ -390,24 +390,7 @@ function ChampionDetailModal({ adv, onClose }: { adv: Adventurer; onClose: () =>
       <div className="story-modal detail-modal" onClick={(e) => e.stopPropagation()}>
         <div className="detail-header">
           <h2 className="story-title">{adv.name}</h2>
-          <div className="zone-actions">
-            {adv.assignment?.mode === 'auto-explore' && (
-              <button
-                className="small-button danger"
-                onClick={() => store.dispatch((s) => recallAdventurer(s, adv.id))}
-              >
-                Recall
-              </button>
-            )}
-            <button
-              className="small-button danger"
-              disabled={onExpedition}
-              onClick={() => setConfirmFire(true)}
-            >
-              🔥 Fire
-            </button>
-            <button className="small-button" onClick={onClose}>✕</button>
-          </div>
+          <button className="small-button" onClick={onClose}>✕</button>
         </div>
         <p className="detail-sub">
           {CLASS_ICON[adv.className]} Level {adv.level} {CLASS_LABEL[adv.className]}
@@ -545,6 +528,24 @@ function ChampionDetailModal({ adv, onClose }: { adv: Adventurer; onClose: () =>
               </div>
             );
           })}
+        </div>
+
+        <div className="zone-actions">
+          {adv.assignment?.mode === 'auto-explore' && (
+            <button
+              className="small-button danger"
+              onClick={() => store.dispatch((s) => recallAdventurer(s, adv.id))}
+            >
+              Recall
+            </button>
+          )}
+          <button
+            className="small-button danger"
+            disabled={onExpedition}
+            onClick={() => setConfirmFire(true)}
+          >
+            🔥 Fire
+          </button>
         </div>
       </div>
     </div>

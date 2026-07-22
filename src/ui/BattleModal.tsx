@@ -37,8 +37,14 @@ export function BattleModal({
   onStop: () => void;
 }) {
   const [pixiDone, setPixiDone] = useState(false);
+  const [stopClicked, setStopClicked] = useState(false);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+
+  function handleStopClick() {
+    setStopClicked(true);
+    onStop();
+  }
 
   // BattleModal stays mounted across a repeat/chain of fights (so the PixiJS
   // app underneath isn't torn down each time) — reset playback state whenever
@@ -50,6 +56,7 @@ export function BattleModal({
   if (prevResult !== result) {
     setPrevResult(result);
     setPixiDone(false);
+    setStopClicked(false);
   }
 
   // Auto-continue mode (or a pending Stop) proceeds on its own once playback
@@ -67,9 +74,6 @@ export function BattleModal({
       <div className="story-modal detail-modal battle-modal">
         <div className="detail-header">
           <h2 className="story-title">Exploring — {locationName}</h2>
-          <button className="small-button danger" onClick={onStop}>
-            Stop
-          </button>
         </div>
 
         <BattleViewer
@@ -80,6 +84,12 @@ export function BattleModal({
         />
 
         {pixiDone && <BattleSummary result={result} onClose={onClose} autoAdvance={autoAdvance} />}
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <button className="small-button danger" onClick={handleStopClick} disabled={stopClicked}>
+            {stopClicked ? 'Stopping…' : 'Stop'}
+          </button>
+        </div>
       </div>
     </div>
   );
