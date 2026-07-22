@@ -143,7 +143,22 @@ export function rollMonsterGroup(locationId: string, rng: Rng): MonsterInstance[
       goldReward: stats.goldReward,
     });
   }
-  return group;
+  return disambiguateMonsterNames(group);
+}
+
+/** Monster names/log entries/sprites are all matched by `name`, so duplicates
+ * within a group (e.g. two "Wolf"s rolled back to back) are disambiguated
+ * once here with " A", " B", " C"... suffixes rather than at each call site. */
+function disambiguateMonsterNames(group: MonsterInstance[]): MonsterInstance[] {
+  const counts: Record<string, number> = {};
+  for (const m of group) counts[m.name] = (counts[m.name] ?? 0) + 1;
+  const seen: Record<string, number> = {};
+  return group.map((m) => {
+    if (counts[m.name] <= 1) return m;
+    const idx = seen[m.name] ?? 0;
+    seen[m.name] = idx + 1;
+    return { ...m, name: `${m.name} ${String.fromCharCode(65 + idx)}` };
+  });
 }
 
 function rollDamage(atk: number, def: number, rng: Rng): number {

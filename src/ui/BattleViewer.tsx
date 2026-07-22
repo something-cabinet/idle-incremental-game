@@ -648,7 +648,13 @@ export function BattleViewer({
     ticker.add(fn);
 
     return () => {
-      ticker.remove(fn);
+      // If Effect 1's cleanup already destroyed the app (component unmounting
+      // rather than just re-rendering), its ticker is destroyed too — calling
+      // remove() on it throws and crashes the whole React tree. Only the app
+      // itself unmounting nulls appRef.current, so this guard is safe.
+      if (appRef.current === app) {
+        ticker.remove(fn);
+      }
     };
   }, [ready, result, findSprite]);
 

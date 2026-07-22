@@ -30,6 +30,16 @@ export function BattleModal({
   const [pixiDone, setPixiDone] = useState(false);
   const skippedRef = useRef(reducedMotion);
 
+  // BattleModal stays mounted across a repeat/chain of fights (so the PixiJS
+  // app underneath isn't torn down each time) — reset playback state whenever
+  // a new `result` comes in, or leftover `pixiDone`/`revealed` from the
+  // previous fight makes the summary + Continue/Stop buttons appear instantly.
+  useEffect(() => {
+    setRevealed(reducedMotion ? result.log.length : 0);
+    setPixiDone(false);
+    skippedRef.current = reducedMotion;
+  }, [result, reducedMotion]);
+
   useEffect(() => {
     if (revealed >= result.log.length) return;
     const t = setTimeout(() => {
