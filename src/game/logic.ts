@@ -2,6 +2,7 @@ import { maxHp } from './adventurers';
 import {
   ADVENTURER_MAX,
   ATTRIBUTES,
+  CHAMPION_PERKS,
   CLASS_DEFS,
   CLICK_BASE_GOLD,
   DAY_LENGTH_SECONDS,
@@ -110,6 +111,8 @@ export function migrateSave(data: SaveData, now = Date.now()): GameState {
     // equipped gear are dropped; adventurers gain fresh attributes + HP.
     inventory: preV5 ? [] : (s.inventory ?? []).map(migrateEquipment),
     adventurers: (s.adventurers ?? []).map((a) => migrateAdventurer(a, preV5)),
+    // Candidates awaiting recruitment get the same v14 perk backfill.
+    recruitCandidates: (s.recruitCandidates ?? []).map((a) => migrateAdventurer(a, preV5)),
     // v10 added the Forge's single craft job (`crafting`); `base` already
     // defaults it to null, and older saves simply lack the key, so the
     // `...base, ...s` spread above backfills it with no extra code needed.
@@ -140,6 +143,9 @@ function migrateAdventurer(a: Adventurer, preV5: boolean): Adventurer {
     assignment: migrateAssignment(a.assignment),
     enemiesDefeated: a.enemiesDefeated ?? 0,
     totalDamageDealt: a.totalDamageDealt ?? 0,
+    // v14 gave every champion a passive perk. Pre-v14 champions get one
+    // assigned deterministically from their id (no rng available at load).
+    perkId: a.perkId ?? CHAMPION_PERKS[a.id % CHAMPION_PERKS.length].id,
   };
   if (preV5) {
     const attributes = { ...CLASS_DEFS[patched.className].base } as Attributes;

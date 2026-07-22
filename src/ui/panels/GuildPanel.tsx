@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { adventurerStats, effectiveAttributes, equipDelta, isInjured, maxHp } from '../../game/adventurers';
+import { adventurerStats, championPerk, effectiveAttributes, equipDelta, isInjured, maxHp } from '../../game/adventurers';
 import { ATTRIBUTES, GUILD_UPGRADES, MATERIALS, xpToNext } from '../../game/config';
 import { formatDuration } from '../../game/format';
 import {
@@ -64,6 +64,23 @@ const SLOT_FALLBACK_ICON: Record<EquipSlot, string> = {
 };
 
 const EQUIP_SLOTS: EquipSlot[] = ['weapon', 'armor', 'trinket'];
+
+/** The champion's passive perk, shown in detail views. */
+function PerkBadge({ adv }: { adv: Adventurer }) {
+  const perk = championPerk(adv.perkId);
+  if (!perk) return null;
+  return (
+    <div className={`row perk-row perk-${perk.tier}`}>
+      <div className="row-info">
+        <span className="row-name">
+          {perk.tier === 'major' ? '⭐' : '✨'} {perk.name}
+          <span className="perk-tag">{perk.tier === 'major' ? 'Major' : 'Minor'} Perk</span>
+        </span>
+        <span className="row-desc">{perk.description}</span>
+      </div>
+    </div>
+  );
+}
 
 function rate(n: number): string {
   if (n === 0) return '0';
@@ -338,6 +355,7 @@ function ChampionDetail({ adv }: { adv: Adventurer }) {
         </div>
       </div>
       <AttributeBars attributes={adv.attributes} />
+      <PerkBadge adv={adv} />
     </div>
   );
 }
@@ -437,6 +455,8 @@ function ChampionDetailModal({ adv, onClose }: { adv: Adventurer; onClose: () =>
         </div>
 
         <AttributeBars attributes={attrs} />
+
+        <PerkBadge adv={adv} />
 
         {(adv.enemiesDefeated > 0 || adv.totalDamageDealt > 0) && (
           <div className="detail-stats">

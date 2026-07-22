@@ -3,6 +3,7 @@ import type {
   AttributeDef,
   AttributeId,
   Attributes,
+  ChampionPerkDef,
   EquipTypeDef,
   GuildUpgradeDef,
   ItemPrefixDef,
@@ -46,7 +47,7 @@ export const AUTOSAVE_INTERVAL_MS = 10_000;
  * interval firing on schedule — see useGameLoop's visibility listeners.
  */
 export const BACKGROUND_CATCHUP_GAP_MS = 3_000;
-export const SAVE_VERSION = 13;
+export const SAVE_VERSION = 14;
 
 // ---------------------------------------------------------------------------
 // Act 1 — town income (low numbers by design)
@@ -200,6 +201,172 @@ export const CLASS_DEFS: Record<
     },
   },
 };
+
+/**
+ * Champion passive perks — every generated champion rolls exactly one, uniformly
+ * (see generateAdventurer). Ordering matters for the deterministic tests that
+ * generate champions with a constant rng of 0.5: `pick` lands on index
+ * floor(0.5 * length) = 12, which must stay a combat-neutral perk (Fortunate).
+ * See ChampionPerkDef for how effects apply to stats vs. live combat.
+ */
+export const CHAMPION_PERKS: ChampionPerkDef[] = [
+  // ---- Minor: a single upside (indices 0-12) ----
+  {
+    id: 'keen-eye', name: 'Keen Eye', tier: 'minor',
+    description: '25% chance to land a critical hit for 1.6× damage (Explore only).',
+    effects: [{ kind: 'crit', chance: 0.25, mult: 1.6 }],
+  },
+  {
+    id: 'bloodthirsty', name: 'Bloodthirsty', tier: 'minor',
+    description: 'Heals for 12% of the damage it deals (Explore only).',
+    effects: [{ kind: 'lifesteal', fraction: 0.12 }],
+  },
+  {
+    id: 'fleet-footed', name: 'Fleet-Footed', tier: 'minor',
+    description: '+12% Dexterity.',
+    effects: [{ kind: 'attrMult', attr: 'dex', mult: 1.12 }],
+  },
+  {
+    id: 'brawny', name: 'Brawny', tier: 'minor',
+    description: '+12% Strength.',
+    effects: [{ kind: 'attrMult', attr: 'str', mult: 1.12 }],
+  },
+  {
+    id: 'sharp-mind', name: 'Sharp Mind', tier: 'minor',
+    description: '+12% Intellect.',
+    effects: [{ kind: 'attrMult', attr: 'int', mult: 1.12 }],
+  },
+  {
+    id: 'hardy', name: 'Hardy', tier: 'minor',
+    description: '+12% Constitution.',
+    effects: [{ kind: 'attrMult', attr: 'con', mult: 1.12 }],
+  },
+  {
+    id: 'stalwart', name: 'Stalwart', tier: 'minor',
+    description: '+15% Resilience.',
+    effects: [{ kind: 'attrMult', attr: 'res', mult: 1.15 }],
+  },
+  {
+    id: 'iron-skin', name: 'Iron Skin', tier: 'minor',
+    description: '+12% max HP.',
+    effects: [{ kind: 'hpMult', mult: 1.12 }],
+  },
+  {
+    id: 'quick-healer', name: 'Quick Healer', tier: 'minor',
+    description: 'Recovers from injuries 30% faster.',
+    effects: [{ kind: 'recoveryMult', mult: 0.7 }],
+  },
+  {
+    id: 'fast-learner', name: 'Fast Learner', tier: 'minor',
+    description: '+25% experience gained.',
+    effects: [{ kind: 'xpMult', mult: 1.25 }],
+  },
+  {
+    id: 'well-rounded', name: 'Well-Rounded', tier: 'minor',
+    description: '+5% to every attribute.',
+    effects: [{ kind: 'allAttrMult', mult: 1.05 }],
+  },
+  {
+    id: 'battle-ready', name: 'Battle-Ready', tier: 'minor',
+    description: '+8% Strength and +8% Dexterity.',
+    effects: [
+      { kind: 'attrMult', attr: 'str', mult: 1.08 },
+      { kind: 'attrMult', attr: 'dex', mult: 1.08 },
+    ],
+  },
+  {
+    // Index 12 — kept combat-neutral for the constant-rng(0.5) tests.
+    id: 'fortunate', name: 'Fortunate', tier: 'minor',
+    description: '+20% Luck.',
+    effects: [{ kind: 'attrMult', attr: 'lck', mult: 1.2 }],
+  },
+  // ---- Major: a big benefit paired with a real drawback (indices 13+) ----
+  {
+    id: 'titans-blood', name: "Titan's Blood", tier: 'major',
+    description: 'Double max HP, but Dexterity is halved.',
+    effects: [
+      { kind: 'hpMult', mult: 2 },
+      { kind: 'attrMult', attr: 'dex', mult: 0.5 },
+    ],
+  },
+  {
+    id: 'glass-cannon', name: 'Glass Cannon', tier: 'major',
+    description: '+50% Strength, Dexterity & Intellect, but max HP is halved.',
+    effects: [
+      { kind: 'attrMult', attr: 'str', mult: 1.5 },
+      { kind: 'attrMult', attr: 'dex', mult: 1.5 },
+      { kind: 'attrMult', attr: 'int', mult: 1.5 },
+      { kind: 'hpMult', mult: 0.5 },
+    ],
+  },
+  {
+    id: 'late-bloomer', name: 'Late Bloomer', tier: 'major',
+    description: '+45% attribute growth per level, but gains XP 40% slower.',
+    effects: [
+      { kind: 'growthMult', mult: 1.45 },
+      { kind: 'xpMult', mult: 0.6 },
+    ],
+  },
+  {
+    id: 'prodigy', name: 'Prodigy', tier: 'major',
+    description: '+60% experience gained, but −15% to every attribute.',
+    effects: [
+      { kind: 'xpMult', mult: 1.6 },
+      { kind: 'allAttrMult', mult: 0.85 },
+    ],
+  },
+  {
+    id: 'berserker', name: 'Berserker', tier: 'major',
+    description: 'Converts 25% of every other attribute into Strength.',
+    effects: [{ kind: 'convertToStat', to: 'str', fraction: 0.25 }],
+  },
+  {
+    id: 'arcanist', name: 'Arcanist', tier: 'major',
+    description: 'Converts 25% of every other attribute into Intellect.',
+    effects: [{ kind: 'convertToStat', to: 'int', fraction: 0.25 }],
+  },
+  {
+    id: 'duelist', name: 'Duelist', tier: 'major',
+    description: 'Converts 25% of every other attribute into Dexterity.',
+    effects: [{ kind: 'convertToStat', to: 'dex', fraction: 0.25 }],
+  },
+  {
+    id: 'juggernaut', name: 'Juggernaut', tier: 'major',
+    description: '+60% Constitution and +25% max HP, but −40% Dexterity.',
+    effects: [
+      { kind: 'attrMult', attr: 'con', mult: 1.6 },
+      { kind: 'hpMult', mult: 1.25 },
+      { kind: 'attrMult', attr: 'dex', mult: 0.6 },
+    ],
+  },
+  {
+    id: 'colossus', name: 'Colossus', tier: 'major',
+    description: 'Double Constitution, but −30% Strength, Dexterity & Intellect.',
+    effects: [
+      { kind: 'attrMult', attr: 'con', mult: 2 },
+      { kind: 'attrMult', attr: 'str', mult: 0.7 },
+      { kind: 'attrMult', attr: 'dex', mult: 0.7 },
+      { kind: 'attrMult', attr: 'int', mult: 0.7 },
+    ],
+  },
+  {
+    id: 'feral', name: 'Feral', tier: 'major',
+    description: '+30% to every attribute, but recovers from injuries twice as slowly.',
+    effects: [
+      { kind: 'allAttrMult', mult: 1.3 },
+      { kind: 'recoveryMult', mult: 2 },
+    ],
+  },
+  {
+    id: 'gambler', name: 'Gambler', tier: 'major',
+    description: '+150% Luck, but −25% Constitution & Resilience.',
+    effects: [
+      { kind: 'attrMult', attr: 'lck', mult: 2.5 },
+      { kind: 'attrMult', attr: 'con', mult: 0.75 },
+      { kind: 'attrMult', attr: 'res', mult: 0.75 },
+    ],
+  },
+];
 
 /** Hire-time variance: each attribute rolls base ± this. */
 export const HIRE_ATTR_VARIANCE = 1;

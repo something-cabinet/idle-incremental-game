@@ -106,10 +106,54 @@ export interface Assignment {
   lastEncounterAt: number;
 }
 
+// ---------------------------------------------------------------------------
+// Champion passive perks
+// ---------------------------------------------------------------------------
+
+/**
+ * Every champion is born with one passive perk. Two flavors:
+ *  - 'minor' — a single upside (a stat nudge, faster healing, a combat quirk).
+ *  - 'major' — a big benefit paired with a real drawback.
+ *
+ * Effects split into two camps by kind:
+ *  - Stat/progression effects (attrMult, allAttrMult, hpMult, convertToStat,
+ *    growthMult, xpMult, recoveryMult) fold into the champion's derived stats,
+ *    so they apply *everywhere* — manual Explore, Auto-Explore and offline.
+ *  - Live-combat effects (crit, lifesteal) only fire during a manual Explore
+ *    battle; Auto-Explore / offline deliberately ignore them for simplicity
+ *    (see combat.ts simulateBattle `live`).
+ */
+export type ChampionPerkEffect =
+  | { kind: 'attrMult'; attr: AttributeId; mult: number }
+  | { kind: 'allAttrMult'; mult: number }
+  | { kind: 'hpMult'; mult: number }
+  /** Move `fraction` of every OTHER attribute into `to`. */
+  | { kind: 'convertToStat'; to: AttributeId; fraction: number }
+  /** Scale the class's per-level attribute growth. */
+  | { kind: 'growthMult'; mult: number }
+  | { kind: 'xpMult'; mult: number }
+  /** <1 = recovers from injury faster; >1 = slower. */
+  | { kind: 'recoveryMult'; mult: number }
+  /** Live combat only: `chance` to multiply a hit by `mult`. */
+  | { kind: 'crit'; chance: number; mult: number }
+  /** Live combat only: heal `fraction` of damage dealt. */
+  | { kind: 'lifesteal'; fraction: number };
+
+export interface ChampionPerkDef {
+  id: string;
+  name: string;
+  tier: 'minor' | 'major';
+  /** Human-readable summary shown in the champion detail view. */
+  description: string;
+  effects: ChampionPerkEffect[];
+}
+
 export interface Adventurer {
   id: number;
   name: string;
   className: AdventurerClass;
+  /** Passive perk id (see CHAMPION_PERKS); assigned at generation. */
+  perkId: string;
   level: number;
   xp: number;
   /**

@@ -5,6 +5,7 @@ import {
   ATK_PER_PRIMARY,
   ATTRIBUTES,
   BONUS_ATTR_TIER_DIV,
+  CHAMPION_PERKS,
   CLASS_DEFS,
   DEF_PER_CON,
   DEF_PER_RES,
@@ -33,6 +34,8 @@ import type {
   AdventurerClass,
   AttributeId,
   Attributes,
+  ChampionPerkDef,
+  ChampionPerkEffect,
   EquipSlot,
   EquipTypeDef,
   Equipment,
@@ -193,10 +196,12 @@ export function generateAdventurer(id: number, rng: Rng): Adventurer {
     const variance = Math.round((rng() * 2 - 1) * HIRE_ATTR_VARIANCE);
     attributes[attr] = Math.max(1, base[attr] + variance);
   }
+  // Perk is rolled last so the class/attribute/name rng stream is unchanged.
   const adv: Adventurer = {
     id,
     name: generateName(rng),
     className,
+    perkId: pick(CHAMPION_PERKS, rng).id,
     level: 1,
     xp: 0,
     attributes,
@@ -212,13 +217,61 @@ export function generateAdventurer(id: number, rng: Rng): Adventurer {
   return { ...adv, hp: maxHp(adv) };
 }
 
-/** Effective attributes: level-1 roll + class growth per level + gear bonuses. */
+// ---------------------------------------------------------------------------
+// Champion perks (passive, one per champion — see CHAMPION_PERKS)
+// ---------------------------------------------------------------------------
+
+export function championPerk(perkId: string | undefined): ChampionPerkDef | undefined {
+  return CHAMPION_PERKS.find((p) => p.id === perkId);
+}
+
+/** The active perk's effects (empty if the champion somehow has no valid perk). */
+export function championPerkEffects(adv: Adventurer): ChampionPerkEffect[] {
+  return championPerk(adv.perkId)?.effects ?? [];
+}
+
+/** Product of a scalar multiplier effect of `kind` across the champion's perk. */
+function perkMult(effects: ChampionPerkEffect[], kind: 'hpMult' | 'growthMult' | 'xpMult' | 'recoveryMult'): number {
+  return effects.reduce((m, e) => (e.kind === kind ? m * e.mult : m), 1);
+}
+
+/**
+ * Effective attributes: level-1 roll + class growth per level + gear bonuses.
+ * Perk stat effects (attrMult/allAttrMult/convertToStat/growthMult) act on the
+ * champion's *innate* attributes only; gear bonuses are added flat on top, so a
+ * "+5 STR" ring always yields +5 regardless of a percentage perk.
+ */
 export function effectiveAttributes(adv: Adventurer): Attributes {
   const growth = CLASS_DEFS[adv.className].growth;
-  const result = {} as Attributes;
+  const effects = championPerkEffects(adv);
+  const growthMult = perkMult(effects, 'growthMult');
+
+  const innate = {} as Attributes;
   for (const { id } of ATTRIBUTES) {
-    result[id] = Math.round(adv.attributes[id] + growth[id] * (adv.level - 1));
+    innate[id] = adv.attributes[id] + growth[id] * growthMult * (adv.level - 1);
   }
+
+  // convertToStat moves a share of every other attribute into one, before any
+  // percentage multipliers scale the result.
+  for (const e of effects) {
+    if (e.kind !== 'convertToStat') continue;
+    let moved = 0;
+    for (const { id } of ATTRIBUTES) {
+      if (id === e.to) continue;
+      const take = innate[id] * e.fraction;
+      innate[id] -= take;
+      moved += take;
+    }
+    innate[e.to] += moved;
+  }
+  for (const e of effects) {
+    if (e.kind === 'attrMult') innate[e.attr] *= e.mult;
+    else if (e.kind === 'allAttrMult') for (const { id } of ATTRIBUTES) innate[id] *= e.mult;
+  }
+
+  const result = {} as Attributes;
+  for (const { id } of ATTRIBUTES) result[id] = Math.max(1, Math.round(innate[id]));
+
   for (const item of Object.values(adv.equipment)) {
     if (!item) continue;
     for (const [attr, value] of Object.entries(item.attrs ?? {})) {
@@ -230,11 +283,18 @@ export function effectiveAttributes(adv: Adventurer): Attributes {
 
 export function maxHp(adv: Adventurer): number {
   const attrs = effectiveAttributes(adv);
+  const hpMult = perkMult(championPerkEffects(adv), 'hpMult');
   let bonus = 0;
   for (const item of Object.values(adv.equipment)) {
     if (item) bonus += item.hp ?? 0;
   }
-  return Math.round(HP_BASE + attrs.con * HP_PER_CON + bonus);
+  // Perk hpMult scales the innate (base + CON) pool; flat gear HP is added after.
+  return Math.round((HP_BASE + attrs.con * HP_PER_CON) * hpMult + bonus);
+}
+
+/** Injury-recovery multiplier from the champion's perk (<1 = faster). */
+export function perkRecoveryMult(adv: Adventurer): number {
+  return perkMult(championPerkEffects(adv), 'recoveryMult');
 }
 
 /**
@@ -313,10 +373,12 @@ export function isInjured(adv: Adventurer, runTimeSeconds: number): boolean {
   return adv.injuredUntil > runTimeSeconds;
 }
 
-/** Returns a new adventurer with XP added and any level-ups applied. */
+/** Returns a new adventurer with XP added and any level-ups applied. The
+ *  champion's perk xpMult scales the incoming amount (applies everywhere,
+ *  including Auto-Explore / offline). */
 export function gainXp(adv: Adventurer, amount: number): Adventurer {
   let { level, xp } = adv;
-  xp += amount;
+  xp += Math.round(amount * perkMult(championPerkEffects(adv), 'xpMult'));
   while (xp >= xpToNext(level)) {
     xp -= xpToNext(level);
     level += 1;

@@ -1,10 +1,12 @@
 import {
   adventurerStats,
+  championPerkEffects,
   effectiveAttributes,
   gainXp,
   generateEquipment,
   isInjured,
   maxHp,
+  perkRecoveryMult,
 } from './adventurers';
 import {
   COMBAT_DAMAGE_VARIANCE,
@@ -170,10 +172,16 @@ function rollDamage(atk: number, def: number, rng: Rng): number {
 /** How long a knocked-out champion needs to recover: scales with the zone's
  * tier and how badly they were overkilled, reduced by heal-speed perks and
  * the Infirmary guild upgrade. */
-function injurySecondsFor(overkillHp: number, hp: number, tier: number, healSpeedMult: number): number {
+function injurySecondsFor(
+  overkillHp: number,
+  hp: number,
+  tier: number,
+  healSpeedMult: number,
+  recoveryMult: number,
+): number {
   const overkillFraction = Math.min(1, Math.max(0, overkillHp / Math.max(1, hp)));
   const fraction = INJURY_MIN_FRACTION + (1 - INJURY_MIN_FRACTION) * overkillFraction;
-  return Math.round((INJURY_SECONDS_PER_TIER * tier * fraction) / healSpeedMult);
+  return Math.round((INJURY_SECONDS_PER_TIER * tier * fraction * recoveryMult) / healSpeedMult);
 }
 
 /**
@@ -182,6 +190,10 @@ function injurySecondsFor(overkillHp: number, hp: number, tier: number, healSpee
  * (or EXPLORE_MAX_TURNS is hit, in which case the party retreats as a loss).
  * Pure & deterministic given `rng` — callers decide whether/how to animate
  * `log` for playback; this function does not touch GameState.
+ *
+ * `live` enables per-champion live-combat perks (crit, lifesteal). Manual
+ * Explore passes true; Auto-Explore / offline leaves it false so those code
+ * paths stay simple and only stat perks (baked into adventurerStats) matter.
  */
 export function simulateBattle(
   state: GameState,
@@ -189,9 +201,22 @@ export function simulateBattle(
   monsters: MonsterInstance[],
   locationId: string,
   rng: Rng,
+  live = false,
 ): BattleOutcome {
   const loc = locationDef(locationId);
   const tier = loc?.tier ?? 1;
+
+  // Live-combat perk effects keyed by champion id (empty unless `live`).
+  const critById: Record<number, { chance: number; mult: number }> = {};
+  const lifestealById: Record<number, number> = {};
+  if (live) {
+    for (const a of party) {
+      for (const e of championPerkEffects(a)) {
+        if (e.kind === 'crit') critById[a.id] = { chance: e.chance, mult: e.mult };
+        else if (e.kind === 'lifesteal') lifestealById[a.id] = e.fraction;
+      }
+    }
+  }
 
   const combatants: Combatant[] = [
     ...party.map((a): Combatant => {
@@ -233,8 +258,17 @@ export function simulateBattle(
       const enemies = combatants.filter((c) => c.side !== attacker.side && c.hp > 0);
       if (enemies.length === 0) continue;
       const target = enemies[Math.floor(rng() * enemies.length)];
-      const damage = rollDamage(attacker.atk, target.def, rng);
+      let damage = rollDamage(attacker.atk, target.def, rng);
+      // Live perks: crit multiplies the hit, lifesteal heals the attacker.
+      if (attacker.side === 'party') {
+        const crit = critById[attacker.refId];
+        if (crit && rng() < crit.chance) damage = Math.round(damage * crit.mult);
+      }
       target.hp -= damage;
+      if (attacker.side === 'party') {
+        const steal = lifestealById[attacker.refId];
+        if (steal) attacker.hp = Math.min(attacker.maxHp, attacker.hp + Math.round(damage * steal));
+      }
       turns++;
       log.push({
         attackerSide: attacker.side,
@@ -285,7 +319,9 @@ export function simulateBattle(
         finalHp: Math.max(0, c.hp),
         maxHp: c.maxHp,
         knockedOut,
-        injurySeconds: knockedOut ? injurySecondsFor(-c.hp, c.maxHp, tier, healSpeedMult) : 0,
+        injurySeconds: knockedOut
+          ? injurySecondsFor(-c.hp, c.maxHp, tier, healSpeedMult, adv ? perkRecoveryMult(adv) : 1)
+          : 0,
         enemiesDefeated: partyKills[c.refId] ?? 0,
         damageDealt: partyDamage[c.refId] ?? 0,
       };
@@ -424,7 +460,7 @@ export function runExplore(
     .map((id) => state.adventurers.find((a) => a.id === id))
     .filter((a): a is Adventurer => !!a);
   const monsters = rollMonsterGroup(locationId, rng);
-  const result = simulateBattle(state, party, monsters, locationId, rng);
+  const result = simulateBattle(state, party, monsters, locationId, rng, true);
   return { state: applyBattleResult(state, result, rng), result };
 }
 

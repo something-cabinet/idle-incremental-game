@@ -251,6 +251,30 @@ button.row:disabled {
   color: var(--text-dim);
 }
 
+/* Champion passive perk badge (Guild detail / recruit views). */
+.perk-row {
+  border-left: 3px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.perk-row.perk-major {
+  border-left-color: var(--gold, #e0b64a);
+  background: color-mix(in srgb, var(--gold, #e0b64a) 10%, transparent);
+}
+
+.perk-tag {
+  margin-left: 0.5em;
+  padding: 0.05em 0.45em;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  vertical-align: middle;
+  color: var(--text-dim);
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
 .row-good {
   font-size: 0.78rem;
   color: var(--green);
