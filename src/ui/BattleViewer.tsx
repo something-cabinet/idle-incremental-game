@@ -400,6 +400,10 @@ export function BattleViewer({
     return () => {
       destroyed = true;
       if (appRef.current) {
+        const canvas = appRef.current.canvas as HTMLElement | null;
+        if (canvas && canvas.parentElement) {
+          canvas.parentElement.removeChild(canvas);
+        }
         appRef.current.destroy(true);
         appRef.current = null;
       }
