@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { adventurerStats, championPerk, effectiveAttributes, equipDelta, isInjured, maxHp } from '../../game/adventurers';
+import { adventurerStats, championPerk, championSkill, effectiveAttributes, equipDelta, isInjured, maxHp } from '../../game/adventurers';
 import { ATTRIBUTES, GUILD_UPGRADES, MATERIALS, xpToNext } from '../../game/config';
 import { formatDuration } from '../../game/format';
 import {
@@ -77,6 +77,23 @@ function PerkBadge({ adv }: { adv: Adventurer }) {
           <span className="perk-tag">{perk.tier === 'major' ? 'Major' : 'Minor'} Perk</span>
         </span>
         <span className="row-desc">{perk.description}</span>
+      </div>
+    </div>
+  );
+}
+
+/** The champion's active combat skill (auto-cast on cooldown in Explore). */
+function SkillBadge({ adv }: { adv: Adventurer }) {
+  const skill = championSkill(adv.skillId);
+  if (!skill) return null;
+  return (
+    <div className="row skill-row">
+      <div className="row-info">
+        <span className="row-name">
+          🎯 {skill.name}
+          <span className="perk-tag">{skill.cooldownSeconds}s CD</span>
+        </span>
+        <span className="row-desc">{skill.description}</span>
       </div>
     </div>
   );
@@ -356,6 +373,7 @@ function ChampionDetail({ adv }: { adv: Adventurer }) {
       </div>
       <AttributeBars attributes={adv.attributes} />
       <PerkBadge adv={adv} />
+      <SkillBadge adv={adv} />
     </div>
   );
 }
@@ -457,6 +475,7 @@ function ChampionDetailModal({ adv, onClose }: { adv: Adventurer; onClose: () =>
         <AttributeBars attributes={attrs} />
 
         <PerkBadge adv={adv} />
+        <SkillBadge adv={adv} />
 
         {(adv.enemiesDefeated > 0 || adv.totalDamageDealt > 0) && (
           <div className="detail-stats">

@@ -7,6 +7,7 @@ import {
   BONUS_ATTR_TIER_DIV,
   CHAMPION_PERKS,
   CLASS_DEFS,
+  CLASS_SKILLS,
   DEF_PER_CON,
   DEF_PER_RES,
   EQUIP_BUDGET_BASE,
@@ -36,6 +37,7 @@ import type {
   Attributes,
   ChampionPerkDef,
   ChampionPerkEffect,
+  ClassSkillDef,
   EquipSlot,
   EquipTypeDef,
   Equipment,
@@ -202,6 +204,7 @@ export function generateAdventurer(id: number, rng: Rng): Adventurer {
     name: generateName(rng),
     className,
     perkId: pick(CHAMPION_PERKS, rng).id,
+    skillId: pick(skillsForClass(className), rng).id,
     level: 1,
     xp: 0,
     attributes,
@@ -223,6 +226,15 @@ export function generateAdventurer(id: number, rng: Rng): Adventurer {
 
 export function championPerk(perkId: string | undefined): ChampionPerkDef | undefined {
   return CHAMPION_PERKS.find((p) => p.id === perkId);
+}
+
+/** The active skills available to a class (its generation pool). */
+export function skillsForClass(className: AdventurerClass): ClassSkillDef[] {
+  return CLASS_SKILLS.filter((s) => s.className === className);
+}
+
+export function championSkill(skillId: string | undefined): ClassSkillDef | undefined {
+  return CLASS_SKILLS.find((s) => s.id === skillId);
 }
 
 /** The active perk's effects (empty if the champion somehow has no valid perk). */

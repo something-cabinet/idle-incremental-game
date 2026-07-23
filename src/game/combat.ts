@@ -1,6 +1,7 @@
 import {
   adventurerStats,
   championPerkEffects,
+  championSkill,
   effectiveAttributes,
   gainXp,
   generateEquipment,
@@ -9,6 +10,7 @@ import {
   perkRecoveryMult,
 } from './adventurers';
 import {
+  BATTLE_SECONDS_PER_ROUND,
   COMBAT_DAMAGE_VARIANCE,
   COMBAT_DEF_MITIGATION_K,
   ENCOUNTER_INTERVAL,
@@ -36,7 +38,20 @@ import {
 } from './config';
 import { autoExploreMembers, locationDef, targetsForLocation } from './guild';
 import { computeModifiers } from './perks';
-import type { Adventurer, AdventurerClass, Equipment, GameState, LogEntry, LogKind, QuestTargetDef, Rng } from './types';
+import type {
+  Adventurer,
+  AdventurerClass,
+  BuffStat,
+  ClassSkillDef,
+  ClassSkillEffect,
+  Equipment,
+  GameState,
+  LogEntry,
+  LogKind,
+  QuestTargetDef,
+  Rng,
+  StatusKind,
+} from './types';
 
 /** Pure turn-based Explore combat: party vs a location's monsters, resolved
  * with speed-ordered initiative until one side is fully defeated. Separate
@@ -56,6 +71,34 @@ export interface MonsterInstance {
   goldReward: number;
 }
 
+/** A timed multiplier on one combat stat (from a skill buff). */
+interface ActiveBuff {
+  stat: BuffStat;
+  mult: number;
+  expiresAt: number;
+}
+
+/** A timed debuff on a combatant (from a skill status). */
+interface ActiveStatus {
+  kind: StatusKind;
+  expiresAt: number;
+  /** Damage per round for poison/burn (0 otherwise). */
+  dmgPerRound: number;
+  /** Speed multiplier while active for slow (1 otherwise). */
+  slowFactor: number;
+  /** Who inflicted it — DoT ticks credit their damage/kills to this source. */
+  sourceSide: 'party' | 'monsters';
+  sourceName: string;
+}
+
+/** A skill a combatant carries, plus its per-battle cooldown clock. Combatants
+ *  can hold several (future enemies/champions with multi-skill kits). */
+interface SkillSlot {
+  def: ClassSkillDef;
+  /** Battle-seconds at which this skill may next be cast. */
+  readyAt: number;
+}
+
 interface Combatant {
   side: 'party' | 'monsters';
   refId: number;
@@ -65,6 +108,9 @@ interface Combatant {
   atk: number;
   def: number;
   speed: number;
+  buffs: ActiveBuff[];
+  statuses: ActiveStatus[];
+  skills: SkillSlot[];
 }
 
 export interface BattleLogEntry {
@@ -76,6 +122,14 @@ export interface BattleLogEntry {
   defenderHpAfter: number;
   defenderMaxHp: number;
   defenderDefeated: boolean;
+  /** Set when this action came from a skill (drives the viewer's labels). */
+  skillName?: string;
+  /** True when a crit multiplied the hit. */
+  crit?: boolean;
+  /** What kind of log line this is; absent/'attack' = a basic strike. */
+  kind?: 'attack' | 'skill' | 'buff' | 'status' | 'dot';
+  /** Short badge shown for buffs/statuses (e.g. 'ATK ↑', 'Poison'). */
+  effectLabel?: string;
 }
 
 export interface PartyBattleResult {
@@ -163,6 +217,15 @@ function disambiguateMonsterNames(group: MonsterInstance[]): MonsterInstance[] {
   });
 }
 
+/** Short badges shown in the viewer for buff/status log lines. */
+const BUFF_LABEL: Record<BuffStat, string> = { atk: 'ATK ↑', def: 'DEF ↑', speed: 'SPD ↑' };
+const STATUS_LABEL: Record<StatusKind, string> = {
+  stun: 'Stun',
+  poison: 'Poison',
+  burn: 'Burn',
+  slow: 'Slow',
+};
+
 function rollDamage(atk: number, def: number, rng: Rng): number {
   const mitigated = atk * (COMBAT_DEF_MITIGATION_K / (COMBAT_DEF_MITIGATION_K + def));
   const variance = 1 - COMBAT_DAMAGE_VARIANCE / 2 + rng() * COMBAT_DAMAGE_VARIANCE;
@@ -191,9 +254,16 @@ function injurySecondsFor(
  * Pure & deterministic given `rng` — callers decide whether/how to animate
  * `log` for playback; this function does not touch GameState.
  *
- * `live` enables per-champion live-combat perks (crit, lifesteal). Manual
- * Explore passes true; Auto-Explore / offline leaves it false so those code
- * paths stay simple and only stat perks (baked into adventurerStats) matter.
+ * `live` enables the manual-Explore combat layer — champion perks (crit,
+ * lifesteal) and auto-cast active skills (damage, buffs, statuses). Auto-Explore
+ * / offline leaves it false so those paths stay simple: no skills, no statuses,
+ * only stat perks (baked into adventurerStats) matter, and the loop reduces to
+ * the plain speed-ordered trade of basic attacks it has always been.
+ *
+ * Skill cooldowns are tracked on a battle clock that advances
+ * BATTLE_SECONDS_PER_ROUND each round; a champion auto-casts its first ready
+ * skill on its turn, else makes a basic attack. Combatants carry a *list* of
+ * skills so future multi-skill champions/enemies need no structural change.
  */
 export function simulateBattle(
   state: GameState,
@@ -221,6 +291,8 @@ export function simulateBattle(
   const combatants: Combatant[] = [
     ...party.map((a): Combatant => {
       const stats = adventurerStats(a);
+      // Champions only bring their active skill to manual Explore battles.
+      const skill = live ? championSkill(a.skillId) : undefined;
       return {
         side: 'party',
         refId: a.id,
@@ -230,6 +302,9 @@ export function simulateBattle(
         atk: stats.atk,
         def: stats.def,
         speed: effectiveAttributes(a).dex,
+        buffs: [],
+        statuses: [],
+        skills: skill ? [{ def: skill, readyAt: 0 }] : [],
       };
     }),
     ...monsters.map((m): Combatant => ({
@@ -241,47 +316,202 @@ export function simulateBattle(
       atk: m.atk,
       def: m.def,
       speed: m.speed,
+      buffs: [],
+      statuses: [],
+      skills: [],
     })),
   ];
 
   const alive = (side: 'party' | 'monsters') => combatants.some((c) => c.side === side && c.hp > 0);
+  const livingEnemies = (c: Combatant) => combatants.filter((o) => o.side !== c.side && o.hp > 0);
+  const livingAllies = (c: Combatant) => combatants.filter((o) => o.side === c.side && o.hp > 0);
   const log: BattleLogEntry[] = [];
 
+  let clock = 0;
   let turns = 0;
+
+  // Effective stats fold in active timed buffs/statuses (all no-ops when none
+  // are present, so the non-live path is byte-for-byte the old behavior).
+  const buffMult = (c: Combatant, stat: BuffStat) =>
+    c.buffs.reduce((m, b) => (b.stat === stat && b.expiresAt > clock ? m * b.mult : m), 1);
+  const atkOf = (c: Combatant) => c.atk * buffMult(c, 'atk');
+  const defOf = (c: Combatant) => c.def * buffMult(c, 'def');
+  const speedOf = (c: Combatant) => {
+    let s = c.speed * buffMult(c, 'speed');
+    for (const st of c.statuses) if (st.kind === 'slow' && st.expiresAt > clock) s *= st.slowFactor;
+    return s;
+  };
+  const isStunned = (c: Combatant) =>
+    c.statuses.some((st) => st.kind === 'stun' && st.expiresAt > clock);
+
+  /** One hit: mitigated damage (× crit for party), lifesteal, and a log line. */
+  function strike(attacker: Combatant, target: Combatant, power: number, skillName?: string) {
+    let damage = rollDamage(atkOf(attacker) * power, defOf(target), rng);
+    let crit = false;
+    if (attacker.side === 'party') {
+      const c = critById[attacker.refId];
+      if (c && rng() < c.chance) {
+        damage = Math.round(damage * c.mult);
+        crit = true;
+      }
+    }
+    target.hp -= damage;
+    if (attacker.side === 'party') {
+      const steal = lifestealById[attacker.refId];
+      if (steal) attacker.hp = Math.min(attacker.maxHp, attacker.hp + Math.round(damage * steal));
+    }
+    turns++;
+    log.push({
+      attackerSide: attacker.side,
+      attackerName: attacker.name,
+      defenderSide: target.side,
+      defenderName: target.name,
+      damage,
+      defenderHpAfter: Math.max(0, target.hp),
+      defenderMaxHp: target.maxHp,
+      defenderDefeated: target.hp <= 0,
+      ...(skillName ? { skillName, kind: 'skill' as const } : {}),
+      ...(crit ? { crit: true } : {}),
+    });
+  }
+
+  function applyDamageEffect(caster: Combatant, eff: Extract<ClassSkillEffect, { kind: 'damage' }>, skillName: string) {
+    if (eff.targeting === 'single') {
+      const enemies = livingEnemies(caster);
+      if (enemies.length === 0) return;
+      strike(caster, enemies[Math.floor(rng() * enemies.length)], eff.power, skillName);
+    } else if (eff.targeting === 'aoe') {
+      for (const t of livingEnemies(caster)) {
+        strike(caster, t, eff.power, skillName);
+        if (turns >= EXPLORE_MAX_TURNS) return;
+      }
+    } else {
+      for (let i = 0; i < (eff.hits ?? 1); i++) {
+        const enemies = livingEnemies(caster);
+        if (enemies.length === 0) return;
+        strike(caster, enemies[Math.floor(rng() * enemies.length)], eff.power, skillName);
+        if (turns >= EXPLORE_MAX_TURNS) return;
+      }
+    }
+  }
+
+  function applyBuffEffect(caster: Combatant, eff: Extract<ClassSkillEffect, { kind: 'buff' }>, skillName: string) {
+    const targets = eff.targeting === 'self' ? [caster] : livingAllies(caster);
+    for (const t of targets) {
+      t.buffs.push({ stat: eff.stat, mult: eff.mult, expiresAt: clock + eff.durationSeconds });
+      turns++;
+      log.push({
+        attackerSide: caster.side,
+        attackerName: caster.name,
+        defenderSide: t.side,
+        defenderName: t.name,
+        damage: 0,
+        defenderHpAfter: Math.max(0, t.hp),
+        defenderMaxHp: t.maxHp,
+        defenderDefeated: false,
+        kind: 'buff',
+        skillName,
+        effectLabel: BUFF_LABEL[eff.stat],
+      });
+    }
+  }
+
+  function applyStatusEffect(caster: Combatant, eff: Extract<ClassSkillEffect, { kind: 'status' }>, skillName: string) {
+    const enemies = livingEnemies(caster);
+    if (enemies.length === 0) return;
+    const targets =
+      eff.targeting === 'enemy-all' ? enemies : [enemies[Math.floor(rng() * enemies.length)]];
+    const potency = eff.potency ?? 0;
+    for (const t of targets) {
+      t.statuses.push({
+        kind: eff.status,
+        expiresAt: clock + eff.durationSeconds,
+        dmgPerRound:
+          eff.status === 'poison' || eff.status === 'burn'
+            ? Math.max(1, Math.round(atkOf(caster) * potency))
+            : 0,
+        slowFactor: eff.status === 'slow' ? potency : 1,
+        sourceSide: caster.side,
+        sourceName: caster.name,
+      });
+      turns++;
+      log.push({
+        attackerSide: caster.side,
+        attackerName: caster.name,
+        defenderSide: t.side,
+        defenderName: t.name,
+        damage: 0,
+        defenderHpAfter: Math.max(0, t.hp),
+        defenderMaxHp: t.maxHp,
+        defenderDefeated: false,
+        kind: 'status',
+        skillName,
+        effectLabel: STATUS_LABEL[eff.status],
+      });
+    }
+  }
+
+  function castSkill(caster: Combatant, slot: SkillSlot) {
+    slot.readyAt = clock + slot.def.cooldownSeconds;
+    for (const eff of slot.def.effects) {
+      if (eff.kind === 'damage') applyDamageEffect(caster, eff, slot.def.name);
+      else if (eff.kind === 'buff') applyBuffEffect(caster, eff, slot.def.name);
+      else applyStatusEffect(caster, eff, slot.def.name);
+      if (turns >= EXPLORE_MAX_TURNS) return;
+    }
+  }
+
+  /** Poison/burn tick at the start of an afflicted combatant's turn. */
+  function tickDots(c: Combatant) {
+    for (const st of c.statuses) {
+      if (st.dmgPerRound <= 0 || st.expiresAt <= clock) continue;
+      c.hp -= st.dmgPerRound;
+      turns++;
+      log.push({
+        attackerSide: st.sourceSide,
+        attackerName: st.sourceName,
+        defenderSide: c.side,
+        defenderName: c.name,
+        damage: st.dmgPerRound,
+        defenderHpAfter: Math.max(0, c.hp),
+        defenderMaxHp: c.maxHp,
+        defenderDefeated: c.hp <= 0,
+        kind: 'dot',
+        effectLabel: STATUS_LABEL[st.kind],
+      });
+      if (c.hp <= 0 || turns >= EXPLORE_MAX_TURNS) return;
+    }
+  }
+
   outer: while (turns < EXPLORE_MAX_TURNS && alive('party') && alive('monsters')) {
     const order = combatants
       .filter((c) => c.hp > 0)
-      .sort((a, b) => b.speed - a.speed || a.refId - b.refId);
+      .sort((a, b) => speedOf(b) - speedOf(a) || a.refId - b.refId);
     for (const attacker of order) {
       if (attacker.hp <= 0) continue;
       if (!alive('party') || !alive('monsters')) break outer;
-      const enemies = combatants.filter((c) => c.side !== attacker.side && c.hp > 0);
-      if (enemies.length === 0) continue;
-      const target = enemies[Math.floor(rng() * enemies.length)];
-      let damage = rollDamage(attacker.atk, target.def, rng);
-      // Live perks: crit multiplies the hit, lifesteal heals the attacker.
-      if (attacker.side === 'party') {
-        const crit = critById[attacker.refId];
-        if (crit && rng() < crit.chance) damage = Math.round(damage * crit.mult);
+
+      // Damage-over-time first (only ever populated in live battles).
+      if (attacker.statuses.length > 0) {
+        tickDots(attacker);
+        if (turns >= EXPLORE_MAX_TURNS) break outer;
+        if (attacker.hp <= 0) continue;
+        if (!alive('party') || !alive('monsters')) break outer;
+        if (isStunned(attacker)) continue; // stunned: lose the action
       }
-      target.hp -= damage;
-      if (attacker.side === 'party') {
-        const steal = lifestealById[attacker.refId];
-        if (steal) attacker.hp = Math.min(attacker.maxHp, attacker.hp + Math.round(damage * steal));
+
+      // Champions auto-cast their first ready skill; everyone else strikes.
+      const ready = attacker.skills.find((s) => s.readyAt <= clock);
+      if (ready) {
+        castSkill(attacker, ready);
+      } else {
+        const enemies = livingEnemies(attacker);
+        if (enemies.length === 0) continue;
+        strike(attacker, enemies[Math.floor(rng() * enemies.length)], 1);
       }
-      turns++;
-      log.push({
-        attackerSide: attacker.side,
-        attackerName: attacker.name,
-        defenderSide: target.side,
-        defenderName: target.name,
-        damage,
-        defenderHpAfter: Math.max(0, target.hp),
-        defenderMaxHp: target.maxHp,
-        defenderDefeated: target.hp <= 0,
-      });
       if (turns >= EXPLORE_MAX_TURNS) break outer;
     }
+    clock += BATTLE_SECONDS_PER_ROUND;
   }
 
   const outcome: 'win' | 'loss' = alive('party') && !alive('monsters') ? 'win' : 'loss';

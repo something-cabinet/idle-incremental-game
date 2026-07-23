@@ -262,6 +262,11 @@ button.row:disabled {
   background: color-mix(in srgb, var(--gold, #e0b64a) 10%, transparent);
 }
 
+.skill-row {
+  border-left: 3px solid var(--blue, #4a7fd0);
+  background: color-mix(in srgb, var(--blue, #4a7fd0) 9%, transparent);
+}
+
 .perk-tag {
   margin-left: 0.5em;
   padding: 0.05em 0.45em;

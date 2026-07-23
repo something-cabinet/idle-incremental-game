@@ -226,14 +226,27 @@ interface Floater {
   elapsed: number;
 }
 
-function createFloater(x: number, y: number, damage: number): Floater {
-  const style = new TextStyle({ fill: 0xffdd44, fontSize: 16, fontFamily: 'monospace', fontWeight: 'bold' });
-  const text = new Text({ text: String(damage), style });
+function createFloater(x: number, y: number, label: string, color = 0xffdd44, size = 16): Floater {
+  const style = new TextStyle({ fill: color, fontSize: size, fontFamily: 'monospace', fontWeight: 'bold' });
+  const text = new Text({ text: label, style });
   text.anchor.set(0.5, 0.5);
   text.x = x;
   text.y = y;
   return { text, startY: y, elapsed: 0 };
 }
+
+/** buff/status/dot log lines are non-lunge "casts"; basic/skill hits lunge. */
+function isCast(entry: BattleLogEntry): boolean {
+  return entry.kind === 'buff' || entry.kind === 'status' || entry.kind === 'dot';
+}
+
+// Floater colors: crits pop red, buffs green, statuses purple, DoT ticks orange.
+const CRIT_COLOR = 0xff5a3c;
+const BUFF_COLOR = 0x5ad06a;
+const STATUS_COLOR = 0xb06ad0;
+const DOT_COLOR = 0xe08a3a;
+const SKILL_LABEL_COLOR = 0xffffff;
+const CAST_MS = 360;
 
 // ---------------------------------------------------------------------------
 // Particle
@@ -281,7 +294,7 @@ interface SceneState {
   shakeY: number;
   shakeDecay: number;
   logIndex: number;
-  animPhase: 'idle' | 'lunging' | 'impact' | 'recovering' | 'waiting';
+  animPhase: 'idle' | 'lunging' | 'impact' | 'recovering' | 'waiting' | 'casting';
   phaseTimer: number;
   currentEntry: BattleLogEntry | null;
   attackerSprite: FighterSpriteData | null;
@@ -514,6 +527,32 @@ export function BattleViewer({
 
       st.attackerSprite = attacker;
       st.defenderSprite = defender;
+
+      // Buffs / statuses / DoT ticks don't lunge — flash the target in place,
+      // float a label (or the DoT damage), and apply any HP change immediately.
+      if (isCast(entry)) {
+        defender.hitFlash = 1;
+        st.shakeDecay = entry.kind === 'dot' ? 140 : 0;
+        const isDot = entry.kind === 'dot';
+        const color = isDot ? DOT_COLOR : entry.kind === 'buff' ? BUFF_COLOR : STATUS_COLOR;
+        const label = isDot ? `-${entry.damage}` : entry.effectLabel ?? entry.skillName ?? '•';
+        const floater = createFloater(
+          defender.container.x,
+          defender.container.y - defender.height / 2 - 10,
+          label,
+          color,
+          isDot ? 14 : 12,
+        );
+        st.floaters.push(floater);
+        st.floatLayer.addChild(floater.text);
+        defender.hp = entry.defenderHpAfter;
+        defender.maxHp = entry.defenderMaxHp;
+        updateHpBar(defender);
+        st.animPhase = 'casting';
+        st.phaseTimer = 0;
+        return;
+      }
+
       st.lungeFromX = attacker.baseX + attacker.offsetX;
       const dir = attacker.container.x < defender.container.x ? 1 : -1;
       st.lungeToX = st.lungeFromX + dir * LUNGE_DIST;
@@ -616,6 +655,34 @@ export function BattleViewer({
 
       st.phaseTimer += dt;
 
+      if (st.animPhase === 'casting') {
+        // Non-lunge cast: hold briefly while the flash/floater plays, then, if
+        // the target was a DoT that dropped it, burst it like any other death.
+        if (st.defenderSprite) {
+          st.defenderSprite.hitFlash = Math.max(0, 1 - st.phaseTimer / CAST_MS);
+        }
+        if (st.phaseTimer >= CAST_MS) {
+          if (st.defenderSprite && st.currentEntry?.defenderDefeated && !st.defenderSprite.defeated) {
+            st.defenderSprite.defeated = true;
+            const color = st.defenderSprite.body.fill;
+            const particles = spawnParticles(typeof color === 'number' ? color : 0x888888);
+            for (const p of particles) {
+              p.g.x = st.defenderSprite.container.x;
+              p.g.y = st.defenderSprite.container.y;
+              st.particles.push(p);
+              st.particleLayer.addChild(p.g);
+            }
+          }
+          st.animPhase = 'idle';
+          st.phaseTimer = 0;
+          st.currentEntry = null;
+          st.attackerSprite = null;
+          st.defenderSprite = null;
+          logEntryTimer = 0;
+        }
+        return;
+      }
+
       if (st.animPhase === 'lunging') {
         if (!st.attackerSprite) return;
         const t = Math.min(1, st.phaseTimer / LUNGE_MS);
@@ -626,13 +693,33 @@ export function BattleViewer({
           st.phaseTimer = 0;
           if (st.defenderSprite) {
             st.defenderSprite.hitFlash = 1;
-            const dmg = st.currentEntry?.damage ?? 0;
-            const floater = createFloater(st.defenderSprite.container.x, st.defenderSprite.container.y - st.defenderSprite.height / 2 - 10, dmg);
+            const entry = st.currentEntry;
+            const dmg = entry?.damage ?? 0;
+            const crit = !!entry?.crit;
+            const floater = createFloater(
+              st.defenderSprite.container.x,
+              st.defenderSprite.container.y - st.defenderSprite.height / 2 - 10,
+              crit ? `${dmg}!` : String(dmg),
+              crit ? CRIT_COLOR : 0xffdd44,
+              crit ? 22 : 16,
+            );
             st.floaters.push(floater);
             st.floatLayer.addChild(floater.text);
-            st.shakeDecay = 200;
-            if (st.currentEntry) {
-              st.defenderSprite.hp = st.currentEntry.defenderHpAfter;
+            // Name the skill above the attacker so a cast reads clearly.
+            if (entry?.skillName && st.attackerSprite) {
+              const label = createFloater(
+                st.attackerSprite.container.x,
+                st.attackerSprite.container.y - st.attackerSprite.height / 2 - 14,
+                entry.skillName,
+                SKILL_LABEL_COLOR,
+                10,
+              );
+              st.floaters.push(label);
+              st.floatLayer.addChild(label.text);
+            }
+            st.shakeDecay = crit ? 320 : 200;
+            if (entry) {
+              st.defenderSprite.hp = entry.defenderHpAfter;
               updateHpBar(st.defenderSprite);
             }
           }

@@ -4,6 +4,7 @@ import {
   ATTRIBUTES,
   CHAMPION_PERKS,
   CLASS_DEFS,
+  CLASS_SKILLS,
   CLICK_BASE_GOLD,
   DAY_LENGTH_SECONDS,
   DEFAULT_SETTINGS,
@@ -135,6 +136,12 @@ function migrateAssignment<T extends { mode: string } | null | undefined>(assign
     : assignment;
 }
 
+/** Deterministic class-skill pick for pre-v15 saves (no rng at load). */
+function classSkillForId(className: Adventurer['className'], id: number): string {
+  const pool = CLASS_SKILLS.filter((s) => s.className === className);
+  return pool[id % pool.length].id;
+}
+
 function migrateAdventurer(a: Adventurer, preV5: boolean): Adventurer {
   const patched: Adventurer = {
     ...a,
@@ -146,6 +153,9 @@ function migrateAdventurer(a: Adventurer, preV5: boolean): Adventurer {
     // v14 gave every champion a passive perk. Pre-v14 champions get one
     // assigned deterministically from their id (no rng available at load).
     perkId: a.perkId ?? CHAMPION_PERKS[a.id % CHAMPION_PERKS.length].id,
+    // v15 gave every champion an active skill. Pre-v15 champions get one from
+    // their own class pool, chosen deterministically from their id.
+    skillId: a.skillId ?? classSkillForId(a.className, a.id),
   };
   if (preV5) {
     const attributes = { ...CLASS_DEFS[patched.className].base } as Attributes;

@@ -4,6 +4,7 @@ import type {
   AttributeId,
   Attributes,
   ChampionPerkDef,
+  ClassSkillDef,
   EquipTypeDef,
   GuildUpgradeDef,
   ItemPrefixDef,
@@ -47,7 +48,7 @@ export const AUTOSAVE_INTERVAL_MS = 10_000;
  * interval firing on schedule — see useGameLoop's visibility listeners.
  */
 export const BACKGROUND_CATCHUP_GAP_MS = 3_000;
-export const SAVE_VERSION = 14;
+export const SAVE_VERSION = 15;
 
 // ---------------------------------------------------------------------------
 // Act 1 — town income (low numbers by design)
@@ -367,6 +368,116 @@ export const CHAMPION_PERKS: ChampionPerkDef[] = [
     ],
   },
 ];
+
+/**
+ * Class active skills — every champion rolls one from their class's pool at
+ * generation (see generateAdventurer). Auto-cast in manual Explore battles the
+ * moment they come off cooldown; Auto-Explore/offline skip skills entirely for
+ * simplicity (see combat.ts). Single-target effects are tuned stronger than
+ * their AoE siblings.
+ */
+export const CLASS_SKILLS: ClassSkillDef[] = [
+  // ---- Warrior: melee bruiser, buffs & control ----
+  {
+    id: 'heavy-strike', name: 'Heavy Strike', className: 'warrior', cooldownSeconds: 5,
+    description: 'A crushing blow dealing 220% attack to one enemy.',
+    effects: [{ kind: 'damage', targeting: 'single', power: 2.2 }],
+  },
+  {
+    id: 'cleave', name: 'Cleave', className: 'warrior', cooldownSeconds: 6,
+    description: 'Sweep every enemy for 70% attack.',
+    effects: [{ kind: 'damage', targeting: 'aoe', power: 0.7 }],
+  },
+  {
+    id: 'shield-bash', name: 'Shield Bash', className: 'warrior', cooldownSeconds: 8,
+    description: '120% attack to one enemy and stuns it for 3s.',
+    effects: [
+      { kind: 'damage', targeting: 'single', power: 1.2 },
+      { kind: 'status', status: 'stun', targeting: 'enemy-single', durationSeconds: 3 },
+    ],
+  },
+  {
+    id: 'war-cry', name: 'War Cry', className: 'warrior', cooldownSeconds: 14,
+    description: 'Rally the party: +30% attack to all champions for 12s.',
+    effects: [{ kind: 'buff', stat: 'atk', mult: 1.3, targeting: 'allies', durationSeconds: 12 }],
+  },
+  {
+    id: 'shield-wall', name: 'Shield Wall', className: 'warrior', cooldownSeconds: 14,
+    description: 'Brace the line: +50% defense to all champions for 12s.',
+    effects: [{ kind: 'buff', stat: 'def', mult: 1.5, targeting: 'allies', durationSeconds: 12 }],
+  },
+  // ---- Ranger: precise single-target, poison & mobility ----
+  {
+    id: 'power-shot', name: 'Power Shot', className: 'ranger', cooldownSeconds: 5,
+    description: 'A piercing arrow dealing 210% attack to one enemy.',
+    effects: [{ kind: 'damage', targeting: 'single', power: 2.1 }],
+  },
+  {
+    id: 'volley', name: 'Volley', className: 'ranger', cooldownSeconds: 7,
+    description: 'Rain arrows on every enemy for 75% attack.',
+    effects: [{ kind: 'damage', targeting: 'aoe', power: 0.75 }],
+  },
+  {
+    id: 'serpent-sting', name: 'Serpent Sting', className: 'ranger', cooldownSeconds: 7,
+    description: '100% attack to one enemy, then poisons it for 8s.',
+    effects: [
+      { kind: 'damage', targeting: 'single', power: 1 },
+      { kind: 'status', status: 'poison', targeting: 'enemy-single', durationSeconds: 8, potency: 0.4 },
+    ],
+  },
+  {
+    id: 'crippling-shot', name: 'Crippling Shot', className: 'ranger', cooldownSeconds: 8,
+    description: '110% attack to one enemy and slows it (−50% speed) for 6s.',
+    effects: [
+      { kind: 'damage', targeting: 'single', power: 1.1 },
+      { kind: 'status', status: 'slow', targeting: 'enemy-single', durationSeconds: 6, potency: 0.5 },
+    ],
+  },
+  {
+    id: 'hunters-focus', name: "Hunter's Focus", className: 'ranger', cooldownSeconds: 13,
+    description: 'Take aim: +40% attack and +30% speed to self for 10s.',
+    effects: [
+      { kind: 'buff', stat: 'atk', mult: 1.4, targeting: 'self', durationSeconds: 10 },
+      { kind: 'buff', stat: 'speed', mult: 1.3, targeting: 'self', durationSeconds: 10 },
+    ],
+  },
+  // ---- Mage: area damage & elemental status ----
+  {
+    id: 'arcane-bolt', name: 'Arcane Bolt', className: 'mage', cooldownSeconds: 5,
+    description: 'A focused blast dealing 230% attack to one enemy.',
+    effects: [{ kind: 'damage', targeting: 'single', power: 2.3 }],
+  },
+  {
+    id: 'fireball', name: 'Fireball', className: 'mage', cooldownSeconds: 8,
+    description: '80% attack to every enemy and burns them for 6s.',
+    effects: [
+      { kind: 'damage', targeting: 'aoe', power: 0.8 },
+      { kind: 'status', status: 'burn', targeting: 'enemy-all', durationSeconds: 6, potency: 0.35 },
+    ],
+  },
+  {
+    id: 'frost-nova', name: 'Frost Nova', className: 'mage', cooldownSeconds: 9,
+    description: '50% attack to every enemy and slows them (−50% speed) for 6s.',
+    effects: [
+      { kind: 'damage', targeting: 'aoe', power: 0.5 },
+      { kind: 'status', status: 'slow', targeting: 'enemy-all', durationSeconds: 6, potency: 0.5 },
+    ],
+  },
+  {
+    id: 'chain-lightning', name: 'Chain Lightning', className: 'mage', cooldownSeconds: 7,
+    description: 'Arcs to 3 random enemies for 110% attack each.',
+    effects: [{ kind: 'damage', targeting: 'random', power: 1.1, hits: 3 }],
+  },
+  {
+    id: 'mana-shield', name: 'Mana Shield', className: 'mage', cooldownSeconds: 13,
+    description: 'Ward the party: +40% defense to all champions for 12s.',
+    effects: [{ kind: 'buff', stat: 'def', mult: 1.4, targeting: 'allies', durationSeconds: 12 }],
+  },
+];
+
+/** Battle-seconds that elapse each combat round — maps skill cooldowns (kept in
+ *  seconds for design clarity) onto the round-based Explore combat loop. */
+export const BATTLE_SECONDS_PER_ROUND = 2;
 
 /** Hire-time variance: each attribute rolls base ± this. */
 export const HIRE_ATTR_VARIANCE = 1;

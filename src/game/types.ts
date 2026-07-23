@@ -148,12 +148,54 @@ export interface ChampionPerkDef {
   effects: ChampionPerkEffect[];
 }
 
+// ---------------------------------------------------------------------------
+// Active combat skills
+// ---------------------------------------------------------------------------
+
+/** Ongoing debuffs a skill can inflict on enemies. */
+export type StatusKind = 'stun' | 'poison' | 'burn' | 'slow';
+/** Combat stats a buff can raise on allies. */
+export type BuffStat = 'atk' | 'def' | 'speed';
+
+/**
+ * One effect of an active skill. A skill may bundle several (e.g. damage + a
+ * status). Single-target effects are tuned stronger than their AoE equivalents.
+ */
+export type ClassSkillEffect =
+  /** Deal `power`× the caster's attack. 'single' = one enemy, 'aoe' = every
+   *  enemy, 'random' = `hits` randomly-chosen enemies. */
+  | { kind: 'damage'; targeting: 'single' | 'aoe' | 'random'; power: number; hits?: number }
+  /** Multiply an ally stat by `mult` for `durationSeconds` ('self' or all 'allies'). */
+  | { kind: 'buff'; stat: BuffStat; mult: number; targeting: 'self' | 'allies'; durationSeconds: number }
+  /** Inflict a status on one ('enemy-single') or every ('enemy-all') enemy.
+   *  `potency` means DoT damage as a fraction of the caster's attack per round
+   *  (poison/burn) or the speed multiplier while slowed. */
+  | { kind: 'status'; status: StatusKind; targeting: 'enemy-single' | 'enemy-all'; durationSeconds: number; potency?: number };
+
+/**
+ * A class active skill. Every champion is generated with one skill drawn from
+ * their class's pool, auto-cast in battle the moment it comes off cooldown
+ * (see combat.ts). Champions can only ever hold one today, but the combat
+ * engine tracks skills as a list so future champions/enemies can carry several.
+ */
+export interface ClassSkillDef {
+  id: string;
+  name: string;
+  className: AdventurerClass;
+  description: string;
+  /** Cooldown in battle-seconds before it can be recast (see BATTLE_SECONDS_PER_ROUND). */
+  cooldownSeconds: number;
+  effects: ClassSkillEffect[];
+}
+
 export interface Adventurer {
   id: number;
   name: string;
   className: AdventurerClass;
   /** Passive perk id (see CHAMPION_PERKS); assigned at generation. */
   perkId: string;
+  /** Active skill id (see CLASS_SKILLS), drawn from the class pool at generation. */
+  skillId: string;
   level: number;
   xp: number;
   /**
