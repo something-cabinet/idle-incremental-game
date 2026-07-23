@@ -35,6 +35,7 @@ import {
   MONSTER_XP_PER_TIER,
   rollMonsterCount,
   SUPER_DROP_CHANCE_MULT,
+  SUPER_LOOT_AMOUNT_MULT,
   SUPER_MONSTER_CHANCE,
   SUPER_MONSTER_PREFIX,
   SUPER_STAT_MULT,
@@ -623,17 +624,21 @@ export function simulateBattle(
   let timeShards = 0;
   let nextId = state.nextEntityId;
   // Explore uses boosted equipment drop chance; Super monsters drop even
-  // more often (clamped to 1) and roll better rarity (see generateEquipment).
+  // more often (clamped to 1), in triple the amount, and roll better rarity
+  // (see generateEquipment).
   if (outcome === 'win') {
     for (const m of monsters) {
       gold += m.goldReward;
       xp += m.xpReward;
       const dropMult = m.isSuper ? SUPER_DROP_CHANCE_MULT : 1;
+      const lootAmount = m.isSuper ? SUPER_LOOT_AMOUNT_MULT : 1;
       if (rng() < Math.min(1, MONSTER_MATERIAL_CHANCE * dropMult)) {
-        materials[m.materialId] = (materials[m.materialId] ?? 0) + 1;
+        materials[m.materialId] = (materials[m.materialId] ?? 0) + lootAmount;
       }
       if (rng() < Math.min(1, EXPLORE_EQUIPMENT_CHANCE * dropMult)) {
-        equipment.push(generateEquipment(nextId++, tier, rng, undefined, 'exalted', m.isSuper));
+        for (let i = 0; i < lootAmount; i++) {
+          equipment.push(generateEquipment(nextId++, tier, rng, undefined, 'exalted', m.isSuper));
+        }
       }
     }
     if (loc && rng() < loc.shardChance) timeShards += 1;

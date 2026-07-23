@@ -9,7 +9,7 @@ import {
   simulateBattle,
 } from './combat';
 import type { MonsterInstance } from './combat';
-import { ENCOUNTER_INTERVAL, LOCATIONS, SUPER_MONSTER_PREFIX, SUPER_STAT_MULT } from './config';
+import { ENCOUNTER_INTERVAL, LOCATIONS, SUPER_LOOT_AMOUNT_MULT, SUPER_MONSTER_PREFIX, SUPER_STAT_MULT } from './config';
 import { tick } from './engine';
 import { sendPartyOnAutoExplore } from './guild';
 import { createInitialState } from './logic';
@@ -145,6 +145,43 @@ describe('rollMonsterGroup', () => {
       if (Object.keys(rSuper.rewards.materials).length > 0 || rSuper.rewards.equipment.length > 0) superDrops++;
     }
     expect(superDrops).toBeGreaterThan(normalDrops);
+  });
+
+  it('a Super monster drop grants triple the material stack and triple the equipment count', () => {
+    const state = { ...createInitialState(0), act: 2 as const };
+    const strong = { ...champion(1, mid), level: 40 };
+    const monster = (isSuper: boolean): MonsterInstance => ({
+      instanceId: 0,
+      targetId: 'wolf',
+      name: isSuper ? 'Super Wolf' : 'Wolf',
+      materialId: 'beast-pelt',
+      maxHp: 10,
+      atk: 1,
+      def: 0,
+      speed: 1,
+      xpReward: 5,
+      goldReward: 5,
+      isSuper,
+    });
+
+    let normalMaterialAmount = 0;
+    let superMaterialAmount = 0;
+    let normalEquipCount = 0;
+    let superEquipCount = 0;
+    const trials = 400;
+    for (let seed = 0; seed < trials; seed++) {
+      const rNormal = simulateBattle(state, [strong], [monster(false)], 'forest-edge', mulberry32(seed), true);
+      normalMaterialAmount += rNormal.rewards.materials['beast-pelt'] ?? 0;
+      normalEquipCount += rNormal.rewards.equipment.length;
+      const rSuper = simulateBattle(state, [strong], [monster(true)], 'forest-edge', mulberry32(seed + 100000), true);
+      superMaterialAmount += rSuper.rewards.materials['beast-pelt'] ?? 0;
+      superEquipCount += rSuper.rewards.equipment.length;
+    }
+    // Every individual material drop and equipment drop is tripled in amount
+    // (SUPER_LOOT_AMOUNT_MULT), on top of the higher drop chance itself, so
+    // the aggregate totals over many trials should differ by well over 3x.
+    expect(superMaterialAmount).toBeGreaterThan(normalMaterialAmount * SUPER_LOOT_AMOUNT_MULT);
+    expect(superEquipCount).toBeGreaterThan(normalEquipCount * SUPER_LOOT_AMOUNT_MULT);
   });
 });
 

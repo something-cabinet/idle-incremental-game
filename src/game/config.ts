@@ -855,6 +855,9 @@ export const SUPER_MONSTER_CHANCE: Record<number, number> = {
 export const SUPER_STAT_MULT = 3;
 /** Super monster material/equipment drop chance multiplier (clamped to 1). */
 export const SUPER_DROP_CHANCE_MULT = 3;
+/** Super monster loot amount multiplier: material stacks and equipment count
+ *  per successful drop roll (see combat.ts's win-reward loop). */
+export const SUPER_LOOT_AMOUNT_MULT = 3;
 /** Visual size multiplier for Super monster sprites in the battle viewer. */
 export const SUPER_SPRITE_SCALE = 1.4;
 /** Name prefix applied to a rolled Super monster. */
