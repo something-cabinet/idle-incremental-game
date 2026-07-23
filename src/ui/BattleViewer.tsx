@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Application, Container, Graphics, Text, TextStyle } from 'pixi.js';
 import type { BattleLogEntry, BattleOutcome } from '../game/combat';
+import { SUPER_SPRITE_SCALE } from '../game/config';
 import type { AdventurerClass } from '../game/types';
 
 // ---------------------------------------------------------------------------
@@ -112,13 +113,24 @@ function createFighterSprite(
   className: string,
   targetId: string,
   hasSkill: boolean,
+  isSuper: boolean,
 ): FighterSpriteData {
   const container = new Container();
   container.x = x;
   container.y = y;
 
-  const w = isParty ? PARTY_W : FIGHTER_W;
-  const h = isParty ? PARTY_H : FIGHTER_H;
+  // Super monsters render bigger to stand out (see combat.ts SUPER_STAT_MULT).
+  const superScale = !isParty && isSuper ? SUPER_SPRITE_SCALE : 1;
+  const w = (isParty ? PARTY_W : FIGHTER_W) * superScale;
+  const h = (isParty ? PARTY_H : FIGHTER_H) * superScale;
+
+  if (!isParty && isSuper) {
+    // A golden ring behind the body makes a Super monster read as special at
+    // a glance even before the name label is legible.
+    const glow = new Graphics();
+    glow.circle(0, 0, Math.min(w, h) / 2 + 4).stroke({ width: 2.5, color: 0xffd700, alpha: 0.9 });
+    container.addChild(glow);
+  }
 
   const body = new Graphics();
   const color = isParty ? CLASS_COLORS[className as AdventurerClass] ?? 0x888888 : monsterColor(tier);
@@ -175,7 +187,12 @@ function createFighterSprite(
   flashOverlay.alpha = 0;
   container.addChild(flashOverlay);
 
-  const nameStyle = new TextStyle({ fill: 0xffffff, fontSize: 7, fontFamily: 'monospace' });
+  const nameStyle = new TextStyle({
+    fill: !isParty && isSuper ? 0xffd700 : 0xffffff,
+    fontSize: 7,
+    fontFamily: 'monospace',
+    fontWeight: !isParty && isSuper ? 'bold' : 'normal',
+  });
   const nameText = new Text({ text: name, style: nameStyle });
   nameText.anchor.set(0.5, 0);
   nameText.y = h / 2 + 4;
@@ -383,7 +400,7 @@ function buildScene(app: Application, result: BattleOutcome, tier: number, w: nu
   result.party.forEach((p, i) => {
     // Every champion is generated with exactly one active skill (see
     // combat.ts/adventurers.ts), so party sprites always show a cooldown bar.
-    const sprite = createFighterSprite(p.name, partyX, partyStartY + i * (PARTY_H + GAP + 20), p.maxHp, true, tier, p.className, '', true);
+    const sprite = createFighterSprite(p.name, partyX, partyStartY + i * (PARTY_H + GAP + 20), p.maxHp, true, tier, p.className, '', true, false);
     sprite.advId = p.advId;
     partySprites.push(sprite);
     scene.addChild(sprite.container);
@@ -393,7 +410,7 @@ function buildScene(app: Application, result: BattleOutcome, tier: number, w: nu
   const monsterStartY = (h - totalHm) / 2;
 
   result.monsters.forEach((m, i) => {
-    const sprite = createFighterSprite(m.name, monsterX, monsterStartY + i * (FIGHTER_H + GAP + 20), m.maxHp, false, tier, '', m.targetId, false);
+    const sprite = createFighterSprite(m.name, monsterX, monsterStartY + i * (FIGHTER_H + GAP + 20), m.maxHp, false, tier, '', m.targetId, false, m.isSuper);
     monsterSprites.push(sprite);
     scene.addChild(sprite.container);
   });

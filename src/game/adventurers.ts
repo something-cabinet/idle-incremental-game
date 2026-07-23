@@ -24,6 +24,8 @@ import {
   RARITY_BONUS_ATTRS,
   RARITY_MULT,
   RARITY_WEIGHTS,
+  SUPER_EXALTED_WEIGHT,
+  SUPER_RARITY_WEIGHTS,
   WEAPON_SCALE_BASE,
   WEAPON_SCALE_DIV,
   WEAPON_SCALE_MAX,
@@ -65,18 +67,30 @@ function pick<T>(items: T[], rng: Rng): T {
  * weight table is filtered down and renormalized over just the allowed
  * rarities, rather than clamping a roll that landed above the cap, so the
  * relative odds among the allowed rarities are unchanged by the cap.
+ *
+ * `isSuper` swaps in SUPER_RARITY_WEIGHTS/SUPER_EXALTED_WEIGHT (loot from a
+ * Super monster — see combat.ts), which shift odds toward epic/exalted. The
+ * EXALTED_MIN_TIER gate still applies unchanged: Supers roll exalted *more
+ * often once it's unlocked*, they don't unlock it early.
  */
-export function rollRarity(tier: number, rng: Rng, maxRarity: Rarity = 'exalted'): Rarity {
+export function rollRarity(
+  tier: number,
+  rng: Rng,
+  maxRarity: Rarity = 'exalted',
+  isSuper = false,
+): Rarity {
+  const baseWeights = isSuper ? SUPER_RARITY_WEIGHTS : RARITY_WEIGHTS;
+  const exaltedWeight = isSuper ? SUPER_EXALTED_WEIGHT : EXALTED_WEIGHT;
   const weights: [Rarity, number][] =
     tier >= EXALTED_MIN_TIER
       ? [
-          ...RARITY_WEIGHTS.map(
+          ...baseWeights.map(
             ([rarity, weight]): [Rarity, number] =>
-              rarity === 'epic' ? [rarity, weight - EXALTED_WEIGHT] : [rarity, weight],
+              rarity === 'epic' ? [rarity, weight - exaltedWeight] : [rarity, weight],
           ),
-          ['exalted', EXALTED_WEIGHT],
+          ['exalted', exaltedWeight],
         ]
-      : RARITY_WEIGHTS;
+      : baseWeights;
   const cap = RARITY_ORDER.indexOf(maxRarity);
   const allowed = weights.filter(([rarity]) => RARITY_ORDER.indexOf(rarity) <= cap);
   const total = allowed.reduce((sum, [, weight]) => sum + weight, 0);
@@ -119,7 +133,8 @@ function attrPointsForTier(tier: number): number {
  * the slot instead of rolling one at random — used by crafting (guild.ts
  * startCraft/engine.ts processCrafting), where the player picks the slot.
  * `maxRarity` caps what can roll (see rollRarity) — crafting uses this to
- * keep the Forge to common/rare (see CRAFT_MAX_RARITY).
+ * keep the Forge to common/rare (see CRAFT_MAX_RARITY). `isSuper` boosts the
+ * rarity roll toward epic/exalted — loot from a Super monster (see combat.ts).
  */
 export function generateEquipment(
   id: number,
@@ -127,10 +142,11 @@ export function generateEquipment(
   rng: Rng,
   forcedSlot?: EquipSlot,
   maxRarity: Rarity = 'exalted',
+  isSuper = false,
 ): Equipment {
   const slot = forcedSlot ?? pick(SLOTS, rng);
   const type = pick(EQUIP_TYPES.filter((t) => t.slot === slot), rng);
-  const rarity = rollRarity(tier, rng, maxRarity);
+  const rarity = rollRarity(tier, rng, maxRarity, isSuper);
   const prefix = rollPrefix(rarity, rng);
   const mult = RARITY_MULT[rarity];
   const budget =

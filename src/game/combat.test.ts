@@ -8,7 +8,8 @@ import {
   runExplore,
   simulateBattle,
 } from './combat';
-import { ENCOUNTER_INTERVAL, exploreMonsterCount, LOCATIONS } from './config';
+import type { MonsterInstance } from './combat';
+import { ENCOUNTER_INTERVAL, LOCATIONS, SUPER_MONSTER_PREFIX, SUPER_STAT_MULT } from './config';
 import { tick } from './engine';
 import { sendPartyOnAutoExplore } from './guild';
 import { createInitialState } from './logic';
@@ -37,10 +38,11 @@ function champion(id: number, rng = mid): Adventurer {
 }
 
 describe('rollMonsterGroup', () => {
-  it('returns a group sized by exploreMonsterCount for the zone tier', () => {
+  it('always returns a group sized 1-3, with every monster having positive stats', () => {
     for (const loc of LOCATIONS.filter((l) => l.kind === 'zone')) {
       const group = rollMonsterGroup(loc.id, mulberry32(loc.tier));
-      expect(group.length).toBe(exploreMonsterCount(loc.tier));
+      expect(group.length).toBeGreaterThanOrEqual(1);
+      expect(group.length).toBeLessThanOrEqual(3);
       for (const m of group) {
         expect(m.maxHp).toBeGreaterThan(0);
         expect(m.atk).toBeGreaterThan(0);
@@ -48,8 +50,101 @@ describe('rollMonsterGroup', () => {
     }
   });
 
+  it('rolls group sizes 1, 2, and 3 across many attempts, usually landing on 2', () => {
+    const counts: Record<number, number> = { 1: 0, 2: 0, 3: 0 };
+    for (let seed = 0; seed < 500; seed++) {
+      const group = rollMonsterGroup('forest-edge', mulberry32(seed * 7919 + 1));
+      counts[group.length] = (counts[group.length] ?? 0) + 1;
+    }
+    expect(counts[1]).toBeGreaterThan(0);
+    expect(counts[2]).toBeGreaterThan(0);
+    expect(counts[3]).toBeGreaterThan(0);
+    expect(counts[2]).toBeGreaterThan(counts[1]);
+    expect(counts[2]).toBeGreaterThan(counts[3]);
+  });
+
   it('returns nothing for an unknown location', () => {
     expect(rollMonsterGroup('nonexistent', mid)).toEqual([]);
+  });
+
+  it('rolls Super monsters more often in smaller groups, with tripled stats and a name prefix', () => {
+    let superInSolo = 0;
+    let soloTotal = 0;
+    let superInTrio = 0;
+    let trioTotal = 0;
+    let sampleSuper: ReturnType<typeof rollMonsterGroup>[number] | undefined;
+    let sampleNormal: ReturnType<typeof rollMonsterGroup>[number] | undefined;
+
+    for (let seed = 0; seed < 2000; seed++) {
+      const group = rollMonsterGroup('forest-edge', mulberry32(seed * 104729 + 3));
+      if (group.length === 1) {
+        soloTotal++;
+        if (group[0].isSuper) superInSolo++;
+      }
+      if (group.length === 3) {
+        trioTotal += group.length;
+        superInTrio += group.filter((m) => m.isSuper).length;
+      }
+      for (const m of group) {
+        if (m.isSuper && !sampleSuper) sampleSuper = m;
+        if (!m.isSuper && !sampleNormal) sampleNormal = m;
+      }
+    }
+
+    expect(soloTotal).toBeGreaterThan(0);
+    expect(trioTotal).toBeGreaterThan(0);
+    const soloRate = superInSolo / soloTotal;
+    const trioRate = superInTrio / trioTotal;
+    expect(soloRate).toBeGreaterThan(trioRate);
+
+    expect(sampleSuper).toBeDefined();
+    expect(sampleNormal).toBeDefined();
+    expect(sampleSuper!.name.startsWith(SUPER_MONSTER_PREFIX)).toBe(true);
+    expect(sampleNormal!.name.startsWith(SUPER_MONSTER_PREFIX)).toBe(false);
+    // Same underlying species (targetId) -> stats scale by exactly SUPER_STAT_MULT.
+    const base = sampleSuper!.targetId;
+    const normalOfSameSpecies = Array.from({ length: 200 }, (_, i) => rollMonsterGroup('forest-edge', mulberry32(i)))
+      .flat()
+      .find((m) => !m.isSuper && m.targetId === base);
+    if (normalOfSameSpecies) {
+      expect(sampleSuper!.maxHp).toBe(normalOfSameSpecies.maxHp * SUPER_STAT_MULT);
+      expect(sampleSuper!.atk).toBe(normalOfSameSpecies.atk * SUPER_STAT_MULT);
+      expect(sampleSuper!.def).toBe(normalOfSameSpecies.def * SUPER_STAT_MULT);
+    }
+    // Rewards (gold/xp) scale by the same multiplier as combat stats.
+    if (normalOfSameSpecies) {
+      expect(sampleSuper!.goldReward).toBe(normalOfSameSpecies.goldReward * SUPER_STAT_MULT);
+      expect(sampleSuper!.xpReward).toBe(normalOfSameSpecies.xpReward * SUPER_STAT_MULT);
+    }
+  });
+
+  it('a Super monster drops materials/equipment more often than a normal one', () => {
+    const state = { ...createInitialState(0), act: 2 as const };
+    const strong = { ...champion(1, mid), level: 40 };
+    const monster = (isSuper: boolean): MonsterInstance => ({
+      instanceId: 0,
+      targetId: 'wolf',
+      name: isSuper ? 'Super Wolf' : 'Wolf',
+      materialId: 'beast-pelt',
+      maxHp: 10,
+      atk: 1,
+      def: 0,
+      speed: 1,
+      xpReward: 5,
+      goldReward: 5,
+      isSuper,
+    });
+
+    let normalDrops = 0;
+    let superDrops = 0;
+    const trials = 400;
+    for (let seed = 0; seed < trials; seed++) {
+      const rNormal = simulateBattle(state, [strong], [monster(false)], 'forest-edge', mulberry32(seed), true);
+      if (Object.keys(rNormal.rewards.materials).length > 0 || rNormal.rewards.equipment.length > 0) normalDrops++;
+      const rSuper = simulateBattle(state, [strong], [monster(true)], 'forest-edge', mulberry32(seed + 100000), true);
+      if (Object.keys(rSuper.rewards.materials).length > 0 || rSuper.rewards.equipment.length > 0) superDrops++;
+    }
+    expect(superDrops).toBeGreaterThan(normalDrops);
   });
 });
 

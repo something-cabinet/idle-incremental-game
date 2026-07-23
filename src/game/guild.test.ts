@@ -293,6 +293,26 @@ describe('attributes, HP & equipment', () => {
     expect(rollRarity(EXALTED_MIN_TIER, () => 0, 'rare')).toBe('common');
   });
 
+  it('a Super monster kill (isSuper) rolls epic/exalted equipment far more often than a normal kill', () => {
+    const rng = mulberry32(11);
+    let normalHighRarity = 0;
+    let superHighRarity = 0;
+    const trials = 2000;
+    for (let i = 0; i < trials; i++) {
+      const normal = rollRarity(EXALTED_MIN_TIER, rng);
+      if (normal === 'epic' || normal === 'exalted') normalHighRarity++;
+      const superRoll = rollRarity(EXALTED_MIN_TIER, rng, 'exalted', true);
+      if (superRoll === 'epic' || superRoll === 'exalted') superHighRarity++;
+    }
+    expect(superHighRarity).toBeGreaterThan(normalHighRarity);
+  });
+
+  it('a Super monster still only rolls exalted at/above EXALTED_MIN_TIER — the gate is not bypassed', () => {
+    const highRoll = () => 0.999; // lands in the last weight slice
+    expect(rollRarity(EXALTED_MIN_TIER - 1, highRoll, 'exalted', true)).toBe('epic');
+    expect(rollRarity(EXALTED_MIN_TIER, highRoll, 'exalted', true)).toBe('exalted');
+  });
+
   it('exalted items roll exclusively from EXALTED_PREFIXES, never mixing with normal prefixes', () => {
     const exaltedNames = new Set(EXALTED_PREFIXES.map((p) => p.name));
     const normalNames = new Set(ITEM_PREFIXES.map((p) => p.name));

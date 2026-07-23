@@ -41,6 +41,7 @@ function punchingBag(): MonsterInstance[] {
     speed: 1,
     xpReward: 0,
     goldReward: 0,
+    isSuper: false,
   }];
 }
 

@@ -33,7 +33,11 @@ import {
   MONSTER_SPEED_BASE,
   MONSTER_SPEED_PER_TIER,
   MONSTER_XP_PER_TIER,
-  exploreMonsterCount,
+  rollMonsterCount,
+  SUPER_DROP_CHANCE_MULT,
+  SUPER_MONSTER_CHANCE,
+  SUPER_MONSTER_PREFIX,
+  SUPER_STAT_MULT,
   tierXp,
 } from './config';
 import { autoExploreMembers, locationDef, targetsForLocation } from './guild';
@@ -69,6 +73,8 @@ export interface MonsterInstance {
   speed: number;
   xpReward: number;
   goldReward: number;
+  /** A rare, tripled-stat/reward variant — see rollMonsterGroup. */
+  isSuper: boolean;
 }
 
 /** A timed multiplier on one combat stat (from a skill buff). */
@@ -183,29 +189,40 @@ function monsterCombatStats(target: QuestTargetDef, tier: number) {
   return { hp, atk, def, speed, xpReward, goldReward };
 }
 
-/** Roll a monster group for a zone: count scales with tier, each slot drawn
- * (with replacement) from that zone's monster targets. */
+/**
+ * Roll a monster group for one Explore battle: a weighted-random 1-3 count
+ * (see rollMonsterCount — usually 2, independent of zone tier), each slot
+ * drawn (with replacement) from that zone's monster targets. Each monster
+ * then gets an independent shot at rolling as a Super variant — tripled
+ * stats/rewards, a bigger sprite, and better loot odds (see SUPER_*
+ * constants) — with the per-monster chance keyed by the group's size, so a
+ * solo fight is the likeliest to meet one.
+ */
 export function rollMonsterGroup(locationId: string, rng: Rng): MonsterInstance[] {
   const loc = locationDef(locationId);
   if (!loc) return [];
   const pool = targetsForLocation(locationId).filter((t) => t.kind === 'monster');
   if (pool.length === 0) return [];
-  const count = exploreMonsterCount(loc.tier);
+  const count = rollMonsterCount(rng);
+  const superChance = SUPER_MONSTER_CHANCE[count] ?? 0;
   const group: MonsterInstance[] = [];
   for (let i = 0; i < count; i++) {
     const target = pool[Math.floor(rng() * pool.length)];
     const stats = monsterCombatStats(target, loc.tier);
+    const isSuper = rng() < superChance;
+    const mult = isSuper ? SUPER_STAT_MULT : 1;
     group.push({
       instanceId: i,
       targetId: target.id,
-      name: target.name,
+      name: isSuper ? `${SUPER_MONSTER_PREFIX} ${target.name}` : target.name,
       materialId: target.materialId,
-      maxHp: stats.hp,
-      atk: stats.atk,
-      def: stats.def,
+      maxHp: stats.hp * mult,
+      atk: stats.atk * mult,
+      def: stats.def * mult,
       speed: stats.speed,
-      xpReward: stats.xpReward,
-      goldReward: stats.goldReward,
+      xpReward: stats.xpReward * mult,
+      goldReward: stats.goldReward * mult,
+      isSuper,
     });
   }
   return disambiguateMonsterNames(group);
@@ -605,17 +622,18 @@ export function simulateBattle(
   const equipment: Equipment[] = [];
   let timeShards = 0;
   let nextId = state.nextEntityId;
-  // Explore uses boosted equipment drop chance
-  const equipChance = EXPLORE_EQUIPMENT_CHANCE;
+  // Explore uses boosted equipment drop chance; Super monsters drop even
+  // more often (clamped to 1) and roll better rarity (see generateEquipment).
   if (outcome === 'win') {
     for (const m of monsters) {
       gold += m.goldReward;
       xp += m.xpReward;
-      if (rng() < MONSTER_MATERIAL_CHANCE) {
+      const dropMult = m.isSuper ? SUPER_DROP_CHANCE_MULT : 1;
+      if (rng() < Math.min(1, MONSTER_MATERIAL_CHANCE * dropMult)) {
         materials[m.materialId] = (materials[m.materialId] ?? 0) + 1;
       }
-      if (rng() < equipChance) {
-        equipment.push(generateEquipment(nextId++, tier, rng));
+      if (rng() < Math.min(1, EXPLORE_EQUIPMENT_CHANCE * dropMult)) {
+        equipment.push(generateEquipment(nextId++, tier, rng, undefined, 'exalted', m.isSuper));
       }
     }
     if (loc && rng() < loc.shardChance) timeShards += 1;

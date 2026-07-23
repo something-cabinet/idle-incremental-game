@@ -14,6 +14,7 @@ import type {
   PerkDef,
   QuestTargetDef,
   Rarity,
+  Rng,
   Settings,
   StoryBeatDef,
   TownSkillDef,
@@ -820,10 +821,58 @@ export const EXPLORE_MAX_PARTY_SIZE = 3;
  * damage always exceeds 0, so real fights resolve in a handful of rounds). */
 export const EXPLORE_MAX_TURNS = 300;
 
-/** Monster group size scales with location tier: 1 at tier 1-2, up to 3 at tier 5+. */
-export function exploreMonsterCount(tier: number): number {
-  return Math.min(3, 1 + Math.floor((tier - 1) / 2));
+/** Monster group size per Explore battle: weighted random 1-3, usually 2 —
+ *  independent of zone tier, so every zone's fights feel varied. */
+export const MONSTER_COUNT_WEIGHTS: [number, number][] = [
+  [1, 0.25],
+  [2, 0.5],
+  [3, 0.25],
+];
+
+/** Weighted roll for one Explore battle's monster group size. */
+export function rollMonsterCount(rng: Rng): number {
+  const total = MONSTER_COUNT_WEIGHTS.reduce((sum, [, w]) => sum + w, 0);
+  let roll = rng() * total;
+  for (const [count, w] of MONSTER_COUNT_WEIGHTS) {
+    roll -= w;
+    if (roll <= 0) return count;
+  }
+  return MONSTER_COUNT_WEIGHTS[MONSTER_COUNT_WEIGHTS.length - 1][0];
 }
+
+/**
+ * Chance for any one monster to roll as a Super variant, keyed by that
+ * battle's group size — a smaller group means a bigger per-monster chance,
+ * so solo fights are the likeliest to meet one (see combat.ts rollMonsterGroup).
+ */
+export const SUPER_MONSTER_CHANCE: Record<number, number> = {
+  1: 0.15,
+  2: 0.08,
+  3: 0.05,
+};
+
+/** Super monsters triple combat stats (hp/atk/def) and rewards (gold/xp). */
+export const SUPER_STAT_MULT = 3;
+/** Super monster material/equipment drop chance multiplier (clamped to 1). */
+export const SUPER_DROP_CHANCE_MULT = 3;
+/** Visual size multiplier for Super monster sprites in the battle viewer. */
+export const SUPER_SPRITE_SCALE = 1.4;
+/** Name prefix applied to a rolled Super monster. */
+export const SUPER_MONSTER_PREFIX = 'Super';
+
+/**
+ * Rarity weights for equipment dropped by a Super monster — same shape as
+ * RARITY_WEIGHTS but epic is far more likely. Exalted is still gated by
+ * EXALTED_MIN_TIER (see adventurers.ts rollRarity) — Supers just roll it more
+ * often once that gate is open, they don't bypass it.
+ */
+export const SUPER_RARITY_WEIGHTS: [Rarity, number][] = [
+  ['common', 0.45],
+  ['rare', 0.35],
+  ['epic', 0.2],
+];
+/** Exalted's roll chance for Super drops at/above EXALTED_MIN_TIER (vs EXALTED_WEIGHT for normal drops). */
+export const SUPER_EXALTED_WEIGHT = 0.05;
 
 // Monster combat stats are derived from location tier * the monster's own
 // QuestTargetDef.difficulty, mirroring how adventurer stats derive from
