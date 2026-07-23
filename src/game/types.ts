@@ -183,8 +183,11 @@ export interface ClassSkillDef {
   name: string;
   className: AdventurerClass;
   description: string;
-  /** Cooldown in battle-seconds before it can be recast (see BATTLE_SECONDS_PER_ROUND). */
-  cooldownSeconds: number;
+  /**
+   * Cooldown counted in the number of this champion's OWN turns (not a
+   * shared battle clock) — see combat.ts's per-combatant cooldown tracking.
+   */
+  cooldownTurns: number;
   effects: ClassSkillEffect[];
 }
 

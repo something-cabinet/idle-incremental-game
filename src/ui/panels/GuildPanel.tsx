@@ -91,7 +91,7 @@ function SkillBadge({ adv }: { adv: Adventurer }) {
       <div className="row-info">
         <span className="row-name">
           🎯 {skill.name}
-          <span className="perk-tag">{skill.cooldownSeconds}s CD</span>
+          <span className="perk-tag">{skill.cooldownTurns}-turn CD</span>
         </span>
         <span className="row-desc">{skill.description}</span>
       </div>

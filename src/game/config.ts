@@ -375,21 +375,28 @@ export const CHAMPION_PERKS: ChampionPerkDef[] = [
  * moment they come off cooldown; Auto-Explore/offline skip skills entirely for
  * simplicity (see combat.ts). Single-target effects are tuned stronger than
  * their AoE siblings.
+ *
+ * `cooldownTurns` counts the champion's OWN turns (see combat.ts) — a value
+ * of 3 means "ready again after 3 of this champion's turns have passed",
+ * regardless of how many turns anyone else took in between. Buff/status
+ * *durations* (durationSeconds below) are unrelated and still run off the
+ * shared battle clock (BATTLE_SECONDS_PER_ROUND) — only the cooldown that
+ * gates recasting a skill is turn-based.
  */
 export const CLASS_SKILLS: ClassSkillDef[] = [
   // ---- Warrior: melee bruiser, buffs & control ----
   {
-    id: 'heavy-strike', name: 'Heavy Strike', className: 'warrior', cooldownSeconds: 5,
+    id: 'heavy-strike', name: 'Heavy Strike', className: 'warrior', cooldownTurns: 3,
     description: 'A crushing blow dealing 220% attack to one enemy.',
     effects: [{ kind: 'damage', targeting: 'single', power: 2.2 }],
   },
   {
-    id: 'cleave', name: 'Cleave', className: 'warrior', cooldownSeconds: 6,
+    id: 'cleave', name: 'Cleave', className: 'warrior', cooldownTurns: 3,
     description: 'Sweep every enemy for 70% attack.',
     effects: [{ kind: 'damage', targeting: 'aoe', power: 0.7 }],
   },
   {
-    id: 'shield-bash', name: 'Shield Bash', className: 'warrior', cooldownSeconds: 8,
+    id: 'shield-bash', name: 'Shield Bash', className: 'warrior', cooldownTurns: 4,
     description: '120% attack to one enemy and stuns it for 3s.',
     effects: [
       { kind: 'damage', targeting: 'single', power: 1.2 },
@@ -397,28 +404,28 @@ export const CLASS_SKILLS: ClassSkillDef[] = [
     ],
   },
   {
-    id: 'war-cry', name: 'War Cry', className: 'warrior', cooldownSeconds: 14,
+    id: 'war-cry', name: 'War Cry', className: 'warrior', cooldownTurns: 7,
     description: 'Rally the party: +30% attack to all champions for 12s.',
     effects: [{ kind: 'buff', stat: 'atk', mult: 1.3, targeting: 'allies', durationSeconds: 12 }],
   },
   {
-    id: 'shield-wall', name: 'Shield Wall', className: 'warrior', cooldownSeconds: 14,
+    id: 'shield-wall', name: 'Shield Wall', className: 'warrior', cooldownTurns: 7,
     description: 'Brace the line: +50% defense to all champions for 12s.',
     effects: [{ kind: 'buff', stat: 'def', mult: 1.5, targeting: 'allies', durationSeconds: 12 }],
   },
   // ---- Ranger: precise single-target, poison & mobility ----
   {
-    id: 'power-shot', name: 'Power Shot', className: 'ranger', cooldownSeconds: 5,
+    id: 'power-shot', name: 'Power Shot', className: 'ranger', cooldownTurns: 3,
     description: 'A piercing arrow dealing 210% attack to one enemy.',
     effects: [{ kind: 'damage', targeting: 'single', power: 2.1 }],
   },
   {
-    id: 'volley', name: 'Volley', className: 'ranger', cooldownSeconds: 7,
+    id: 'volley', name: 'Volley', className: 'ranger', cooldownTurns: 4,
     description: 'Rain arrows on every enemy for 75% attack.',
     effects: [{ kind: 'damage', targeting: 'aoe', power: 0.75 }],
   },
   {
-    id: 'serpent-sting', name: 'Serpent Sting', className: 'ranger', cooldownSeconds: 7,
+    id: 'serpent-sting', name: 'Serpent Sting', className: 'ranger', cooldownTurns: 4,
     description: '100% attack to one enemy, then poisons it for 8s.',
     effects: [
       { kind: 'damage', targeting: 'single', power: 1 },
@@ -426,7 +433,7 @@ export const CLASS_SKILLS: ClassSkillDef[] = [
     ],
   },
   {
-    id: 'crippling-shot', name: 'Crippling Shot', className: 'ranger', cooldownSeconds: 8,
+    id: 'crippling-shot', name: 'Crippling Shot', className: 'ranger', cooldownTurns: 4,
     description: '110% attack to one enemy and slows it (−50% speed) for 6s.',
     effects: [
       { kind: 'damage', targeting: 'single', power: 1.1 },
@@ -434,7 +441,7 @@ export const CLASS_SKILLS: ClassSkillDef[] = [
     ],
   },
   {
-    id: 'hunters-focus', name: "Hunter's Focus", className: 'ranger', cooldownSeconds: 13,
+    id: 'hunters-focus', name: "Hunter's Focus", className: 'ranger', cooldownTurns: 7,
     description: 'Take aim: +40% attack and +30% speed to self for 10s.',
     effects: [
       { kind: 'buff', stat: 'atk', mult: 1.4, targeting: 'self', durationSeconds: 10 },
@@ -443,12 +450,12 @@ export const CLASS_SKILLS: ClassSkillDef[] = [
   },
   // ---- Mage: area damage & elemental status ----
   {
-    id: 'arcane-bolt', name: 'Arcane Bolt', className: 'mage', cooldownSeconds: 5,
+    id: 'arcane-bolt', name: 'Arcane Bolt', className: 'mage', cooldownTurns: 3,
     description: 'A focused blast dealing 230% attack to one enemy.',
     effects: [{ kind: 'damage', targeting: 'single', power: 2.3 }],
   },
   {
-    id: 'fireball', name: 'Fireball', className: 'mage', cooldownSeconds: 8,
+    id: 'fireball', name: 'Fireball', className: 'mage', cooldownTurns: 4,
     description: '80% attack to every enemy and burns them for 6s.',
     effects: [
       { kind: 'damage', targeting: 'aoe', power: 0.8 },
@@ -456,7 +463,7 @@ export const CLASS_SKILLS: ClassSkillDef[] = [
     ],
   },
   {
-    id: 'frost-nova', name: 'Frost Nova', className: 'mage', cooldownSeconds: 9,
+    id: 'frost-nova', name: 'Frost Nova', className: 'mage', cooldownTurns: 5,
     description: '50% attack to every enemy and slows them (−50% speed) for 6s.',
     effects: [
       { kind: 'damage', targeting: 'aoe', power: 0.5 },
@@ -464,19 +471,20 @@ export const CLASS_SKILLS: ClassSkillDef[] = [
     ],
   },
   {
-    id: 'chain-lightning', name: 'Chain Lightning', className: 'mage', cooldownSeconds: 7,
+    id: 'chain-lightning', name: 'Chain Lightning', className: 'mage', cooldownTurns: 4,
     description: 'Arcs to 3 random enemies for 110% attack each.',
     effects: [{ kind: 'damage', targeting: 'random', power: 1.1, hits: 3 }],
   },
   {
-    id: 'mana-shield', name: 'Mana Shield', className: 'mage', cooldownSeconds: 13,
+    id: 'mana-shield', name: 'Mana Shield', className: 'mage', cooldownTurns: 7,
     description: 'Ward the party: +40% defense to all champions for 12s.',
     effects: [{ kind: 'buff', stat: 'def', mult: 1.4, targeting: 'allies', durationSeconds: 12 }],
   },
 ];
 
-/** Battle-seconds that elapse each combat round — maps skill cooldowns (kept in
- *  seconds for design clarity) onto the round-based Explore combat loop. */
+/** Battle-seconds that elapse each combat round — used for buff/status
+ *  durations (durationSeconds) and speed-ordering timing only. Skill
+ *  cooldowns are turn-based (see CLASS_SKILLS) and don't use this. */
 export const BATTLE_SECONDS_PER_ROUND = 2;
 
 /** Hire-time variance: each attribute rolls base ± this. */

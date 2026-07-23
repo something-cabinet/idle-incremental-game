@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { championSkill, generateAdventurer, maxHp, skillsForClass } from './adventurers';
 import { rollMonsterGroup, simulateBattle } from './combat';
+import type { MonsterInstance } from './combat';
 import { CLASS_SKILLS } from './config';
 import { createInitialState, migrateSave } from './logic';
 import type { Adventurer, AdventurerClass } from './types';
@@ -25,6 +26,24 @@ function champ(skillId: string, level: number): Adventurer {
   return { ...base, hp: maxHp(base) };
 }
 
+/** A punching bag: absurd HP, negligible attack, so a solo champion survives
+ * long enough (and never wins/ends the fight) to observe many cooldown
+ * cycles of their own turns deterministically. */
+function punchingBag(): MonsterInstance[] {
+  return [{
+    instanceId: 0,
+    targetId: 'dummy',
+    name: 'Dummy',
+    materialId: 'beast-pelt',
+    maxHp: 1_000_000,
+    atk: 1,
+    def: 0,
+    speed: 1,
+    xpReward: 0,
+    goldReward: 0,
+  }];
+}
+
 const CLASSES: AdventurerClass[] = ['warrior', 'ranger', 'mage'];
 
 describe('class active skills', () => {
@@ -35,7 +54,7 @@ describe('class active skills', () => {
     expect(new Set(CLASS_SKILLS.map((s) => s.id)).size).toBe(CLASS_SKILLS.length);
     for (const s of CLASS_SKILLS) {
       expect(s.name.length).toBeGreaterThan(0);
-      expect(s.cooldownSeconds).toBeGreaterThan(0);
+      expect(s.cooldownTurns).toBeGreaterThan(0);
       expect(s.effects.length).toBeGreaterThan(0);
     }
   });
@@ -67,40 +86,31 @@ describe('class active skills', () => {
   });
 
   it('a live battle auto-casts the champion skill and labels the hit', () => {
-    // Skills start on a half-charged cooldown (see BATTLE_SECONDS_PER_ROUND
-    // note below), so the fight needs a few rounds to run before the first
-    // cast — a modest level vs a stacked zone guarantees that.
     const state = createInitialState(0);
     const a = champ('arcane-bolt', 18);
-    const monsters = rollMonsterGroup('frontier-pass', mulberry32(6));
-    const out = simulateBattle(state, [a], monsters, 'frontier-pass', mulberry32(2), true);
+    const out = simulateBattle(state, [a], punchingBag(), 'frontier-pass', mulberry32(2), true);
     expect(out.log.some((e) => e.skillName === 'Arcane Bolt' && e.damage > 0)).toBe(true);
   });
 
   it('a buff skill applies a buff log line to the party', () => {
     const state = createInitialState(0);
-    const a = champ('war-cry', 30); // 14s CD — needs a longer fight to come off cooldown
-    const monsters = rollMonsterGroup('frontier-pass', mulberry32(6));
-    const out = simulateBattle(state, [a], monsters, 'frontier-pass', mulberry32(2), true);
+    const a = champ('war-cry', 18); // 7-turn CD
+    const out = simulateBattle(state, [a], punchingBag(), 'frontier-pass', mulberry32(2), true);
     expect(out.log.some((e) => e.kind === 'buff' && e.effectLabel === 'ATK ↑')).toBe(true);
   });
 
   it('a poison skill inflicts a status and then ticks damage over time', () => {
     const state = createInitialState(0);
-    // Modest champion vs a stacked frontier group: the fight lasts long enough
-    // for the poison to tick before the target dies.
     const a = champ('serpent-sting', 18);
-    const monsters = rollMonsterGroup('frontier-pass', mulberry32(6));
-    const out = simulateBattle(state, [a], monsters, 'frontier-pass', mulberry32(2), true);
+    const out = simulateBattle(state, [a], punchingBag(), 'frontier-pass', mulberry32(2), true);
     expect(out.log.some((e) => e.kind === 'status' && e.effectLabel === 'Poison')).toBe(true);
     expect(out.log.some((e) => e.kind === 'dot' && e.effectLabel === 'Poison' && e.damage > 0)).toBe(true);
   });
 
   it('cooldowns force basic attacks between casts (skills are not spammed)', () => {
     const state = createInitialState(0);
-    const a = champ('power-shot', 40); // 5s CD single-target
-    const monsters = rollMonsterGroup('frontier-pass', mulberry32(6));
-    const out = simulateBattle(state, [a], monsters, 'frontier-pass', mulberry32(2), true);
+    const a = champ('power-shot', 18); // 3-turn CD single-target
+    const out = simulateBattle(state, [a], punchingBag(), 'frontier-pass', mulberry32(2), true);
     const casts = out.log.filter((e) => e.attackerSide === 'party' && e.skillName).length;
     const basics = out.log.filter((e) => e.attackerSide === 'party' && !e.skillName && e.damage > 0).length;
     expect(casts).toBeGreaterThan(0);
@@ -116,41 +126,56 @@ describe('class active skills', () => {
     expect(skill!.className).toBe(migrated.adventurers[0].className);
   });
 
-  it('skills enter battle half charged, not fully ready or fully empty', () => {
-    const state = createInitialState(0);
-    const a = champ('power-shot', 18); // 5s CD
-    const monsters = rollMonsterGroup('frontier-pass', mulberry32(6));
-    const out = simulateBattle(state, [a], monsters, 'frontier-pass', mulberry32(2), true);
-    const first = out.log.find((e) => e.cooldownProgress?.[a.id] !== undefined);
-    expect(first?.cooldownProgress?.[a.id]).toBeCloseTo(0.5, 1);
-  });
-
-  it('cooldownProgress resets to 0 right after a cast and climbs back to 1 as it recovers', () => {
-    // Level 22 vs frontier-pass wins after several rounds, giving entries both
-    // before and after the first cast to inspect the cooldown curve.
-    const state = createInitialState(0);
-    const a = champ('power-shot', 22);
-    const monsters = rollMonsterGroup('frontier-pass', mulberry32(6));
-    const out = simulateBattle(state, [a], monsters, 'frontier-pass', mulberry32(2), true);
-    const castIdx = out.log.findIndex((e) => e.skillName === 'Power Shot');
-    expect(castIdx).toBeGreaterThanOrEqual(0);
-    expect(out.log[castIdx].cooldownProgress?.[a.id]).toBe(0);
-    // Progress is monotonically non-decreasing between casts.
-    let prev = 0;
-    for (let i = castIdx; i < out.log.length; i++) {
-      const p = out.log[i].cooldownProgress?.[a.id];
-      if (p === undefined) continue;
-      if (p < prev) break; // a later recast reset it — stop checking this streak
-      prev = p;
-    }
-    expect(prev).toBeGreaterThan(0);
-  });
-
   it('a non-live battle carries no cooldownProgress snapshots', () => {
     const state = createInitialState(0);
     const a = champ('power-shot', 18);
-    const monsters = rollMonsterGroup('frontier-pass', mulberry32(6));
-    const out = simulateBattle(state, [a], monsters, 'frontier-pass', mulberry32(2), false);
+    const out = simulateBattle(state, [a], punchingBag(), 'frontier-pass', mulberry32(2), false);
     expect(out.log.every((e) => e.cooldownProgress === undefined || Object.keys(e.cooldownProgress).length === 0)).toBe(true);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Turn-based cooldown mechanics — a solo champion vs a punching bag makes
+  // "this champion's own turn" and "log entries where they act" line up 1:1,
+  // so the exact cadence can be asserted precisely.
+  // ---------------------------------------------------------------------------
+  describe('turn-based cooldown (power-shot, 3-turn CD)', () => {
+    const cooldownTurns = 3;
+
+    function partyLog() {
+      const state = createInitialState(0);
+      const a = champ('power-shot', 18);
+      const out = simulateBattle(state, [a], punchingBag(), 'frontier-pass', mulberry32(2), true);
+      return { a, partyEntries: out.log.filter((e) => e.attackerSide === 'party') };
+    }
+
+    it("casts first on the champion's 2nd own turn (half-charged start), then every cooldownTurns turns after", () => {
+      const { partyEntries } = partyLog();
+      const castTurnIndices = partyEntries
+        .map((e, i) => (e.skillName ? i : -1))
+        .filter((i) => i >= 0);
+      // Half-charged start (ceil(3/2) = 2 turns needed) puts the first cast
+      // on the champion's 2nd own turn — 0-indexed position 1 — then every
+      // cooldownTurns turns thereafter, indefinitely.
+      expect(castTurnIndices.length).toBeGreaterThanOrEqual(4);
+      for (let k = 0; k < 4; k++) {
+        expect(castTurnIndices[k]).toBe(1 + k * cooldownTurns);
+      }
+    });
+
+    it("cooldownProgress resets to 0 on each cast and climbs by 1/cooldownTurns every turn until the next cast", () => {
+      const { a, partyEntries } = partyLog();
+      const castTurnIndices = partyEntries
+        .map((e, i) => (e.skillName ? i : -1))
+        .filter((i) => i >= 0);
+      expect(castTurnIndices.length).toBeGreaterThanOrEqual(3);
+      for (let c = 0; c < castTurnIndices.length - 1; c++) {
+        const start = castTurnIndices[c];
+        const next = castTurnIndices[c + 1];
+        expect(partyEntries[start].cooldownProgress?.[a.id]).toBe(0);
+        for (let t = start + 1; t < next; t++) {
+          expect(partyEntries[t].cooldownProgress?.[a.id]).toBeCloseTo((t - start) / cooldownTurns, 5);
+        }
+      }
+    });
   });
 });

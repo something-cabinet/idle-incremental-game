@@ -91,12 +91,14 @@ interface ActiveStatus {
   sourceName: string;
 }
 
-/** A skill a combatant carries, plus its per-battle cooldown clock. Combatants
- *  can hold several (future enemies/champions with multi-skill kits). */
+/** A skill a combatant carries, plus its own per-combatant cooldown counter.
+ *  Combatants can hold several (future enemies/champions with multi-skill
+ *  kits). Ticks down once per this combatant's own turn — see the main loop
+ *  — independent of any other combatant's turns or the shared battle clock. */
 interface SkillSlot {
   def: ClassSkillDef;
-  /** Battle-seconds at which this skill may next be cast. */
-  readyAt: number;
+  /** Remaining turns (of this combatant's own) before it can be cast again. */
+  cooldownRemaining: number;
 }
 
 interface Combatant {
@@ -267,10 +269,14 @@ function injurySecondsFor(
  * only stat perks (baked into adventurerStats) matter, and the loop reduces to
  * the plain speed-ordered trade of basic attacks it has always been.
  *
- * Skill cooldowns are tracked on a battle clock that advances
- * BATTLE_SECONDS_PER_ROUND each round; a champion auto-casts its first ready
- * skill on its turn, else makes a basic attack. Combatants carry a *list* of
- * skills so future multi-skill champions/enemies need no structural change.
+ * Skill cooldowns are turn-based, per combatant: each SkillSlot's counter
+ * ticks down by 1 on every one of *that combatant's own* turns (whether or
+ * not they land the action — a stunned turn still counts), independent of
+ * anyone else's turns or the shared battle clock. A champion auto-casts its
+ * first ready skill on its turn, else makes a basic attack. Combatants carry
+ * a *list* of skills so future multi-skill champions/enemies need no
+ * structural change. (Buff/status *durations* are unrelated and still run
+ * off the shared battle clock — only the recast gate is turn-based.)
  */
 export function simulateBattle(
   state: GameState,
@@ -311,9 +317,10 @@ export function simulateBattle(
         speed: effectiveAttributes(a).dex,
         buffs: [],
         statuses: [],
-        // Champions enter battle with their skill already half charged, not
-        // fresh off a full cooldown, so the first cast comes sooner.
-        skills: skill ? [{ def: skill, readyAt: skill.cooldownSeconds * 0.5 }] : [],
+        // Champions enter battle with their skill already half charged (in
+        // terms of their own turns), not fresh off a full cooldown, so the
+        // first cast comes sooner.
+        skills: skill ? [{ def: skill, cooldownRemaining: Math.ceil(skill.cooldownTurns / 2) }] : [],
       };
     }),
     ...monsters.map((m): Combatant => ({
@@ -354,17 +361,16 @@ export function simulateBattle(
     c.statuses.some((st) => st.kind === 'stun' && st.expiresAt > clock);
 
   /** Cooldown progress (0 = just cast, 1 = ready) for every skill-bearing
-   *  party member, as of right now on the battle clock. A skill's "cooldown
-   *  start" is back-derived from its readyAt, so this reads correctly both
-   *  for the initial half-charged state and for any later recast. */
+   *  party member, as of right now — derived straight from each skill's own
+   *  turn-based counter, so this reads correctly both for the initial
+   *  half-charged state and for any later recast. */
   function snapshotCooldowns(): Record<number, number> {
     const out: Record<number, number> = {};
     for (const c of combatants) {
       if (c.side !== 'party') continue;
       for (const slot of c.skills) {
-        const total = slot.def.cooldownSeconds;
-        const startedAt = slot.readyAt - total;
-        out[c.refId] = Math.max(0, Math.min(1, (clock - startedAt) / total));
+        const total = slot.def.cooldownTurns;
+        out[c.refId] = Math.max(0, Math.min(1, (total - slot.cooldownRemaining) / total));
       }
     }
     return out;
@@ -482,7 +488,7 @@ export function simulateBattle(
   }
 
   function castSkill(caster: Combatant, slot: SkillSlot) {
-    slot.readyAt = clock + slot.def.cooldownSeconds;
+    slot.cooldownRemaining = slot.def.cooldownTurns;
     for (const eff of slot.def.effects) {
       if (eff.kind === 'damage') applyDamageEffect(caster, eff, slot.def.name);
       else if (eff.kind === 'buff') applyBuffEffect(caster, eff, slot.def.name);
@@ -521,6 +527,12 @@ export function simulateBattle(
       if (attacker.hp <= 0) continue;
       if (!alive('party') || !alive('monsters')) break outer;
 
+      // Cooldowns tick down once per this combatant's own turn — whether or
+      // not they land the action — independent of anyone else's turns.
+      for (const slot of attacker.skills) {
+        if (slot.cooldownRemaining > 0) slot.cooldownRemaining -= 1;
+      }
+
       // Damage-over-time first (only ever populated in live battles).
       if (attacker.statuses.length > 0) {
         tickDots(attacker);
@@ -531,7 +543,7 @@ export function simulateBattle(
       }
 
       // Champions auto-cast their first ready skill; everyone else strikes.
-      const ready = attacker.skills.find((s) => s.readyAt <= clock);
+      const ready = attacker.skills.find((s) => s.cooldownRemaining <= 0);
       if (ready) {
         castSkill(attacker, ready);
       } else {
