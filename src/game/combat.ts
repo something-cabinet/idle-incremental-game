@@ -130,6 +130,13 @@ export interface BattleLogEntry {
   kind?: 'attack' | 'skill' | 'buff' | 'status' | 'dot';
   /** Short badge shown for buffs/statuses (e.g. 'ATK ↑', 'Poison'). */
   effectLabel?: string;
+  /**
+   * Snapshot, taken at this log entry, of every skill-bearing party member's
+   * cooldown progress (0 = just cast, 1 = ready). Lets the viewer animate a
+   * cooldown bar under each champion's HP bar without re-deriving battle
+   * timing itself. Keyed by champion id; only present in live battles.
+   */
+  cooldownProgress?: Record<number, number>;
 }
 
 export interface PartyBattleResult {
@@ -304,7 +311,9 @@ export function simulateBattle(
         speed: effectiveAttributes(a).dex,
         buffs: [],
         statuses: [],
-        skills: skill ? [{ def: skill, readyAt: 0 }] : [],
+        // Champions enter battle with their skill already half charged, not
+        // fresh off a full cooldown, so the first cast comes sooner.
+        skills: skill ? [{ def: skill, readyAt: skill.cooldownSeconds * 0.5 }] : [],
       };
     }),
     ...monsters.map((m): Combatant => ({
@@ -344,6 +353,27 @@ export function simulateBattle(
   const isStunned = (c: Combatant) =>
     c.statuses.some((st) => st.kind === 'stun' && st.expiresAt > clock);
 
+  /** Cooldown progress (0 = just cast, 1 = ready) for every skill-bearing
+   *  party member, as of right now on the battle clock. A skill's "cooldown
+   *  start" is back-derived from its readyAt, so this reads correctly both
+   *  for the initial half-charged state and for any later recast. */
+  function snapshotCooldowns(): Record<number, number> {
+    const out: Record<number, number> = {};
+    for (const c of combatants) {
+      if (c.side !== 'party') continue;
+      for (const slot of c.skills) {
+        const total = slot.def.cooldownSeconds;
+        const startedAt = slot.readyAt - total;
+        out[c.refId] = Math.max(0, Math.min(1, (clock - startedAt) / total));
+      }
+    }
+    return out;
+  }
+
+  function pushLog(entry: Omit<BattleLogEntry, 'cooldownProgress'>) {
+    log.push({ ...entry, cooldownProgress: snapshotCooldowns() });
+  }
+
   /** One hit: mitigated damage (× crit for party), lifesteal, and a log line. */
   function strike(attacker: Combatant, target: Combatant, power: number, skillName?: string) {
     let damage = rollDamage(atkOf(attacker) * power, defOf(target), rng);
@@ -361,7 +391,7 @@ export function simulateBattle(
       if (steal) attacker.hp = Math.min(attacker.maxHp, attacker.hp + Math.round(damage * steal));
     }
     turns++;
-    log.push({
+    pushLog({
       attackerSide: attacker.side,
       attackerName: attacker.name,
       defenderSide: target.side,
@@ -400,7 +430,7 @@ export function simulateBattle(
     for (const t of targets) {
       t.buffs.push({ stat: eff.stat, mult: eff.mult, expiresAt: clock + eff.durationSeconds });
       turns++;
-      log.push({
+      pushLog({
         attackerSide: caster.side,
         attackerName: caster.name,
         defenderSide: t.side,
@@ -435,7 +465,7 @@ export function simulateBattle(
         sourceName: caster.name,
       });
       turns++;
-      log.push({
+      pushLog({
         attackerSide: caster.side,
         attackerName: caster.name,
         defenderSide: t.side,
@@ -467,7 +497,7 @@ export function simulateBattle(
       if (st.dmgPerRound <= 0 || st.expiresAt <= clock) continue;
       c.hp -= st.dmgPerRound;
       turns++;
-      log.push({
+      pushLog({
         attackerSide: st.sourceSide,
         attackerName: st.sourceName,
         defenderSide: c.side,

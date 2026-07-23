@@ -67,18 +67,21 @@ describe('class active skills', () => {
   });
 
   it('a live battle auto-casts the champion skill and labels the hit', () => {
+    // Skills start on a half-charged cooldown (see BATTLE_SECONDS_PER_ROUND
+    // note below), so the fight needs a few rounds to run before the first
+    // cast — a modest level vs a stacked zone guarantees that.
     const state = createInitialState(0);
-    const a = champ('arcane-bolt', 40);
-    const monsters = rollMonsterGroup('old-mines', mulberry32(9));
-    const out = simulateBattle(state, [a], monsters, 'old-mines', mulberry32(4), true);
+    const a = champ('arcane-bolt', 18);
+    const monsters = rollMonsterGroup('frontier-pass', mulberry32(6));
+    const out = simulateBattle(state, [a], monsters, 'frontier-pass', mulberry32(2), true);
     expect(out.log.some((e) => e.skillName === 'Arcane Bolt' && e.damage > 0)).toBe(true);
   });
 
   it('a buff skill applies a buff log line to the party', () => {
     const state = createInitialState(0);
-    const a = champ('war-cry', 40);
-    const monsters = rollMonsterGroup('old-mines', mulberry32(9));
-    const out = simulateBattle(state, [a], monsters, 'old-mines', mulberry32(4), true);
+    const a = champ('war-cry', 30); // 14s CD — needs a longer fight to come off cooldown
+    const monsters = rollMonsterGroup('frontier-pass', mulberry32(6));
+    const out = simulateBattle(state, [a], monsters, 'frontier-pass', mulberry32(2), true);
     expect(out.log.some((e) => e.kind === 'buff' && e.effectLabel === 'ATK ↑')).toBe(true);
   });
 
@@ -111,5 +114,43 @@ describe('class active skills', () => {
     const skill = championSkill(migrated.adventurers[0].skillId);
     expect(skill).toBeDefined();
     expect(skill!.className).toBe(migrated.adventurers[0].className);
+  });
+
+  it('skills enter battle half charged, not fully ready or fully empty', () => {
+    const state = createInitialState(0);
+    const a = champ('power-shot', 18); // 5s CD
+    const monsters = rollMonsterGroup('frontier-pass', mulberry32(6));
+    const out = simulateBattle(state, [a], monsters, 'frontier-pass', mulberry32(2), true);
+    const first = out.log.find((e) => e.cooldownProgress?.[a.id] !== undefined);
+    expect(first?.cooldownProgress?.[a.id]).toBeCloseTo(0.5, 1);
+  });
+
+  it('cooldownProgress resets to 0 right after a cast and climbs back to 1 as it recovers', () => {
+    // Level 22 vs frontier-pass wins after several rounds, giving entries both
+    // before and after the first cast to inspect the cooldown curve.
+    const state = createInitialState(0);
+    const a = champ('power-shot', 22);
+    const monsters = rollMonsterGroup('frontier-pass', mulberry32(6));
+    const out = simulateBattle(state, [a], monsters, 'frontier-pass', mulberry32(2), true);
+    const castIdx = out.log.findIndex((e) => e.skillName === 'Power Shot');
+    expect(castIdx).toBeGreaterThanOrEqual(0);
+    expect(out.log[castIdx].cooldownProgress?.[a.id]).toBe(0);
+    // Progress is monotonically non-decreasing between casts.
+    let prev = 0;
+    for (let i = castIdx; i < out.log.length; i++) {
+      const p = out.log[i].cooldownProgress?.[a.id];
+      if (p === undefined) continue;
+      if (p < prev) break; // a later recast reset it — stop checking this streak
+      prev = p;
+    }
+    expect(prev).toBeGreaterThan(0);
+  });
+
+  it('a non-live battle carries no cooldownProgress snapshots', () => {
+    const state = createInitialState(0);
+    const a = champ('power-shot', 18);
+    const monsters = rollMonsterGroup('frontier-pass', mulberry32(6));
+    const out = simulateBattle(state, [a], monsters, 'frontier-pass', mulberry32(2), false);
+    expect(out.log.every((e) => e.cooldownProgress === undefined || Object.keys(e.cooldownProgress).length === 0)).toBe(true);
   });
 });

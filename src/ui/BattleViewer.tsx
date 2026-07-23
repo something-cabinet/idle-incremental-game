@@ -15,6 +15,12 @@ const PARTY_H = Math.round(FIGHTER_H * 0.7);
 const HP_BAR_H = 4;
 const HP_BAR_W = 26;
 const HP_TEXT_SIZE = 7;
+// Cooldown bar: thinner, sits directly under the HP bar, only on party
+// sprites (every champion carries exactly one active skill — see combat.ts).
+const CD_BAR_H = 3;
+const CD_BAR_W = HP_BAR_W;
+const BAR_GAP = 2;
+const BODY_MARGIN = 4;
 const GAP = 14;
 const LUNGE_DIST = 40;
 const LUNGE_MS = 180;
@@ -69,11 +75,18 @@ function lerp(a: number, b: number, t: number): number {
 // ---------------------------------------------------------------------------
 
 interface FighterSpriteData {
+  /** Champion id — set on party sprites only, used to key cooldownProgress. */
+  advId?: number;
   container: Container;
   nameText: Text;
   hpText: Text;
   hpFill: Graphics;
   hpBg: Graphics;
+  hpBarY: number;
+  /** Cooldown bar graphics — present only on party sprites (see CD_BAR_H). */
+  cdFill?: Graphics;
+  cdBg?: Graphics;
+  cdBarY: number;
   body: Graphics;
   flashOverlay: Graphics;
   baseX: number;
@@ -98,6 +111,7 @@ function createFighterSprite(
   tier: number,
   className: string,
   targetId: string,
+  hasSkill: boolean,
 ): FighterSpriteData {
   const container = new Container();
   container.x = x;
@@ -167,7 +181,12 @@ function createFighterSprite(
   nameText.y = h / 2 + 4;
   container.addChild(nameText);
 
-  const hpBarY = -h / 2 - HP_BAR_H - 4;
+  // The cooldown bar sits directly under the HP bar, so when present the HP
+  // bar is pushed up to make room; the body margin is preserved for whichever
+  // bar ends up closest to the sprite.
+  const cdBarY = -h / 2 - BODY_MARGIN - CD_BAR_H;
+  const hpBarY = hasSkill ? cdBarY - BAR_GAP - HP_BAR_H : -h / 2 - HP_BAR_H - BODY_MARGIN;
+
   const hpBg = new Graphics();
   hpBg.roundRect(-HP_BAR_W / 2, hpBarY, HP_BAR_W, HP_BAR_H, 2).fill({ color: 0x333333 });
   container.addChild(hpBg);
@@ -175,6 +194,19 @@ function createFighterSprite(
   const hpFill = new Graphics();
   hpFill.roundRect(-HP_BAR_W / 2, hpBarY, HP_BAR_W, HP_BAR_H, 2).fill({ color: 0x44cc44 });
   container.addChild(hpFill);
+
+  let cdBg: Graphics | undefined;
+  let cdFill: Graphics | undefined;
+  if (hasSkill) {
+    cdBg = new Graphics();
+    cdBg.roundRect(-CD_BAR_W / 2, cdBarY, CD_BAR_W, CD_BAR_H, 1.5).fill({ color: 0x333333 });
+    container.addChild(cdBg);
+
+    cdFill = new Graphics();
+    // Starts half-filled: skills enter battle at 50% cooldown (see combat.ts).
+    cdFill.roundRect(-CD_BAR_W / 2, cdBarY, CD_BAR_W * 0.5, CD_BAR_H, 1.5).fill({ color: 0x4a9fe0 });
+    container.addChild(cdFill);
+  }
 
   const hpTextStyle = new TextStyle({ fill: 0xffffff, fontSize: HP_TEXT_SIZE, fontFamily: 'monospace' });
   const hpText = new Text({ text: String(maxHp), style: hpTextStyle });
@@ -188,6 +220,10 @@ function createFighterSprite(
     hpText,
     hpFill,
     hpBg,
+    hpBarY,
+    cdFill,
+    cdBg,
+    cdBarY,
     body,
     flashOverlay,
     baseX: x,
@@ -207,13 +243,24 @@ function createFighterSprite(
 function updateHpBar(sprite: FighterSpriteData): void {
   const pct = Math.max(0, sprite.hp / sprite.maxHp);
   const w = HP_BAR_W * pct;
-  const hpBarY = -sprite.height / 2 - HP_BAR_H - 4;
   const color = pct > 0.5 ? 0x44cc44 : pct > 0.25 ? 0xccaa44 : 0xcc4444;
   sprite.hpFill.clear();
   if (w > 0) {
-    sprite.hpFill.roundRect(-HP_BAR_W / 2, hpBarY, w, HP_BAR_H, 2).fill({ color });
+    sprite.hpFill.roundRect(-HP_BAR_W / 2, sprite.hpBarY, w, HP_BAR_H, 2).fill({ color });
   }
   sprite.hpText.text = String(Math.max(0, Math.round(sprite.hp)));
+}
+
+/** `progress`: 0 = just cast, 1 = ready. Full bar = "the skill is ready". */
+function updateCdBar(sprite: FighterSpriteData, progress: number): void {
+  if (!sprite.cdFill) return;
+  const pct = Math.max(0, Math.min(1, progress));
+  const w = CD_BAR_W * pct;
+  sprite.cdFill.clear();
+  if (w > 0) {
+    const color = pct >= 1 ? 0x5ad06a : 0x4a9fe0;
+    sprite.cdFill.roundRect(-CD_BAR_W / 2, sprite.cdBarY, w, CD_BAR_H, 1.5).fill({ color });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -334,7 +381,10 @@ function buildScene(app: Application, result: BattleOutcome, tier: number, w: nu
   const partyStartY = (h - totalH) / 2;
 
   result.party.forEach((p, i) => {
-    const sprite = createFighterSprite(p.name, partyX, partyStartY + i * (PARTY_H + GAP + 20), p.maxHp, true, tier, p.className, '');
+    // Every champion is generated with exactly one active skill (see
+    // combat.ts/adventurers.ts), so party sprites always show a cooldown bar.
+    const sprite = createFighterSprite(p.name, partyX, partyStartY + i * (PARTY_H + GAP + 20), p.maxHp, true, tier, p.className, '', true);
+    sprite.advId = p.advId;
     partySprites.push(sprite);
     scene.addChild(sprite.container);
   });
@@ -343,7 +393,7 @@ function buildScene(app: Application, result: BattleOutcome, tier: number, w: nu
   const monsterStartY = (h - totalHm) / 2;
 
   result.monsters.forEach((m, i) => {
-    const sprite = createFighterSprite(m.name, monsterX, monsterStartY + i * (FIGHTER_H + GAP + 20), m.maxHp, false, tier, '', m.targetId);
+    const sprite = createFighterSprite(m.name, monsterX, monsterStartY + i * (FIGHTER_H + GAP + 20), m.maxHp, false, tier, '', m.targetId, false);
     monsterSprites.push(sprite);
     scene.addChild(sprite.container);
   });
@@ -518,6 +568,16 @@ export function BattleViewer({
       st.currentEntry = entry;
       st.logIndex++;
 
+      // cooldownProgress is a full snapshot of every skill-bearing party
+      // member as of this entry, so refresh every party cd bar in one pass.
+      if (entry.cooldownProgress) {
+        for (const s of st.partySprites) {
+          if (s.advId === undefined) continue;
+          const progress = entry.cooldownProgress[s.advId];
+          if (progress !== undefined) updateCdBar(s, progress);
+        }
+      }
+
       const attacker = findSprite(entry.attackerSide, entry.attackerName);
       const defender = findSprite(entry.defenderSide, entry.defenderName);
       if (!attacker || !defender) {
@@ -616,6 +676,13 @@ export function BattleViewer({
 
       if (st.animPhase === 'idle') {
         if (skipRef.current) {
+          // Find the last snapshot recorded for each champion so the cooldown
+          // bar still lands in its true end-of-battle state when skipping.
+          const lastCooldowns: Record<number, number> = {};
+          for (const e of result.log) {
+            if (!e.cooldownProgress) continue;
+            Object.assign(lastCooldowns, e.cooldownProgress);
+          }
           for (const s of st.partySprites) {
             const pr = result.party.find((p) => p.name === s.nameText.text);
             if (pr) {
@@ -623,6 +690,9 @@ export function BattleViewer({
               s.defeated = pr.knockedOut;
               s.container.alpha = pr.knockedOut ? 0.3 : 1;
               updateHpBar(s);
+            }
+            if (s.advId !== undefined && lastCooldowns[s.advId] !== undefined) {
+              updateCdBar(s, lastCooldowns[s.advId]);
             }
           }
           for (const s of st.monsterSprites) {
