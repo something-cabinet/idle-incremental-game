@@ -380,9 +380,9 @@ export const CHAMPION_PERKS: ChampionPerkDef[] = [
  * `cooldownTurns` counts the champion's OWN turns (see combat.ts) — a value
  * of 3 means "ready again after 3 of this champion's turns have passed",
  * regardless of how many turns anyone else took in between. Buff/status
- * *durations* (durationSeconds below) are unrelated and still run off the
- * shared battle clock (BATTLE_SECONDS_PER_ROUND) — only the cooldown that
- * gates recasting a skill is turn-based.
+ * `durationTurns` uses the same turn-based philosophy, but counted on the
+ * AFFECTED combatant's own turns instead — a buff on an ally lasts N of that
+ * ally's turns, a status on an enemy lasts N of that enemy's turns.
  */
 export const CLASS_SKILLS: ClassSkillDef[] = [
   // ---- Warrior: melee bruiser, buffs & control ----
@@ -398,21 +398,21 @@ export const CLASS_SKILLS: ClassSkillDef[] = [
   },
   {
     id: 'shield-bash', name: 'Shield Bash', className: 'warrior', cooldownTurns: 4,
-    description: '120% attack to one enemy and stuns it for 3s.',
+    description: '120% attack to one enemy and stuns it for 2 turns.',
     effects: [
       { kind: 'damage', targeting: 'single', power: 1.2 },
-      { kind: 'status', status: 'stun', targeting: 'enemy-single', durationSeconds: 3 },
+      { kind: 'status', status: 'stun', targeting: 'enemy-single', durationTurns: 2 },
     ],
   },
   {
     id: 'war-cry', name: 'War Cry', className: 'warrior', cooldownTurns: 7,
-    description: 'Rally the party: +30% attack to all champions for 12s.',
-    effects: [{ kind: 'buff', stat: 'atk', mult: 1.3, targeting: 'allies', durationSeconds: 12 }],
+    description: 'Rally the party: +30% attack to all champions for 6 turns.',
+    effects: [{ kind: 'buff', stat: 'atk', mult: 1.3, targeting: 'allies', durationTurns: 6 }],
   },
   {
     id: 'shield-wall', name: 'Shield Wall', className: 'warrior', cooldownTurns: 7,
-    description: 'Brace the line: +50% defense to all champions for 12s.',
-    effects: [{ kind: 'buff', stat: 'def', mult: 1.5, targeting: 'allies', durationSeconds: 12 }],
+    description: 'Brace the line: +50% defense to all champions for 6 turns.',
+    effects: [{ kind: 'buff', stat: 'def', mult: 1.5, targeting: 'allies', durationTurns: 6 }],
   },
   // ---- Ranger: precise single-target, poison & mobility ----
   {
@@ -427,26 +427,26 @@ export const CLASS_SKILLS: ClassSkillDef[] = [
   },
   {
     id: 'serpent-sting', name: 'Serpent Sting', className: 'ranger', cooldownTurns: 4,
-    description: '100% attack to one enemy, then poisons it for 8s.',
+    description: '100% attack to one enemy, then poisons it for 4 turns.',
     effects: [
       { kind: 'damage', targeting: 'single', power: 1 },
-      { kind: 'status', status: 'poison', targeting: 'enemy-single', durationSeconds: 8, potency: 0.4 },
+      { kind: 'status', status: 'poison', targeting: 'enemy-single', durationTurns: 4, potency: 0.4 },
     ],
   },
   {
     id: 'crippling-shot', name: 'Crippling Shot', className: 'ranger', cooldownTurns: 4,
-    description: '110% attack to one enemy and slows it (−50% speed) for 6s.',
+    description: '110% attack to one enemy and slows it (−50% speed) for 3 turns.',
     effects: [
       { kind: 'damage', targeting: 'single', power: 1.1 },
-      { kind: 'status', status: 'slow', targeting: 'enemy-single', durationSeconds: 6, potency: 0.5 },
+      { kind: 'status', status: 'slow', targeting: 'enemy-single', durationTurns: 3, potency: 0.5 },
     ],
   },
   {
     id: 'hunters-focus', name: "Hunter's Focus", className: 'ranger', cooldownTurns: 7,
-    description: 'Take aim: +40% attack and +30% speed to self for 10s.',
+    description: 'Take aim: +40% attack and +30% speed to self for 5 turns.',
     effects: [
-      { kind: 'buff', stat: 'atk', mult: 1.4, targeting: 'self', durationSeconds: 10 },
-      { kind: 'buff', stat: 'speed', mult: 1.3, targeting: 'self', durationSeconds: 10 },
+      { kind: 'buff', stat: 'atk', mult: 1.4, targeting: 'self', durationTurns: 5 },
+      { kind: 'buff', stat: 'speed', mult: 1.3, targeting: 'self', durationTurns: 5 },
     ],
   },
   // ---- Mage: area damage & elemental status ----
@@ -457,18 +457,18 @@ export const CLASS_SKILLS: ClassSkillDef[] = [
   },
   {
     id: 'fireball', name: 'Fireball', className: 'mage', cooldownTurns: 4,
-    description: '80% attack to every enemy and burns them for 6s.',
+    description: '80% attack to every enemy and burns them for 3 turns.',
     effects: [
       { kind: 'damage', targeting: 'aoe', power: 0.8 },
-      { kind: 'status', status: 'burn', targeting: 'enemy-all', durationSeconds: 6, potency: 0.35 },
+      { kind: 'status', status: 'burn', targeting: 'enemy-all', durationTurns: 3, potency: 0.35 },
     ],
   },
   {
     id: 'frost-nova', name: 'Frost Nova', className: 'mage', cooldownTurns: 5,
-    description: '50% attack to every enemy and slows them (−50% speed) for 6s.',
+    description: '50% attack to every enemy and slows them (−50% speed) for 3 turns.',
     effects: [
       { kind: 'damage', targeting: 'aoe', power: 0.5 },
-      { kind: 'status', status: 'slow', targeting: 'enemy-all', durationSeconds: 6, potency: 0.5 },
+      { kind: 'status', status: 'slow', targeting: 'enemy-all', durationTurns: 3, potency: 0.5 },
     ],
   },
   {
@@ -478,15 +478,11 @@ export const CLASS_SKILLS: ClassSkillDef[] = [
   },
   {
     id: 'mana-shield', name: 'Mana Shield', className: 'mage', cooldownTurns: 7,
-    description: 'Ward the party: +40% defense to all champions for 12s.',
-    effects: [{ kind: 'buff', stat: 'def', mult: 1.4, targeting: 'allies', durationSeconds: 12 }],
+    description: 'Ward the party: +40% defense to all champions for 6 turns.',
+    effects: [{ kind: 'buff', stat: 'def', mult: 1.4, targeting: 'allies', durationTurns: 6 }],
   },
 ];
 
-/** Battle-seconds that elapse each combat round — used for buff/status
- *  durations (durationSeconds) and speed-ordering timing only. Skill
- *  cooldowns are turn-based (see CLASS_SKILLS) and don't use this. */
-export const BATTLE_SECONDS_PER_ROUND = 2;
 
 /** Hire-time variance: each attribute rolls base ± this. */
 export const HIRE_ATTR_VARIANCE = 1;

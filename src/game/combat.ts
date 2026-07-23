@@ -10,7 +10,6 @@ import {
   perkRecoveryMult,
 } from './adventurers';
 import {
-  BATTLE_SECONDS_PER_ROUND,
   COMBAT_DAMAGE_VARIANCE,
   COMBAT_DEF_MITIGATION_K,
   ENCOUNTER_INTERVAL,
@@ -78,18 +77,24 @@ export interface MonsterInstance {
   isSuper: boolean;
 }
 
-/** A timed multiplier on one combat stat (from a skill buff). */
+/** A timed multiplier on one combat stat (from a skill buff). Ticks down once
+ *  per the OWNER's own turn (see decrementTimedEffects in the main loop) —
+ *  same turn-based philosophy as SkillSlot's cooldown, just counting presence
+ *  instead of counting down to readiness. */
 interface ActiveBuff {
   stat: BuffStat;
   mult: number;
-  expiresAt: number;
+  /** Remaining turns (of the owner's own) this buff is still active for. */
+  turnsRemaining: number;
 }
 
-/** A timed debuff on a combatant (from a skill status). */
+/** A timed debuff on a combatant (from a skill status). Ticks down once per
+ *  the OWNER's own turn, same as ActiveBuff. */
 interface ActiveStatus {
   kind: StatusKind;
-  expiresAt: number;
-  /** Damage per round for poison/burn (0 otherwise). */
+  /** Remaining turns (of the owner's own) this status is still active for. */
+  turnsRemaining: number;
+  /** Damage per turn for poison/burn (0 otherwise). */
   dmgPerRound: number;
   /** Speed multiplier while active for slow (1 otherwise). */
   slowFactor: number;
@@ -101,7 +106,7 @@ interface ActiveStatus {
 /** A skill a combatant carries, plus its own per-combatant cooldown counter.
  *  Combatants can hold several (future enemies/champions with multi-skill
  *  kits). Ticks down once per this combatant's own turn — see the main loop
- *  — independent of any other combatant's turns or the shared battle clock. */
+ *  — independent of any other combatant's turns; there is no shared clock. */
 interface SkillSlot {
   def: ClassSkillDef;
   /** Remaining turns (of this combatant's own) before it can be cast again. */
@@ -287,14 +292,14 @@ function injurySecondsFor(
  * only stat perks (baked into adventurerStats) matter, and the loop reduces to
  * the plain speed-ordered trade of basic attacks it has always been.
  *
- * Skill cooldowns are turn-based, per combatant: each SkillSlot's counter
- * ticks down by 1 on every one of *that combatant's own* turns (whether or
- * not they land the action — a stunned turn still counts), independent of
- * anyone else's turns or the shared battle clock. A champion auto-casts its
- * first ready skill on its turn, else makes a basic attack. Combatants carry
- * a *list* of skills so future multi-skill champions/enemies need no
- * structural change. (Buff/status *durations* are unrelated and still run
- * off the shared battle clock — only the recast gate is turn-based.)
+ * Skill cooldowns AND buff/status durations are turn-based, per combatant:
+ * each SkillSlot's cooldown counter and each ActiveBuff/ActiveStatus's
+ * turnsRemaining tick down by 1 on every one of *that combatant's own* turns
+ * (whether or not they land the action — a stunned turn still counts),
+ * independent of anyone else's turns — there is no shared battle clock. A
+ * champion auto-casts its first ready skill on its turn, else makes a basic
+ * attack. Combatants carry a *list* of skills so future multi-skill
+ * champions/enemies need no structural change.
  */
 export function simulateBattle(
   state: GameState,
@@ -361,22 +366,44 @@ export function simulateBattle(
   const livingAllies = (c: Combatant) => combatants.filter((o) => o.side === c.side && o.hp > 0);
   const log: BattleLogEntry[] = [];
 
-  let clock = 0;
   let turns = 0;
 
   // Effective stats fold in active timed buffs/statuses (all no-ops when none
   // are present, so the non-live path is byte-for-byte the old behavior).
   const buffMult = (c: Combatant, stat: BuffStat) =>
-    c.buffs.reduce((m, b) => (b.stat === stat && b.expiresAt > clock ? m * b.mult : m), 1);
+    c.buffs.reduce((m, b) => (b.stat === stat && b.turnsRemaining > 0 ? m * b.mult : m), 1);
   const atkOf = (c: Combatant) => c.atk * buffMult(c, 'atk');
   const defOf = (c: Combatant) => c.def * buffMult(c, 'def');
   const speedOf = (c: Combatant) => {
     let s = c.speed * buffMult(c, 'speed');
-    for (const st of c.statuses) if (st.kind === 'slow' && st.expiresAt > clock) s *= st.slowFactor;
+    for (const st of c.statuses) if (st.kind === 'slow' && st.turnsRemaining > 0) s *= st.slowFactor;
     return s;
   };
   const isStunned = (c: Combatant) =>
-    c.statuses.some((st) => st.kind === 'stun' && st.expiresAt > clock);
+    c.statuses.some((st) => st.kind === 'stun' && st.turnsRemaining > 0);
+
+  /**
+   * Buff/status durations tick down once per the OWNER's own turn — called
+   * exactly once at the end of each combatant's turn processing (after DoT
+   * ticks and the action), decrementing only effects that were already
+   * present *before* this turn's action ran (`preBuffs`/`preStatuses`).
+   *
+   * That distinction matters for a caster who buffs themselves (e.g. War
+   * Cry's 'allies' targeting includes the caster, Hunter's Focus targets
+   * 'self'): without it, a buff applied mid-turn would get decremented again
+   * a moment later by this same call, silently losing its first turn of
+   * benefit. Skipping freshly-applied effects means a skill with
+   * `durationTurns: N` grants exactly N active turns for every target,
+   * caster included — status effects on a *different* combatant (e.g.
+   * poison on an enemy) are unaffected either way, since that combatant's
+   * own turn (and decrement) always falls in a separate loop iteration.
+   */
+  function decrementTimedEffects(c: Combatant, preBuffs: ActiveBuff[], preStatuses: ActiveStatus[]) {
+    const preBuffSet = new Set(preBuffs);
+    const preStatusSet = new Set(preStatuses);
+    c.buffs = c.buffs.filter((b) => (preBuffSet.has(b) ? --b.turnsRemaining > 0 : true));
+    c.statuses = c.statuses.filter((st) => (preStatusSet.has(st) ? --st.turnsRemaining > 0 : true));
+  }
 
   /** Cooldown progress (0 = just cast, 1 = ready) for every skill-bearing
    *  party member, as of right now — derived straight from each skill's own
@@ -452,7 +479,7 @@ export function simulateBattle(
   function applyBuffEffect(caster: Combatant, eff: Extract<ClassSkillEffect, { kind: 'buff' }>, skillName: string) {
     const targets = eff.targeting === 'self' ? [caster] : livingAllies(caster);
     for (const t of targets) {
-      t.buffs.push({ stat: eff.stat, mult: eff.mult, expiresAt: clock + eff.durationSeconds });
+      t.buffs.push({ stat: eff.stat, mult: eff.mult, turnsRemaining: eff.durationTurns });
       turns++;
       pushLog({
         attackerSide: caster.side,
@@ -479,7 +506,7 @@ export function simulateBattle(
     for (const t of targets) {
       t.statuses.push({
         kind: eff.status,
-        expiresAt: clock + eff.durationSeconds,
+        turnsRemaining: eff.durationTurns,
         dmgPerRound:
           eff.status === 'poison' || eff.status === 'burn'
             ? Math.max(1, Math.round(atkOf(caster) * potency))
@@ -515,10 +542,12 @@ export function simulateBattle(
     }
   }
 
-  /** Poison/burn tick at the start of an afflicted combatant's turn. */
+  /** Poison/burn tick at the start of an afflicted combatant's turn, once per
+   *  turn it's active for (checked before this turn's decrementTimedEffects
+   *  call, so it ticks on every one of its durationTurns, including the last). */
   function tickDots(c: Combatant) {
     for (const st of c.statuses) {
-      if (st.dmgPerRound <= 0 || st.expiresAt <= clock) continue;
+      if (st.dmgPerRound <= 0 || st.turnsRemaining <= 0) continue;
       c.hp -= st.dmgPerRound;
       turns++;
       pushLog({
@@ -552,26 +581,38 @@ export function simulateBattle(
       }
 
       // Damage-over-time first (only ever populated in live battles).
+      let canAct = true;
       if (attacker.statuses.length > 0) {
         tickDots(attacker);
         if (turns >= EXPLORE_MAX_TURNS) break outer;
         if (attacker.hp <= 0) continue;
         if (!alive('party') || !alive('monsters')) break outer;
-        if (isStunned(attacker)) continue; // stunned: lose the action
+        if (isStunned(attacker)) canAct = false; // stunned: lose the action
       }
 
+      // Snapshot before acting: the action itself may push a fresh buff/status
+      // onto this same attacker (self/ally targeting) — decrementTimedEffects
+      // below must not immediately consume that fresh effect's first turn.
+      const preBuffs = [...attacker.buffs];
+      const preStatuses = [...attacker.statuses];
+
       // Champions auto-cast their first ready skill; everyone else strikes.
-      const ready = attacker.skills.find((s) => s.cooldownRemaining <= 0);
-      if (ready) {
-        castSkill(attacker, ready);
-      } else {
-        const enemies = livingEnemies(attacker);
-        if (enemies.length === 0) continue;
-        strike(attacker, enemies[Math.floor(rng() * enemies.length)], 1);
+      if (canAct) {
+        const ready = attacker.skills.find((s) => s.cooldownRemaining <= 0);
+        if (ready) {
+          castSkill(attacker, ready);
+        } else {
+          const enemies = livingEnemies(attacker);
+          if (enemies.length > 0) strike(attacker, enemies[Math.floor(rng() * enemies.length)], 1);
+        }
       }
+
+      // Buff/status durations consume one of THIS turn's own turns — after
+      // the action, so an effect on its last active turn still applied to it.
+      decrementTimedEffects(attacker, preBuffs, preStatuses);
+
       if (turns >= EXPLORE_MAX_TURNS) break outer;
     }
-    clock += BATTLE_SECONDS_PER_ROUND;
   }
 
   const outcome: 'win' | 'loss' = alive('party') && !alive('monsters') ? 'win' : 'loss';

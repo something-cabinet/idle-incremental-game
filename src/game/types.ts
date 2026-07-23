@@ -160,17 +160,22 @@ export type BuffStat = 'atk' | 'def' | 'speed';
 /**
  * One effect of an active skill. A skill may bundle several (e.g. damage + a
  * status). Single-target effects are tuned stronger than their AoE equivalents.
+ *
+ * `durationTurns` (buff/status) counts the AFFECTED combatant's OWN turns —
+ * same turn-based philosophy as ClassSkillDef.cooldownTurns (see combat.ts):
+ * a value of 3 means "active for 3 of the affected combatant's own turns",
+ * regardless of anyone else's turns or any shared clock.
  */
 export type ClassSkillEffect =
   /** Deal `power`× the caster's attack. 'single' = one enemy, 'aoe' = every
    *  enemy, 'random' = `hits` randomly-chosen enemies. */
   | { kind: 'damage'; targeting: 'single' | 'aoe' | 'random'; power: number; hits?: number }
-  /** Multiply an ally stat by `mult` for `durationSeconds` ('self' or all 'allies'). */
-  | { kind: 'buff'; stat: BuffStat; mult: number; targeting: 'self' | 'allies'; durationSeconds: number }
+  /** Multiply an ally stat by `mult` for `durationTurns` ('self' or all 'allies'). */
+  | { kind: 'buff'; stat: BuffStat; mult: number; targeting: 'self' | 'allies'; durationTurns: number }
   /** Inflict a status on one ('enemy-single') or every ('enemy-all') enemy.
-   *  `potency` means DoT damage as a fraction of the caster's attack per round
+   *  `potency` means DoT damage as a fraction of the caster's attack per turn
    *  (poison/burn) or the speed multiplier while slowed. */
-  | { kind: 'status'; status: StatusKind; targeting: 'enemy-single' | 'enemy-all'; durationSeconds: number; potency?: number };
+  | { kind: 'status'; status: StatusKind; targeting: 'enemy-single' | 'enemy-all'; durationTurns: number; potency?: number };
 
 /**
  * A class active skill. Every champion is generated with one skill drawn from

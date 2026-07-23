@@ -179,4 +179,70 @@ describe('class active skills', () => {
       }
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // Turn-based buff/status durations — mirrors the cooldown describe above,
+  // but for the AFFECTED combatant's own turns rather than the caster's.
+  // rng = mid (constant) removes damage variance so buffed/unbuffed hits are
+  // trivially distinguishable by exact value.
+  // ---------------------------------------------------------------------------
+  describe('turn-based buff/status durations', () => {
+    it("a self/ally buff (War Cry, 6-turn duration, 7-turn CD) boosts damage for exactly 6 of the caster's own turns", () => {
+      const state = createInitialState(0);
+      const a = champ('war-cry', 18); // +30% atk for 6 turns, targets 'allies' (includes self in a solo party)
+      const out = simulateBattle(state, [a], punchingBag(), 'frontier-pass', mid, true);
+      const partyEntries = out.log.filter((e) => e.attackerSide === 'party');
+      const castIdx = partyEntries.findIndex((e) => e.skillName === 'War Cry');
+      expect(castIdx).toBeGreaterThan(0);
+      const baseline = partyEntries[0].damage; // unbuffed hit, before any cast
+
+      // Count the run of boosted basic attacks immediately following the
+      // cast, stopping at the next cast (cooldownTurns=7 is only 1 more than
+      // durationTurns=6, so the buff and the next cast are back-to-back —
+      // there's no unbuffed attack in between to look for).
+      const buffedRun: number[] = [];
+      for (let i = castIdx + 1; i < partyEntries.length; i++) {
+        const e = partyEntries[i];
+        if (e.skillName) break; // next cast — stop counting this buff's run
+        buffedRun.push(e.damage);
+      }
+      expect(buffedRun.length).toBe(6);
+      for (const dmg of buffedRun) expect(dmg).toBeGreaterThan(baseline);
+    });
+
+    it('a stun (Shield Bash, 2-turn duration) skips exactly 2 of the target\'s own turns', () => {
+      const state = createInitialState(0);
+      const base = { ...generateAdventurer(1, mid), perkId: 'well-rounded', skillId: 'shield-bash', level: 18, className: 'warrior' as const };
+      const a = { ...base, hp: maxHp(base) };
+      const out = simulateBattle(state, [a], punchingBag(), 'frontier-pass', mid, true);
+      const monsterTurnIndices = out.log
+        .map((e, i) => (e.attackerSide === 'monsters' ? i : -1))
+        .filter((i) => i >= 0);
+      // Gaps between consecutive monster turns: 1 = acted normally, >1 means
+      // turns were skipped in between (stunned). First stun applies right
+      // after the first monster turn, so the very next gap should show 2
+      // skipped turns before the monster acts again.
+      const gaps = monsterTurnIndices.slice(1).map((idx, i) => idx - monsterTurnIndices[i]);
+      expect(gaps.some((g) => g > 1)).toBe(true);
+    });
+
+    it('a poison DoT (Serpent Sting, 4-turn duration) ticks exactly 4 times per application', () => {
+      const state = createInitialState(0);
+      const a = champ('serpent-sting', 18); // 4-turn CD, matches duration exactly
+      const out = simulateBattle(state, [a], punchingBag(), 'frontier-pass', mid, true);
+      // Only the damage entry (kind: 'skill') marks a cast — the status-apply
+      // entry right after it also carries the same skillName.
+      const castIndices = out.log
+        .map((e, i) => (e.kind === 'skill' && e.skillName === 'Serpent Sting' ? i : -1))
+        .filter((i) => i >= 0);
+      expect(castIndices.length).toBeGreaterThanOrEqual(2);
+      // Between the first cast and the second (a full cooldown cycle later),
+      // exactly 4 'dot' entries should have fired.
+      const [first, second] = castIndices;
+      const dotTicksInWindow = out.log
+        .slice(first, second)
+        .filter((e) => e.kind === 'dot' && e.effectLabel === 'Poison').length;
+      expect(dotTicksInWindow).toBe(4);
+    });
+  });
 });
