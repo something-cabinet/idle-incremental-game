@@ -700,6 +700,9 @@ export const QUEST_TARGETS: QuestTargetDef[] = [
 export const DUNGEON_WINS_REQUIRED = 5;
 export const DUNGEON_ROOM_COUNT = 3;
 export const DUNGEON_BOSS_STAT_MULT = 2.5;
+/** Visual size multiplier for a dungeon boss's sprite — bigger than a Super
+ * monster's (see SUPER_SPRITE_SCALE) so it reads as the run's climax. */
+export const DUNGEON_BOSS_SPRITE_SCALE = 1.9;
 /** Bonus units of the zone's own material, granted once per full clear. */
 export const DUNGEON_COMPLETION_MATERIAL_AMOUNT = 15;
 

@@ -98,4 +98,22 @@ describe('fightDungeonRoom', () => {
     expect(result.monsters).toEqual([]);
     expect(result.outcome).toBe('loss');
   });
+
+  it('flags the boss room monsters as isBoss (and regular rooms as not)', () => {
+    const state = baseState();
+    const strong = champion(1);
+    const regular = fightDungeonRoom(state, 'forest-edge', [strong.id], 0, mulberry32(1));
+    expect(regular.result.monsters.every((m) => !m.isBoss)).toBe(true);
+    const boss = fightDungeonRoom(state, 'forest-edge', [strong.id], DUNGEON_ROOM_COUNT, mulberry32(1));
+    expect(boss.result.monsters.every((m) => m.isBoss)).toBe(true);
+  });
+
+  it('carries surviving champions\' HP/cooldown forward via carryOut, for the caller to feed into the next room', () => {
+    const state = baseState();
+    const strong = champion(1);
+    const { result, carryOut } = fightDungeonRoom({ ...state, adventurers: [strong] }, 'forest-edge', [strong.id], 0, mulberry32(1));
+    const pr = result.party.find((p) => p.advId === strong.id)!;
+    expect(pr.knockedOut).toBe(false);
+    expect(carryOut[strong.id]).toEqual({ hp: pr.finalHp, skillCooldownRemaining: pr.skillCooldownRemaining });
+  });
 });

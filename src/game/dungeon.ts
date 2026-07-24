@@ -1,5 +1,5 @@
 import { applyBattleResult, rollMonsterGroup, simulateBattle } from './combat';
-import type { BattleOutcome, MonsterInstance } from './combat';
+import type { BattleCarryIn, BattleOutcome, MonsterInstance } from './combat';
 import { DUNGEONS, DUNGEON_COMPLETION_MATERIAL_AMOUNT, DUNGEON_ROOM_COUNT, DUNGEON_BOSS_STAT_MULT, SUPER_STAT_MULT } from './config';
 import { locationDef } from './guild';
 import type { Adventurer, DungeonDef, DungeonProgress, GameState, Rng } from './types';
@@ -39,6 +39,7 @@ function rollDungeonRoomMonsters(dungeon: DungeonDef, roomIndex: number, rng: Rn
       ...m,
       name: i === 0 ? dungeon.bossName : `${dungeon.bossName}'s ${m.name}`,
       isSuper: false,
+      isBoss: true,
       maxHp: Math.round(m.maxHp * mult),
       atk: Math.round(m.atk * mult),
       def: Math.round(m.def * mult),
@@ -55,6 +56,11 @@ function rollDungeonRoomMonsters(dungeon: DungeonDef, roomIndex: number, rng: Rn
  * (current room, surviving party) is UI-local state, same as ExploreDialog's
  * chained fights — only rewards persist to GameState. On a won boss room, also
  * grants the dungeon's one-time-per-clear completion bonus material.
+ *
+ * `carryIn`/the returned `carryOut` let the caller thread each survivor's HP
+ * and skill cooldown from one room straight into the next, instead of every
+ * room starting fresh at full HP and a half-charged skill — the whole run
+ * plays like one continuous fight against a series of monster groups.
  */
 export function fightDungeonRoom(
   state: GameState,
@@ -62,13 +68,14 @@ export function fightDungeonRoom(
   partyIds: number[],
   roomIndex: number,
   rng: Rng,
-): { state: GameState; result: BattleOutcome } {
+  carryIn?: BattleCarryIn,
+): { state: GameState; result: BattleOutcome; carryOut: BattleCarryIn } {
   const dungeon = dungeonDef(locationId);
   const party = partyIds
     .map((id) => state.adventurers.find((a) => a.id === id))
     .filter((a): a is Adventurer => !!a);
   const monsters = dungeon ? rollDungeonRoomMonsters(dungeon, roomIndex, rng) : [];
-  const result = simulateBattle(state, party, monsters, locationId, rng, true);
+  const result = simulateBattle(state, party, monsters, locationId, rng, true, carryIn);
   let next = applyBattleResult(state, result, rng, 'dungeon');
   if (dungeon && result.outcome === 'win' && roomIndex === DUNGEON_ROOM_COUNT) {
     const materialId = locationDef(locationId)?.materialId;
@@ -78,5 +85,10 @@ export function fightDungeonRoom(
       next = { ...next, materials };
     }
   }
-  return { state: next, result };
+  const carryOut: BattleCarryIn = {};
+  for (const p of result.party) {
+    if (p.knockedOut) continue;
+    carryOut[p.advId] = { hp: p.finalHp, skillCooldownRemaining: p.skillCooldownRemaining };
+  }
+  return { state: next, result, carryOut };
 }

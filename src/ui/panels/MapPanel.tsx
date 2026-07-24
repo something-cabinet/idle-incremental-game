@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { adventurerStats, isInjured } from '../../game/adventurers';
 import { canExplore, runExplore } from '../../game/combat';
-import type { BattleOutcome } from '../../game/combat';
+import type { BattleCarryIn, BattleOutcome } from '../../game/combat';
 import {
   DUNGEON_WINS_REQUIRED,
   EXPLORE_MAX_PARTY_SIZE,
@@ -153,6 +153,10 @@ function DungeonRunDialog({
   const [battle, setBattle] = useState<BattleOutcome | null>(null);
   const [roomIndex, setRoomIndex] = useState(0);
   const [activeIds, setActiveIds] = useState<number[]>([]);
+  // Survivors' HP/skill cooldown carried from the last room into the next —
+  // the run plays as one continuous fight, not a fresh full-HP battle each
+  // room (see dungeon.ts fightDungeonRoom's carryIn/carryOut).
+  const [carry, setCarry] = useState<BattleCarryIn>({});
   const [finished, setFinished] = useState<'cleared' | 'failed' | null>(null);
 
   function toggle(id: number) {
@@ -163,21 +167,24 @@ function DungeonRunDialog({
     });
   }
 
-  function fightRoom(ids: number[], room: number) {
+  function fightRoom(ids: number[], room: number, carryIn: BattleCarryIn) {
     let outcome: BattleOutcome | null = null;
+    let carryOut: BattleCarryIn = {};
     store.dispatch((s) => {
-      const { state: next, result } = fightDungeonRoom(s, zone.id, ids, room, Math.random);
+      const { state: next, result, carryOut: out } = fightDungeonRoom(s, zone.id, ids, room, Math.random, carryIn);
       outcome = result;
+      carryOut = out;
       return next;
     });
     if (outcome) setBattle(outcome);
+    setCarry(carryOut);
   }
 
   function begin() {
     setFinished(null);
     setActiveIds(partyIds);
     setRoomIndex(0);
-    fightRoom(partyIds, 0);
+    fightRoom(partyIds, 0, {});
   }
 
   function handleBattleClose() {
@@ -198,7 +205,7 @@ function DungeonRunDialog({
     const nextRoom = roomIndex + 1;
     setRoomIndex(nextRoom);
     setBattle(null);
-    fightRoom(survivors, nextRoom);
+    fightRoom(survivors, nextRoom, carry);
   }
 
   if (battle) {

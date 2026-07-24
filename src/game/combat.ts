@@ -77,6 +77,9 @@ export interface MonsterInstance {
   goldReward: number;
   /** A rare, tripled-stat/reward variant — see rollMonsterGroup. */
   isSuper: boolean;
+  /** A dungeon's amplified final-room monster — see dungeon.ts. Rendered
+   *  bigger and in a distinct color from a Super monster (BattleViewer). */
+  isBoss?: boolean;
 }
 
 /** A timed multiplier on one combat stat (from a skill buff). Ticks down once
@@ -165,7 +168,16 @@ export interface PartyBattleResult {
   injurySeconds: number;
   enemiesDefeated: number;
   damageDealt: number;
+  /** Remaining turns on this champion's skill cooldown at battle's end (0 if
+   *  no skill or not a live battle) — lets a caller carry it into the next
+   *  fight instead of resetting to half-charged (see dungeon.ts carryIn). */
+  skillCooldownRemaining: number;
 }
+
+/** Per-champion HP/cooldown to start a battle with instead of full HP and a
+ *  half-charged skill — how a dungeon run carries state from room to room
+ *  (see dungeon.ts). Keyed by champion id. */
+export type BattleCarryIn = Record<number, { hp: number; skillCooldownRemaining: number }>;
 
 export interface BattleOutcome {
   locationId: string;
@@ -310,6 +322,7 @@ export function simulateBattle(
   locationId: string,
   rng: Rng,
   live = false,
+  carryIn?: BattleCarryIn,
 ): BattleOutcome {
   const loc = locationDef(locationId);
   const tier = loc?.tier ?? 1;
@@ -331,11 +344,12 @@ export function simulateBattle(
       const stats = adventurerStats(a);
       // Champions only bring their active skill to manual Explore battles.
       const skill = live ? championSkill(a.skillId) : undefined;
+      const carry = carryIn?.[a.id];
       return {
         side: 'party',
         refId: a.id,
         name: a.name,
-        hp: stats.maxHp,
+        hp: carry?.hp ?? stats.maxHp,
         maxHp: stats.maxHp,
         atk: stats.atk,
         def: stats.def,
@@ -343,9 +357,11 @@ export function simulateBattle(
         buffs: [],
         statuses: [],
         // Champions enter battle with their skill already half charged (in
-        // terms of their own turns), not fresh off a full cooldown, so the
-        // first cast comes sooner.
-        skills: skill ? [{ def: skill, cooldownRemaining: Math.ceil(skill.cooldownTurns / 2) }] : [],
+        // terms of their own turns), not fresh off a full cooldown — unless
+        // `carryIn` says otherwise (a dungeon room continuing a prior one).
+        skills: skill
+          ? [{ def: skill, cooldownRemaining: carry?.skillCooldownRemaining ?? Math.ceil(skill.cooldownTurns / 2) }]
+          : [],
       };
     }),
     ...monsters.map((m): Combatant => ({
@@ -657,6 +673,7 @@ export function simulateBattle(
           : 0,
         enemiesDefeated: partyKills[c.refId] ?? 0,
         damageDealt: partyDamage[c.refId] ?? 0,
+        skillCooldownRemaining: c.skills[0]?.cooldownRemaining ?? 0,
       };
     });
 

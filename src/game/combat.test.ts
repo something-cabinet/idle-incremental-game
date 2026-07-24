@@ -373,3 +373,23 @@ describe('processAutoExplore (auto-battle, online + offline)', () => {
     expect(here.length).toBe(3); // 4th rejected
   });
 });
+
+describe('simulateBattle carryIn', () => {
+  it('seeds starting HP from carryIn instead of full HP (a dungeon room continuing the last)', () => {
+    const state = baseState();
+    // Deliberately weak vs. a high-tier zone so they take a hit before
+    // dealing with the whole monster group (outcome doesn't matter here).
+    const weak = { ...champion(1, mid), level: 1 };
+    const carryHp = 50;
+    const carryIn = { [weak.id]: { hp: carryHp, skillCooldownRemaining: 0 } };
+    const monsters = rollMonsterGroup('frontier-pass', mulberry32(3));
+    const result = simulateBattle(state, [weak], monsters, 'frontier-pass', mulberry32(3), true, carryIn);
+
+    // The first hit landed on the champion must start from the carried HP,
+    // not a fresh full HP — every hit deals at least 1 damage (rollDamage's
+    // floor), so it must land strictly below the carried-in value.
+    const firstHitOnChampion = result.log.find((e) => e.defenderSide === 'party');
+    expect(firstHitOnChampion).toBeDefined();
+    expect(firstHitOnChampion!.defenderHpAfter).toBeLessThan(carryHp);
+  });
+});

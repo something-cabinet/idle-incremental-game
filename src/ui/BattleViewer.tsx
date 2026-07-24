@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Application, Container, Graphics, Text, TextStyle } from 'pixi.js';
 import type { BattleLogEntry, BattleOutcome } from '../game/combat';
-import { SUPER_SPRITE_SCALE } from '../game/config';
+import { DUNGEON_BOSS_SPRITE_SCALE, SUPER_SPRITE_SCALE } from '../game/config';
 import type { AdventurerClass } from '../game/types';
 
 // ---------------------------------------------------------------------------
@@ -114,17 +114,29 @@ function createFighterSprite(
   targetId: string,
   hasSkill: boolean,
   isSuper: boolean,
+  isBoss = false,
 ): FighterSpriteData {
   const container = new Container();
   container.x = x;
   container.y = y;
 
-  // Super monsters render bigger to stand out (see combat.ts SUPER_STAT_MULT).
-  const superScale = !isParty && isSuper ? SUPER_SPRITE_SCALE : 1;
-  const w = (isParty ? PARTY_W : FIGHTER_W) * superScale;
-  const h = (isParty ? PARTY_H : FIGHTER_H) * superScale;
+  // Super monsters render bigger to stand out (see combat.ts SUPER_STAT_MULT);
+  // a dungeon boss (mutually exclusive with Super — see dungeon.ts) bigger still.
+  const sizeScale = !isParty && isBoss ? DUNGEON_BOSS_SPRITE_SCALE : !isParty && isSuper ? SUPER_SPRITE_SCALE : 1;
+  const w = (isParty ? PARTY_W : FIGHTER_W) * sizeScale;
+  const h = (isParty ? PARTY_H : FIGHTER_H) * sizeScale;
 
-  if (!isParty && isSuper) {
+  if (!isParty && isBoss) {
+    // A double crimson ring (thicker + a soft outer halo) reads as a bigger
+    // deal than a Super monster's single gold ring — this is the run's climax.
+    const ringR = Math.min(w, h) / 2 + 6;
+    const halo = new Graphics();
+    halo.circle(0, 0, ringR + 4).stroke({ width: 2, color: 0xff2a4d, alpha: 0.35 });
+    container.addChild(halo);
+    const glow = new Graphics();
+    glow.circle(0, 0, ringR).stroke({ width: 3.5, color: 0xff2a4d, alpha: 0.95 });
+    container.addChild(glow);
+  } else if (!isParty && isSuper) {
     // A golden ring behind the body makes a Super monster read as special at
     // a glance even before the name label is legible.
     const glow = new Graphics();
@@ -188,10 +200,10 @@ function createFighterSprite(
   container.addChild(flashOverlay);
 
   const nameStyle = new TextStyle({
-    fill: !isParty && isSuper ? 0xffd700 : 0xffffff,
-    fontSize: 7,
+    fill: !isParty && isBoss ? 0xff4d6d : !isParty && isSuper ? 0xffd700 : 0xffffff,
+    fontSize: !isParty && isBoss ? 9 : 7,
     fontFamily: 'monospace',
-    fontWeight: !isParty && isSuper ? 'bold' : 'normal',
+    fontWeight: !isParty && (isBoss || isSuper) ? 'bold' : 'normal',
   });
   const nameText = new Text({ text: name, style: nameStyle });
   nameText.anchor.set(0.5, 0);
@@ -410,7 +422,7 @@ function buildScene(app: Application, result: BattleOutcome, tier: number, w: nu
   const monsterStartY = (h - totalHm) / 2;
 
   result.monsters.forEach((m, i) => {
-    const sprite = createFighterSprite(m.name, monsterX, monsterStartY + i * (FIGHTER_H + GAP + 20), m.maxHp, false, tier, '', m.targetId, false, m.isSuper);
+    const sprite = createFighterSprite(m.name, monsterX, monsterStartY + i * (FIGHTER_H + GAP + 20), m.maxHp, false, tier, '', m.targetId, false, m.isSuper, m.isBoss ?? false);
     monsterSprites.push(sprite);
     scene.addChild(sprite.container);
   });
