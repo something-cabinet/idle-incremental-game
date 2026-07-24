@@ -32,6 +32,8 @@ import {
   MONSTER_SPEED_BASE,
   MONSTER_SPEED_PER_TIER,
   MONSTER_XP_PER_TIER,
+  DUNGEONS,
+  DUNGEON_WINS_REQUIRED,
   rollMonsterCount,
   SUPER_DROP_CHANCE_MULT,
   SUPER_LOOT_AMOUNT_MULT,
@@ -784,6 +786,32 @@ export function applyBattleResult(
   };
 }
 
+/** A win from *manual* Explore (never Auto-Explore — see processAutoExplore,
+ * which never calls this) counts toward that zone's dungeon unlock. Counting
+ * stops once unlocked — see DungeonProgress / DUNGEON_WINS_REQUIRED. */
+function recordDungeonWin(state: GameState, locationId: string): GameState {
+  const dungeon = DUNGEONS.find((d) => d.locationId === locationId);
+  if (!dungeon) return state;
+  const progress = state.dungeonProgress[locationId] ?? { wins: 0, unlocked: false };
+  if (progress.unlocked) return state;
+  const wins = progress.wins + 1;
+  const unlocked = wins >= DUNGEON_WINS_REQUIRED;
+  const dungeonProgress = { ...state.dungeonProgress, [locationId]: { wins, unlocked } };
+  if (!unlocked) return { ...state, dungeonProgress };
+  const entry: LogEntry = {
+    id: state.nextEntityId,
+    at: state.runTimeSeconds,
+    kind: 'dungeon',
+    text: `${dungeon.name} has been discovered nearby.`,
+  };
+  return {
+    ...state,
+    dungeonProgress,
+    nextEntityId: state.nextEntityId + 1,
+    activityLog: [...state.activityLog, entry],
+  };
+}
+
 /** Roll a monster group, simulate the battle, and apply its result to state
  * in one step — the single entry point the manual Explore UI calls. */
 export function runExplore(
@@ -797,7 +825,9 @@ export function runExplore(
     .filter((a): a is Adventurer => !!a);
   const monsters = rollMonsterGroup(locationId, rng);
   const result = simulateBattle(state, party, monsters, locationId, rng, true);
-  return { state: applyBattleResult(state, result, rng), result };
+  let next = applyBattleResult(state, result, rng);
+  if (result.outcome === 'win') next = recordDungeonWin(next, locationId);
+  return { state: next, result };
 }
 
 // ---------------------------------------------------------------------------

@@ -55,6 +55,7 @@ export function createInitialState(now = Date.now()): GameState {
     nextEntityId: 1,
     locationsCleared: {},
     bossesDefeated: {},
+    dungeonProgress: {},
     activityLog: [],
     storyFlags: {},
     pendingStories: ['a1-arrival'],
@@ -120,6 +121,8 @@ export function migrateSave(data: SaveData, now = Date.now()): GameState {
     // v11 added `tier` to Equipment (drives its stat budget and essence
     // yield); pre-v11 items default to tier 1, same as pre-v11 equipment
     // that never had that stat scaling in the first place.
+    // v16 added per-zone dungeon-unlock tracking; older saves start unlocked nowhere.
+    dungeonProgress: s.dungeonProgress ?? {},
   };
 }
 

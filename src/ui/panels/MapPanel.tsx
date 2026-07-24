@@ -3,6 +3,7 @@ import { adventurerStats, isInjured } from '../../game/adventurers';
 import { canExplore, runExplore } from '../../game/combat';
 import type { BattleOutcome } from '../../game/combat';
 import {
+  DUNGEON_WINS_REQUIRED,
   EXPLORE_MAX_PARTY_SIZE,
   MATERIALS,
   QUEST_DEFAULT_MAX_ADVENTURERS,
@@ -10,6 +11,7 @@ import {
   QUEST_MAX_REPEATS_INPUT,
   QUEST_MAX_REQUIREMENTS,
 } from '../../game/config';
+import { dungeonDef, dungeonProgress, fightDungeonRoom, DUNGEON_TOTAL_ROOMS } from '../../game/dungeon';
 import { formatDuration } from '../../game/format';
 import {
   autoExploreMembers,
@@ -23,7 +25,7 @@ import {
   targetsForLocation,
   zones,
 } from '../../game/guild';
-import type { Adventurer, AdventurerClass, LocationDef, QuestRequirement, QuestTargetDef } from '../../game/types';
+import type { Adventurer, AdventurerClass, DungeonDef, LocationDef, QuestRequirement, QuestTargetDef } from '../../game/types';
 import { useGameState, useGameStore } from '../../hooks/useGame';
 import { BattleModal } from '../BattleModal';
 
@@ -46,18 +48,230 @@ function rate(n: number): string {
 }
 
 export function MapPanel() {
+  const [subtab, setSubtab] = useState<'explore' | 'dungeons'>('explore');
   return (
     <div className="panel">
-      <section className="rows">
-        <h3 className="section-title">Wilds</h3>
+      <div className="subtab-bar">
+        <button
+          className={`subtab ${subtab === 'explore' ? 'active' : ''}`}
+          onClick={() => setSubtab('explore')}
+        >
+          Explore
+        </button>
+        <button
+          className={`subtab ${subtab === 'dungeons' ? 'active' : ''}`}
+          onClick={() => setSubtab('dungeons')}
+        >
+          Dungeons
+        </button>
+      </div>
+      {subtab === 'explore' ? (
+        <section className="rows">
+          <h3 className="section-title">Wilds</h3>
+          <p className="detail-sub">
+            Browse each zone's monsters and gatherables, then post a quest there for
+            whichever of them you need — see Guild → Quests to manage what's running.
+          </p>
+          {zones().map((zone) => (
+            <ZoneCard key={zone.id} zone={zone} />
+          ))}
+        </section>
+      ) : (
+        <DungeonsSection />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Dungeons — a repeatable multi-room gauntlet per zone, unlocked once that
+// zone has DUNGEON_WINS_REQUIRED manual Explore wins (Auto-Explore doesn't
+// count — see combat.ts recordDungeonWin). Reuses ExplorePartyRow/BattleModal.
+// ---------------------------------------------------------------------------
+
+function DungeonsSection() {
+  return (
+    <section className="rows">
+      <h3 className="section-title">Dungeons</h3>
+      <p className="detail-sub">
+        Win {DUNGEON_WINS_REQUIRED} manual Explore battles in a zone to discover its dungeon — a
+        multi-room gauntlet capped by a tougher boss fight. Repeatable, with a bonus haul on every
+        full clear.
+      </p>
+      {zones().map((zone) => (
+        <DungeonCard key={zone.id} zone={zone} />
+      ))}
+    </section>
+  );
+}
+
+function DungeonCard({ zone }: { zone: LocationDef }) {
+  const state = useGameState();
+  const [open, setOpen] = useState(false);
+  const zoneUnlocked = isZoneUnlocked(state, zone.id);
+  const dungeon = dungeonDef(zone.id);
+  if (!zoneUnlocked || !dungeon) return null;
+  const progress = dungeonProgress(state, zone.id);
+
+  return (
+    <div className="zone-card">
+      <div className="zone-header">
+        <span className="row-name">
+          {dungeon.name} <span className="row-sub">tier {zone.tier}</span>
+        </span>
+        <span className="row-desc">{dungeon.description}</span>
+      </div>
+      <div className="zone-detail">
+        {progress.unlocked ? (
+          <button className="small-button" onClick={() => setOpen(true)}>
+            ⚔ Enter Dungeon
+          </button>
+        ) : (
+          <div className="row locked">
+            🔒 Win {progress.wins}/{DUNGEON_WINS_REQUIRED} Explore battles at {zone.name} to discover
+            this dungeon.
+          </div>
+        )}
+      </div>
+      {open && <DungeonRunDialog dungeon={dungeon} zone={zone} onClose={() => setOpen(false)} />}
+    </div>
+  );
+}
+
+function DungeonRunDialog({
+  dungeon,
+  zone,
+  onClose,
+}: {
+  dungeon: DungeonDef;
+  zone: LocationDef;
+  onClose: () => void;
+}) {
+  const store = useGameStore();
+  const state = useGameState();
+  const [partyIds, setPartyIds] = useState<number[]>([]);
+  const [battle, setBattle] = useState<BattleOutcome | null>(null);
+  const [roomIndex, setRoomIndex] = useState(0);
+  const [activeIds, setActiveIds] = useState<number[]>([]);
+  const [finished, setFinished] = useState<'cleared' | 'failed' | null>(null);
+
+  function toggle(id: number) {
+    setPartyIds((prev) => {
+      if (prev.includes(id)) return prev.filter((p) => p !== id);
+      if (prev.length >= EXPLORE_MAX_PARTY_SIZE) return prev;
+      return [...prev, id];
+    });
+  }
+
+  function fightRoom(ids: number[], room: number) {
+    let outcome: BattleOutcome | null = null;
+    store.dispatch((s) => {
+      const { state: next, result } = fightDungeonRoom(s, zone.id, ids, room, Math.random);
+      outcome = result;
+      return next;
+    });
+    if (outcome) setBattle(outcome);
+  }
+
+  function begin() {
+    setFinished(null);
+    setActiveIds(partyIds);
+    setRoomIndex(0);
+    fightRoom(partyIds, 0);
+  }
+
+  function handleBattleClose() {
+    if (!battle) return;
+    const knockedOutIds = new Set(battle.party.filter((p) => p.knockedOut).map((p) => p.advId));
+    const survivors = activeIds.filter((id) => !knockedOutIds.has(id));
+    setActiveIds(survivors);
+    if (battle.outcome === 'loss' || survivors.length === 0) {
+      setBattle(null);
+      setFinished('failed');
+      return;
+    }
+    if (roomIndex === DUNGEON_TOTAL_ROOMS - 1) {
+      setBattle(null);
+      setFinished('cleared');
+      return;
+    }
+    const nextRoom = roomIndex + 1;
+    setRoomIndex(nextRoom);
+    setBattle(null);
+    fightRoom(survivors, nextRoom);
+  }
+
+  if (battle) {
+    const isBossRoom = roomIndex === DUNGEON_TOTAL_ROOMS - 1;
+    return (
+      <BattleModal
+        result={battle}
+        locationName={
+          isBossRoom ? `${dungeon.name} — ${dungeon.bossName}` : `${dungeon.name} — Room ${roomIndex + 1}`
+        }
+        tier={zone.tier}
+        reducedMotion={state.settings.reducedMotion}
+        onClose={handleBattleClose}
+        autoAdvance={false}
+        onStop={() => {}}
+      />
+    );
+  }
+
+  if (finished) {
+    return (
+      <div className="story-overlay" onClick={onClose}>
+        <div className="story-modal detail-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="detail-header">
+            <h2 className="story-title">{dungeon.name}</h2>
+            <button className="small-button" onClick={onClose}>✕</button>
+          </div>
+          <p className="detail-sub">
+            {finished === 'cleared'
+              ? `Cleared! The party defeated ${dungeon.bossName} and returned with a bonus haul.`
+              : "The party was overwhelmed and had to retreat. No permadeath — champions are recovering in town."}
+          </p>
+          <button className="small-button" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="story-overlay" onClick={onClose}>
+      <div className="story-modal detail-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="detail-header">
+          <h2 className="story-title">{dungeon.name}</h2>
+          <button className="small-button" onClick={onClose}>✕</button>
+        </div>
         <p className="detail-sub">
-          Browse each zone's monsters and gatherables, then post a quest there for
-          whichever of them you need — see Guild → Quests to manage what's running.
+          {dungeon.description} {DUNGEON_TOTAL_ROOMS - 1} rooms, then {dungeon.bossName} — clear every
+          room in one run for a bonus haul. Knocked-out champions sit out the rest of the run (no
+          permadeath), and a wipe ends the run with whatever's already been earned.
         </p>
-        {zones().map((zone) => (
-          <ZoneCard key={zone.id} zone={zone} />
-        ))}
-      </section>
+
+        <div className="rows">
+          {state.adventurers.length === 0 && (
+            <div className="row locked">Recruit champions in the Guild tab first.</div>
+          )}
+          {state.adventurers.map((adv) => (
+            <ExplorePartyRow
+              key={adv.id}
+              adv={adv}
+              selected={partyIds.includes(adv.id)}
+              disabled={!canExplore(state, adv) && !partyIds.includes(adv.id)}
+              injured={isInjured(adv, state.runTimeSeconds)}
+              onToggle={() => toggle(adv.id)}
+            />
+          ))}
+        </div>
+
+        <div className="zone-actions">
+          <button className="small-button" disabled={partyIds.length === 0} onClick={begin}>
+            ⚔ Enter Dungeon ({partyIds.length}/{EXPLORE_MAX_PARTY_SIZE})
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

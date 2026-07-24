@@ -5,6 +5,7 @@ import type {
   Attributes,
   ChampionPerkDef,
   ClassSkillDef,
+  DungeonDef,
   EquipTypeDef,
   GuildUpgradeDef,
   ItemPrefixDef,
@@ -49,7 +50,7 @@ export const AUTOSAVE_INTERVAL_MS = 10_000;
  * interval firing on schedule — see useGameLoop's visibility listeners.
  */
 export const BACKGROUND_CATCHUP_GAP_MS = 3_000;
-export const SAVE_VERSION = 15;
+export const SAVE_VERSION = 16;
 
 // ---------------------------------------------------------------------------
 // Act 1 — town income (low numbers by design)
@@ -685,6 +686,48 @@ export const QUEST_TARGETS: QuestTargetDef[] = [
   { id: 'hellhound', locationId: 'frontier-pass', kind: 'monster', name: 'Hellhound', materialId: 'beast-pelt', difficulty: 1.3 },
   { id: 'scorched-ore', locationId: 'frontier-pass', kind: 'gatherable', name: 'Scorched Ore', materialId: 'iron-ore', difficulty: 1.4 },
   { id: 'ember-crystal', locationId: 'frontier-pass', kind: 'gatherable', name: 'Ember Crystal', materialId: 'crystal', difficulty: 1.6 },
+];
+
+// ---------------------------------------------------------------------------
+// Dungeons — one per zone (tiers 1-6 only; Act 3 boss expeditions aren't
+// built out yet, see engine.ts). Unlocked once a zone's manual-Explore win
+// count reaches DUNGEON_WINS_REQUIRED (see combat.ts recordDungeonWin) — a
+// repeatable multi-room gauntlet (DUNGEON_ROOM_COUNT regular rooms then one
+// amplified boss room) resolved by game/dungeon.ts, reusing the zone's own
+// monster pool/tier/material. Placeholder names/balance, per docs.
+// ---------------------------------------------------------------------------
+
+export const DUNGEON_WINS_REQUIRED = 5;
+export const DUNGEON_ROOM_COUNT = 3;
+export const DUNGEON_BOSS_STAT_MULT = 2.5;
+/** Bonus units of the zone's own material, granted once per full clear. */
+export const DUNGEON_COMPLETION_MATERIAL_AMOUNT = 15;
+
+export const DUNGEONS: DungeonDef[] = [
+  {
+    id: 'forest-edge-dungeon', locationId: 'forest-edge', name: "The Wolves' Den",
+    description: 'A denning ground the pack has held for generations.', bossName: 'Alpha Direwolf',
+  },
+  {
+    id: 'river-crossing-dungeon', locationId: 'river-crossing', name: 'The Bandit Hideout',
+    description: 'Smugglers carved a warren into the riverbank.', bossName: 'Bandit Chief',
+  },
+  {
+    id: 'old-mines-dungeon', locationId: 'old-mines', name: 'The Deep Shaft',
+    description: 'The tunnels go down further than anyone admits.', bossName: 'Tunnel Horror',
+  },
+  {
+    id: 'haunted-marsh-dungeon', locationId: 'haunted-marsh', name: 'The Drowned Chapel',
+    description: 'A chapel sank here long before the marsh rose to meet it.', bossName: 'The Weeping Widow',
+  },
+  {
+    id: 'sunken-ruins-dungeon', locationId: 'sunken-ruins', name: 'The Flooded Vault',
+    description: 'Whatever they locked away is still down there.', bossName: 'Vault Warden',
+  },
+  {
+    id: 'frontier-pass-dungeon', locationId: 'frontier-pass', name: 'The Ashen Barracks',
+    description: 'A demon legion camped here before the front moved on.', bossName: 'Legion Captain',
+  },
 ];
 
 // ---------------------------------------------------------------------------

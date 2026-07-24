@@ -250,6 +250,25 @@ export interface LocationDef {
 }
 
 /**
+ * A repeatable multi-room dungeon tied 1:1 to a zone LocationDef (same tier,
+ * same monster pool/rewards) — unlocked once that zone's manual-Explore win
+ * count reaches DUNGEON_WINS_REQUIRED. See game/dungeon.ts.
+ */
+export interface DungeonDef {
+  id: string;
+  locationId: string;
+  name: string;
+  description: string;
+  bossName: string;
+}
+
+/** Per-zone dungeon-unlock tracking. `wins` stops counting once `unlocked`. */
+export interface DungeonProgress {
+  wins: number;
+  unlocked: boolean;
+}
+
+/**
  * A quest target inside a location. Monsters carry their own loot (loot is
  * tied to the monster, not the location); gatherables are tied to the location.
  * Both are things the guild can post a bounty on.
@@ -382,7 +401,7 @@ export interface TownSkillBonuses {
 // Activity log (quest/auto-explore results shown in the Guild tab)
 // ---------------------------------------------------------------------------
 
-export type LogKind = 'quest' | 'patrol' | 'injury' | 'expedition' | 'explore';
+export type LogKind = 'quest' | 'patrol' | 'injury' | 'expedition' | 'explore' | 'dungeon';
 
 export interface LogEntry {
   id: number;
@@ -487,6 +506,8 @@ export interface GameState {
   nextEntityId: number; // shared id counter for adventurers/equipment
   locationsCleared: Record<string, boolean>; // first quest success per zone
   bossesDefeated: Record<string, boolean>; // this timeline
+  /** Manual-Explore win count / unlock state per zone locationId — see game/dungeon.ts. */
+  dungeonProgress: Record<string, DungeonProgress>;
   activityLog: LogEntry[]; // newest last, capped at ACTIVITY_LOG_MAX
 
   // Story
