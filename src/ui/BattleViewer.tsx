@@ -441,6 +441,14 @@ interface SceneState {
   currentEntry: BattleLogEntry | null;
   attackerSprite: FighterSpriteData | null;
   defenderSprite: FighterSpriteData | null;
+  /** The log entries driving the current lunge/impact/recovering phase — more
+   *  than one when an AOE/multi-hit skill logged several entries in a row
+   *  (see advanceLog): they play as a single slide with simultaneous impacts
+   *  on every target, not a separate lunge per entry. Parallel to
+   *  `groupDefenders`. Empty outside those phases (and during a `casting`
+   *  phase, which never groups — see isCast). */
+  groupEntries: BattleLogEntry[];
+  groupDefenders: FighterSpriteData[];
   lungeFromX: number;
   lungeToX: number;
   scene: Container;
@@ -512,6 +520,8 @@ function buildScene(app: Application, result: BattleOutcome, tier: number, w: nu
     currentEntry: null,
     attackerSprite: null,
     defenderSprite: null,
+    groupEntries: [],
+    groupDefenders: [],
     lungeFromX: 0,
     lungeToX: 0,
     scene,
@@ -660,22 +670,42 @@ export function BattleViewer({
         return;
       }
 
-      const entry = result.log[st.logIndex];
-      st.currentEntry = entry;
-      st.logIndex++;
+      const first = result.log[st.logIndex];
 
-      // cooldownProgress is a full snapshot of every skill-bearing party
-      // member as of this entry, so refresh every party cd bar in one pass.
-      if (entry.cooldownProgress) {
+      // An AOE/multi-hit skill logs one entry per target (or hit) in a row —
+      // group that run into a single visual action (one lunge, simultaneous
+      // impacts on every target) instead of animating each as a separate
+      // attack. Basic attacks and casts are always solo groups of one.
+      const group: BattleLogEntry[] = [first];
+      if (!isCast(first) && first.kind === 'skill' && first.skillName) {
+        let j = st.logIndex + 1;
+        while (
+          j < result.log.length &&
+          result.log[j].attackerSide === first.attackerSide &&
+          result.log[j].attackerName === first.attackerName &&
+          result.log[j].kind === 'skill' &&
+          result.log[j].skillName === first.skillName
+        ) {
+          group.push(result.log[j]);
+          j++;
+        }
+      }
+      st.logIndex += group.length;
+      st.currentEntry = first;
+
+      // cooldownProgress is a full snapshot as of each entry — the group's
+      // last one is the freshest, so applying just it covers the whole group.
+      const lastSnapshot = group[group.length - 1].cooldownProgress;
+      if (lastSnapshot) {
         for (const s of st.partySprites) {
           if (s.advId === undefined) continue;
-          const progress = entry.cooldownProgress[s.advId];
+          const progress = lastSnapshot[s.advId];
           if (progress !== undefined) updateCdBar(s, progress);
         }
       }
 
-      const attacker = findSprite(entry.attackerSide, entry.attackerName);
-      const defender = findSprite(entry.defenderSide, entry.defenderName);
+      const attacker = findSprite(first.attackerSide, first.attackerName);
+      const defender = findSprite(first.defenderSide, first.defenderName);
       if (!attacker || !defender) {
         advanceLog();
         return;
@@ -686,12 +716,12 @@ export function BattleViewer({
 
       // Buffs / statuses / DoT ticks don't lunge — flash the target in place,
       // float a label (or the DoT damage), and apply any HP change immediately.
-      if (isCast(entry)) {
+      if (isCast(first)) {
         defender.hitFlash = 1;
-        st.shakeDecay = entry.kind === 'dot' ? 140 : 0;
-        const isDot = entry.kind === 'dot';
-        const color = isDot ? DOT_COLOR : entry.kind === 'buff' ? BUFF_COLOR : STATUS_COLOR;
-        const label = isDot ? `-${entry.damage}` : entry.effectLabel ?? entry.skillName ?? '•';
+        st.shakeDecay = first.kind === 'dot' ? 140 : 0;
+        const isDot = first.kind === 'dot';
+        const color = isDot ? DOT_COLOR : first.kind === 'buff' ? BUFF_COLOR : STATUS_COLOR;
+        const label = isDot ? `-${first.damage}` : first.effectLabel ?? first.skillName ?? '•';
         const floater = createFloater(
           defender.container.x,
           defender.container.y - defender.height / 2 - 10,
@@ -701,13 +731,31 @@ export function BattleViewer({
         );
         st.floaters.push(floater);
         st.floatLayer.addChild(floater.text);
-        defender.hp = entry.defenderHpAfter;
-        defender.maxHp = entry.defenderMaxHp;
+        defender.hp = first.defenderHpAfter;
+        defender.maxHp = first.defenderMaxHp;
         updateHpBar(defender);
         st.animPhase = 'casting';
         st.phaseTimer = 0;
         return;
       }
+
+      // Resolve each group entry's own defender sprite — an AOE hits several
+      // distinct sprites; a multi-hit single-target skill may repeat one.
+      const groupEntries: BattleLogEntry[] = [];
+      const groupDefenders: FighterSpriteData[] = [];
+      for (const e of group) {
+        const d = findSprite(e.defenderSide, e.defenderName);
+        if (d) {
+          groupEntries.push(e);
+          groupDefenders.push(d);
+        }
+      }
+      if (groupEntries.length === 0) {
+        advanceLog();
+        return;
+      }
+      st.groupEntries = groupEntries;
+      st.groupDefenders = groupDefenders;
 
       st.lungeFromX = attacker.baseX + attacker.offsetX;
       const dir = attacker.container.x < defender.container.x ? 1 : -1;
@@ -857,47 +905,51 @@ export function BattleViewer({
         if (t >= 1) {
           st.animPhase = 'impact';
           st.phaseTimer = 0;
-          if (st.defenderSprite) {
-            st.defenderSprite.hitFlash = 1;
-            const entry = st.currentEntry;
-            const dmg = entry?.damage ?? 0;
-            const crit = !!entry?.crit;
+          let anyCrit = false;
+          // One impact per group entry, all landing at once — an AOE/multi-hit
+          // skill's targets all flash and take damage together, not in sequence.
+          for (let k = 0; k < st.groupEntries.length; k++) {
+            const entry = st.groupEntries[k];
+            const defender = st.groupDefenders[k];
+            defender.hitFlash = 1;
+            const dmg = entry.damage;
+            const crit = !!entry.crit;
+            anyCrit = anyCrit || crit;
             const floater = createFloater(
-              st.defenderSprite.container.x,
-              st.defenderSprite.container.y - st.defenderSprite.height / 2 - 10,
+              defender.container.x,
+              defender.container.y - defender.height / 2 - 10,
               crit ? `${dmg}!` : String(dmg),
               crit ? CRIT_COLOR : 0xffdd44,
               crit ? 22 : 16,
             );
             st.floaters.push(floater);
             st.floatLayer.addChild(floater.text);
-            // Name the skill above the attacker so a cast reads clearly.
-            if (entry?.skillName && st.attackerSprite) {
-              const label = createFloater(
-                st.attackerSprite.container.x,
-                st.attackerSprite.container.y - st.attackerSprite.height / 2 - 14,
-                entry.skillName,
-                SKILL_LABEL_COLOR,
-                10,
-              );
-              st.floaters.push(label);
-              st.floatLayer.addChild(label.text);
-            }
-            st.shakeDecay = crit ? 320 : 200;
-            if (entry) {
-              st.defenderSprite.hp = entry.defenderHpAfter;
-              updateHpBar(st.defenderSprite);
-            }
+            defender.hp = entry.defenderHpAfter;
+            updateHpBar(defender);
           }
+          // Name the skill once above the attacker so the group reads clearly.
+          const skillName = st.groupEntries[0]?.skillName;
+          if (skillName && st.attackerSprite) {
+            const label = createFloater(
+              st.attackerSprite.container.x,
+              st.attackerSprite.container.y - st.attackerSprite.height / 2 - 14,
+              skillName,
+              SKILL_LABEL_COLOR,
+              10,
+            );
+            st.floaters.push(label);
+            st.floatLayer.addChild(label.text);
+          }
+          st.shakeDecay = anyCrit ? 320 : 200;
         }
       } else if (st.animPhase === 'impact') {
-        if (!st.attackerSprite || !st.defenderSprite) return;
+        if (!st.attackerSprite || st.groupDefenders.length === 0) return;
         const t = Math.min(1, st.phaseTimer / IMPACT_MS);
-        st.defenderSprite.hitFlash = Math.max(0, 1 - t * 2);
+        for (const defender of st.groupDefenders) defender.hitFlash = Math.max(0, 1 - t * 2);
         if (t >= 1) {
           st.animPhase = 'recovering';
           st.phaseTimer = 0;
-          st.defenderSprite.hitFlash = 0;
+          for (const defender of st.groupDefenders) defender.hitFlash = 0;
         }
       } else if (st.animPhase === 'recovering') {
         if (!st.attackerSprite) return;
@@ -906,13 +958,20 @@ export function BattleViewer({
         st.attackerSprite.container.x = lerp(st.lungeToX, st.lungeFromX, et);
         if (t >= 1) {
           st.attackerSprite.container.x = st.lungeFromX;
-          if (st.defenderSprite && st.currentEntry?.defenderDefeated) {
-            st.defenderSprite.defeated = true;
-            const color = st.defenderSprite.body.fill;
+          // Burst each distinct defeated target once (a multi-hit skill can
+          // repeat the same defender across group entries).
+          const burst = new Set<FighterSpriteData>();
+          for (let k = 0; k < st.groupEntries.length; k++) {
+            const entry = st.groupEntries[k];
+            const defender = st.groupDefenders[k];
+            if (!entry.defenderDefeated || defender.defeated || burst.has(defender)) continue;
+            burst.add(defender);
+            defender.defeated = true;
+            const color = defender.body.fill;
             const particles = spawnParticles(typeof color === 'number' ? color : 0x888888);
             for (const p of particles) {
-              p.g.x = st.defenderSprite.container.x;
-              p.g.y = st.defenderSprite.container.y;
+              p.g.x = defender.container.x;
+              p.g.y = defender.container.y;
               st.particles.push(p);
               st.particleLayer.addChild(p.g);
             }
@@ -922,6 +981,8 @@ export function BattleViewer({
           st.currentEntry = null;
           st.attackerSprite = null;
           st.defenderSprite = null;
+          st.groupEntries = [];
+          st.groupDefenders = [];
           logEntryTimer = 0;
         }
       }
