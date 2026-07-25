@@ -85,6 +85,8 @@ function lerp(a: number, b: number, t: number): number {
 interface FighterSpriteData {
   /** Champion id — set on party sprites only, used to key cooldownProgress. */
   advId?: number;
+  /** Set on party sprites only — drives the below-canvas status panel. */
+  className?: AdventurerClass;
   container: Container;
   nameText: Text;
   hpText: Text;
@@ -111,6 +113,15 @@ interface FighterSpriteData {
   /** Present only on the dungeon boss monster's sprite — mirrors its HP into
    *  a prominent bar fixed at the top of the battlefield (see createBossBar). */
   bossBar?: BossBarData;
+  /** Current cooldown fill (0 = just cast, 1 = ready) — mirrors the cdFill
+   *  bar's width so the below-canvas status panel can read it directly. */
+  cdProgress: number;
+  /** Current remaining cooldown in turns (0 = ready); null until the first
+   *  cooldownTurnsRemaining snapshot arrives. For the below-canvas panel. */
+  cdTurnsRemaining: number | null;
+  /** Current active buff/status labels (party sprites only) — mirrors the
+   *  most recent partyEffects snapshot for the below-canvas status panel. */
+  activeEffects: string[];
 }
 
 interface BossBarData {
@@ -263,6 +274,7 @@ function createFighterSprite(
 
   return {
     container,
+    className: isParty ? (className as AdventurerClass) : undefined,
     nameText,
     hpText,
     hpFill,
@@ -284,6 +296,11 @@ function createFighterSprite(
     maxHp,
     hitFlash: 0,
     defeated: false,
+    // Skills enter live battles half charged (see combat.ts) — mirror that
+    // starting value here so the status panel's initial read matches.
+    cdProgress: hasSkill ? 0.5 : 1,
+    cdTurnsRemaining: null,
+    activeEffects: [],
   };
 }
 
@@ -348,8 +365,9 @@ function updateHpBar(sprite: FighterSpriteData): void {
 
 /** `progress`: 0 = just cast, 1 = ready. Full bar = "the skill is ready". */
 function updateCdBar(sprite: FighterSpriteData, progress: number): void {
-  if (!sprite.cdFill) return;
   const pct = Math.max(0, Math.min(1, progress));
+  sprite.cdProgress = pct;
+  if (!sprite.cdFill) return;
   const w = CD_BAR_W * pct;
   sprite.cdFill.clear();
   if (w > 0) {
@@ -550,6 +568,36 @@ function clearScene(app: Application, st: SceneState): void {
 }
 
 // ---------------------------------------------------------------------------
+// Party status — a live snapshot per champion, handed up to a parent
+// component (e.g. a below-canvas panel) on every meaningful change.
+// ---------------------------------------------------------------------------
+
+export interface PartyStatusEntry {
+  advId: number;
+  name: string;
+  className: AdventurerClass;
+  hp: number;
+  maxHp: number;
+  /** Turns left on this champion's skill cooldown (0 = ready); null if this
+   *  fighter carries no skill, or no snapshot has arrived yet. */
+  cooldownTurns: number | null;
+  /** Currently active buff/status labels, e.g. 'ATK ↑', 'Poison'. */
+  effects: string[];
+}
+
+function buildPartyStatus(st: SceneState): PartyStatusEntry[] {
+  return st.partySprites.map((s) => ({
+    advId: s.advId ?? -1,
+    name: s.nameText.text,
+    className: s.className ?? 'warrior',
+    hp: Math.max(0, Math.round(s.hp)),
+    maxHp: s.maxHp,
+    cooldownTurns: s.cdFill ? s.cdTurnsRemaining : null,
+    effects: s.activeEffects,
+  }));
+}
+
+// ---------------------------------------------------------------------------
 // BattleViewer — PixiJS canvas battle playback
 // ---------------------------------------------------------------------------
 
@@ -558,11 +606,13 @@ export function BattleViewer({
   tier,
   skip: initialSkip,
   onFinish,
+  onPartyStatus,
 }: {
   result: BattleOutcome;
   tier: number;
   skip: boolean;
   onFinish: () => void;
+  onPartyStatus?: (status: PartyStatusEntry[]) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<Application | null>(null);
@@ -571,6 +621,8 @@ export function BattleViewer({
   const skipRef = useRef(initialSkip);
   const onFinishRef = useRef(onFinish);
   onFinishRef.current = onFinish;
+  const onPartyStatusRef = useRef(onPartyStatus);
+  onPartyStatusRef.current = onPartyStatus;
 
   const findSprite = useCallback(
     (side: 'party' | 'monsters', name: string): FighterSpriteData | undefined => {
@@ -643,6 +695,7 @@ export function BattleViewer({
     // Build new scene
     const st = buildScene(app, result, tier, w, h);
     sceneRef.current = st;
+    onPartyStatusRef.current?.(buildPartyStatus(st));
 
     // Reset skip
     skipRef.current = initialSkip;
@@ -657,6 +710,12 @@ export function BattleViewer({
 
     let logEntryTimer = 0;
     const LOG_DELAY = 500;
+
+    function notifyStatus() {
+      const st = sceneRef.current;
+      if (!st || !onPartyStatusRef.current) return;
+      onPartyStatusRef.current(buildPartyStatus(st));
+    }
 
     function advanceLog() {
       const st = sceneRef.current;
@@ -693,14 +752,29 @@ export function BattleViewer({
       st.logIndex += group.length;
       st.currentEntry = first;
 
-      // cooldownProgress is a full snapshot as of each entry — the group's
-      // last one is the freshest, so applying just it covers the whole group.
-      const lastSnapshot = group[group.length - 1].cooldownProgress;
-      if (lastSnapshot) {
+      // cooldownProgress/cooldownTurnsRemaining/partyEffects are full
+      // snapshots as of each entry — the group's last one is freshest, so
+      // applying just it covers the whole group.
+      const lastEntry = group[group.length - 1];
+      if (lastEntry.cooldownProgress) {
         for (const s of st.partySprites) {
           if (s.advId === undefined) continue;
-          const progress = lastSnapshot[s.advId];
+          const progress = lastEntry.cooldownProgress[s.advId];
           if (progress !== undefined) updateCdBar(s, progress);
+        }
+      }
+      if (lastEntry.cooldownTurnsRemaining) {
+        for (const s of st.partySprites) {
+          if (s.advId === undefined) continue;
+          const turns = lastEntry.cooldownTurnsRemaining[s.advId];
+          if (turns !== undefined) s.cdTurnsRemaining = turns;
+        }
+      }
+      if (lastEntry.partyEffects) {
+        for (const s of st.partySprites) {
+          if (s.advId === undefined) continue;
+          const effects = lastEntry.partyEffects[s.advId];
+          if (effects !== undefined) s.activeEffects = effects;
         }
       }
 
@@ -736,6 +810,7 @@ export function BattleViewer({
         updateHpBar(defender);
         st.animPhase = 'casting';
         st.phaseTimer = 0;
+        notifyStatus();
         return;
       }
 
@@ -821,11 +896,15 @@ export function BattleViewer({
       if (st.animPhase === 'idle') {
         if (skipRef.current) {
           // Find the last snapshot recorded for each champion so the cooldown
-          // bar still lands in its true end-of-battle state when skipping.
+          // bar (and status panel) still land in their true end-of-battle
+          // state when skipping.
           const lastCooldowns: Record<number, number> = {};
+          const lastCooldownTurns: Record<number, number> = {};
+          const lastEffects: Record<number, string[]> = {};
           for (const e of result.log) {
-            if (!e.cooldownProgress) continue;
-            Object.assign(lastCooldowns, e.cooldownProgress);
+            if (e.cooldownProgress) Object.assign(lastCooldowns, e.cooldownProgress);
+            if (e.cooldownTurnsRemaining) Object.assign(lastCooldownTurns, e.cooldownTurnsRemaining);
+            if (e.partyEffects) Object.assign(lastEffects, e.partyEffects);
           }
           for (const s of st.partySprites) {
             const pr = result.party.find((p) => p.name === s.nameText.text);
@@ -835,8 +914,10 @@ export function BattleViewer({
               s.container.alpha = pr.knockedOut ? 0.3 : 1;
               updateHpBar(s);
             }
-            if (s.advId !== undefined && lastCooldowns[s.advId] !== undefined) {
-              updateCdBar(s, lastCooldowns[s.advId]);
+            if (s.advId !== undefined) {
+              if (lastCooldowns[s.advId] !== undefined) updateCdBar(s, lastCooldowns[s.advId]);
+              if (lastCooldownTurns[s.advId] !== undefined) s.cdTurnsRemaining = lastCooldownTurns[s.advId];
+              if (lastEffects[s.advId] !== undefined) s.activeEffects = lastEffects[s.advId];
             }
           }
           for (const s of st.monsterSprites) {
@@ -848,6 +929,7 @@ export function BattleViewer({
               updateHpBar(s);
             }
           }
+          notifyStatus();
           if (!st.finished) {
             st.finished = true;
             onFinishRef.current();
@@ -941,6 +1023,7 @@ export function BattleViewer({
             st.floatLayer.addChild(label.text);
           }
           st.shakeDecay = anyCrit ? 320 : 200;
+          notifyStatus();
         }
       } else if (st.animPhase === 'impact') {
         if (!st.attackerSprite || st.groupDefenders.length === 0) return;

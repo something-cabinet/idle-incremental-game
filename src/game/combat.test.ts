@@ -225,6 +225,32 @@ describe('simulateBattle', () => {
       expect(entry.defenderDefeated).toBe(entry.defenderHpAfter === 0);
     }
   });
+
+  it('every log entry snapshots each party member\'s active buff/status labels (partyEffects)', () => {
+    const state = baseState();
+    // War Cry is a warrior buff (ATK ↑ on allies, 6 turns) — cast early since
+    // skills start half-charged.
+    const warrior = { ...champion(1, mid), level: 15, className: 'warrior' as const, skillId: 'war-cry' };
+    const party = [{ ...warrior, hp: maxHp(warrior) }];
+    const monsters = rollMonsterGroup('old-mines', mulberry32(1));
+    const result = simulateBattle(state, party, monsters, 'old-mines', mulberry32(2), true);
+
+    // Every entry carries a full partyEffects snapshot for every party member.
+    for (const entry of result.log) {
+      expect(entry.partyEffects).toBeDefined();
+      expect(entry.partyEffects![warrior.id]).toBeDefined();
+    }
+
+    const buffEntry = result.log.find((e) => e.kind === 'buff');
+    expect(buffEntry).toBeDefined();
+    expect(buffEntry!.partyEffects![warrior.id]).toContain('ATK ↑');
+
+    // Before the buff was cast, it wasn't active yet.
+    const buffIndex = result.log.indexOf(buffEntry!);
+    if (buffIndex > 0) {
+      expect(result.log[buffIndex - 1].partyEffects![warrior.id]).not.toContain('ATK ↑');
+    }
+  });
 });
 
 describe('canExplore', () => {

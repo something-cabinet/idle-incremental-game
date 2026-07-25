@@ -156,6 +156,22 @@ export interface BattleLogEntry {
    * timing itself. Keyed by champion id; only present in live battles.
    */
   cooldownProgress?: Record<number, number>;
+  /**
+   * Snapshot, taken at this log entry, of every skill-bearing party member's
+   * actual remaining cooldown (in that champion's own turns; 0 = ready).
+   * Same idea as cooldownProgress but the raw turn count instead of a 0-1
+   * fraction, for a UI that just wants to say "N turns left". Keyed by
+   * champion id; only present in live battles.
+   */
+  cooldownTurnsRemaining?: Record<number, number>;
+  /**
+   * Snapshot, taken at this log entry, of every party member's currently
+   * active buff/status labels (e.g. 'ATK ↑', 'Poison') — empty array if none.
+   * Same idea as cooldownProgress: lets a UI show "what's currently affecting
+   * this champion" without re-deriving buff/status durations itself. Keyed by
+   * champion id; only present in live battles.
+   */
+  partyEffects?: Record<number, string[]>;
 }
 
 export interface PartyBattleResult {
@@ -439,8 +455,43 @@ export function simulateBattle(
     return out;
   }
 
-  function pushLog(entry: Omit<BattleLogEntry, 'cooldownProgress'>) {
-    log.push({ ...entry, cooldownProgress: snapshotCooldowns() });
+  /** Raw remaining-turns count (0 = ready) for every skill-bearing party
+   *  member, as of right now — same idea as snapshotCooldowns but unrounded
+   *  turns instead of a 0-1 fraction, for a "N turns left" readout. */
+  function snapshotCooldownTurns(): Record<number, number> {
+    const out: Record<number, number> = {};
+    for (const c of combatants) {
+      if (c.side !== 'party') continue;
+      for (const slot of c.skills) {
+        out[c.refId] = slot.cooldownRemaining;
+      }
+    }
+    return out;
+  }
+
+  /** Every party member's currently active buff/status labels, as of right
+   *  now — same snapshot-per-entry idea as snapshotCooldowns. */
+  function snapshotPartyEffects(): Record<number, string[]> {
+    const out: Record<number, string[]> = {};
+    for (const c of combatants) {
+      if (c.side !== 'party') continue;
+      const labels: string[] = [];
+      for (const b of c.buffs) if (b.turnsRemaining > 0) labels.push(BUFF_LABEL[b.stat]);
+      for (const s of c.statuses) if (s.turnsRemaining > 0) labels.push(STATUS_LABEL[s.kind]);
+      out[c.refId] = labels;
+    }
+    return out;
+  }
+
+  function pushLog(
+    entry: Omit<BattleLogEntry, 'cooldownProgress' | 'partyEffects' | 'cooldownTurnsRemaining'>,
+  ) {
+    log.push({
+      ...entry,
+      cooldownProgress: snapshotCooldowns(),
+      cooldownTurnsRemaining: snapshotCooldownTurns(),
+      partyEffects: snapshotPartyEffects(),
+    });
   }
 
   /** One hit: mitigated damage (× crit for party), lifesteal, and a log line. */

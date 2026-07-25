@@ -1475,6 +1475,25 @@ button.row:disabled {
   gap: 14px;
 }
 
+.party-status-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.party-status-row {
+  padding: 4px 8px;
+  gap: 2px;
+}
+
+.party-status-row .row-name {
+  font-size: 0.8rem;
+}
+
+.party-status-row .row-sub {
+  white-space: nowrap;
+}
+
 .battle-field {
   display: grid;
   grid-template-columns: 1fr auto 1fr;

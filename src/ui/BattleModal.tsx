@@ -1,7 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import type { BattleOutcome } from '../game/combat';
+import type { AdventurerClass } from '../game/types';
 import { itemIcon } from './itemDisplay';
 import { BattleViewer } from './BattleViewer';
+import type { PartyStatusEntry } from './BattleViewer';
+
+const CLASS_ICON: Record<AdventurerClass, string> = {
+  warrior: '🗡️',
+  ranger: '🏹',
+  mage: '🔮',
+};
 
 /**
  * Blocking battle modal: no close button/overlay-dismiss until playback of
@@ -38,6 +46,7 @@ export function BattleModal({
 }) {
   const [pixiDone, setPixiDone] = useState(false);
   const [stopClicked, setStopClicked] = useState(false);
+  const [partyStatus, setPartyStatus] = useState<PartyStatusEntry[]>([]);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
@@ -81,7 +90,10 @@ export function BattleModal({
           tier={tier}
           skip={reducedMotion}
           onFinish={() => setPixiDone(true)}
+          onPartyStatus={setPartyStatus}
         />
+
+        <PartyStatusPanel status={partyStatus} />
 
         {pixiDone && <BattleSummary result={result} onClose={onClose} autoAdvance={autoAdvance} />}
 
@@ -135,6 +147,39 @@ function BattleSummary({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * A small live readout of each champion's HP, skill cooldown, and active
+ * buffs/statuses, below the battle canvas — mirrors what's happening on
+ * their sprite without needing to squint at it. Driven by BattleViewer's
+ * onPartyStatus callback, which fires as the fight plays out.
+ */
+function PartyStatusPanel({ status }: { status: PartyStatusEntry[] }) {
+  if (status.length === 0) return null;
+  return (
+    <div className="party-status-panel">
+      {status.map((p) => {
+        const knockedOut = p.hp <= 0;
+        return (
+          <div key={p.advId} className={`row party-status-row ${knockedOut ? 'disabled' : ''}`}>
+            <div className="row-info">
+              <span className="row-name">
+                {CLASS_ICON[p.className]} {p.name}
+              </span>
+              <span className="row-sub">
+                HP {p.hp}/{p.maxHp}
+                {p.cooldownTurns !== null && ` · CD ${p.cooldownTurns > 0 ? `${p.cooldownTurns}t` : 'ready'}`}
+                {p.effects.map((e, i) => (
+                  <span key={i} className="perk-tag">{e}</span>
+                ))}
+              </span>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
