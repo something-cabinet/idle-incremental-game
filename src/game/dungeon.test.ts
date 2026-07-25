@@ -99,13 +99,15 @@ describe('fightDungeonRoom', () => {
     expect(result.outcome).toBe('loss');
   });
 
-  it('flags the boss room monsters as isBoss (and regular rooms as not)', () => {
+  it('flags only the first boss-room monster as isBoss, with normal support alongside', () => {
     const state = baseState();
     const strong = champion(1);
     const regular = fightDungeonRoom(state, 'forest-edge', [strong.id], 0, mulberry32(1));
     expect(regular.result.monsters.every((m) => !m.isBoss)).toBe(true);
     const boss = fightDungeonRoom(state, 'forest-edge', [strong.id], DUNGEON_ROOM_COUNT, mulberry32(1));
-    expect(boss.result.monsters.every((m) => m.isBoss)).toBe(true);
+    expect(boss.result.monsters[0].isBoss).toBe(true);
+    expect(boss.result.monsters[0].name).toBe('Alpha Direwolf');
+    expect(boss.result.monsters.slice(1).every((m) => !m.isBoss)).toBe(true);
   });
 
   it('carries surviving champions\' HP/cooldown forward via carryOut, for the caller to feed into the next room', () => {

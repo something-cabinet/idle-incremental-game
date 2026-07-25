@@ -25,28 +25,34 @@ export function isDungeonUnlocked(state: GameState, locationId: string): boolean
 }
 
 /** Roll a room's monster group. Regular rooms are a normal Explore roll for
- * this zone; the boss room (roomIndex === DUNGEON_ROOM_COUNT) takes that same
- * roll and amplifies stats/rewards by DUNGEON_BOSS_STAT_MULT (undoing any
- * Super roll first, so the two multipliers don't stack), renamed after the
- * dungeon's boss. */
+ * this zone. The boss room (roomIndex === DUNGEON_ROOM_COUNT) is a single
+ * amplified boss monster — stats/rewards scaled by DUNGEON_BOSS_STAT_MULT,
+ * undoing any Super roll first so the two multipliers don't stack — plus a
+ * normal support group from the zone's usual roll, so the boss never fights
+ * alone. Only the boss gets the isBoss flag (bigger sprite, its own health
+ * bar in the battle viewer); the support monsters are unscaled and unnamed. */
 function rollDungeonRoomMonsters(dungeon: DungeonDef, roomIndex: number, rng: Rng): MonsterInstance[] {
-  const group = rollMonsterGroup(dungeon.locationId, rng);
-  if (roomIndex < DUNGEON_ROOM_COUNT) return group;
-  return group.map((m, i) => {
-    const denom = m.isSuper ? SUPER_STAT_MULT : 1;
-    const mult = DUNGEON_BOSS_STAT_MULT / denom;
-    return {
-      ...m,
-      name: i === 0 ? dungeon.bossName : `${dungeon.bossName}'s ${m.name}`,
-      isSuper: false,
-      isBoss: true,
-      maxHp: Math.round(m.maxHp * mult),
-      atk: Math.round(m.atk * mult),
-      def: Math.round(m.def * mult),
-      xpReward: Math.round(m.xpReward * mult),
-      goldReward: Math.round(m.goldReward * mult),
-    };
-  });
+  if (roomIndex < DUNGEON_ROOM_COUNT) return rollMonsterGroup(dungeon.locationId, rng);
+
+  const bossBase = rollMonsterGroup(dungeon.locationId, rng)[0];
+  const support = rollMonsterGroup(dungeon.locationId, rng).map((m, i) => ({ ...m, instanceId: i + 1 }));
+  if (!bossBase) return support;
+
+  const denom = bossBase.isSuper ? SUPER_STAT_MULT : 1;
+  const mult = DUNGEON_BOSS_STAT_MULT / denom;
+  const boss: MonsterInstance = {
+    ...bossBase,
+    instanceId: 0,
+    name: dungeon.bossName,
+    isSuper: false,
+    isBoss: true,
+    maxHp: Math.round(bossBase.maxHp * mult),
+    atk: Math.round(bossBase.atk * mult),
+    def: Math.round(bossBase.def * mult),
+    xpReward: Math.round(bossBase.xpReward * mult),
+    goldReward: Math.round(bossBase.goldReward * mult),
+  };
+  return [boss, ...support];
 }
 
 /**

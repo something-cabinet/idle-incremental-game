@@ -30,6 +30,13 @@ const RECOVER_MS = 160;
 const DAMAGE_FLOAT_MS = 700;
 const SHAKE_INTENSITY = 4;
 const PARTICLE_COUNT = 8;
+// Dungeon boss health bar: a prominent bar fixed at the top of the
+// battlefield, distinct from the small bar under the boss's own sprite.
+const BOSS_BAR_W = 220;
+const BOSS_BAR_H = 12;
+const BOSS_BAR_Y = 18;
+const BOSS_BAR_NAME_SIZE = 13;
+const BOSS_BAR_HP_SIZE = 9;
 
 const CLASS_COLORS: Record<AdventurerClass, number> = {
   warrior: 0xd4533a,
@@ -101,6 +108,17 @@ interface FighterSpriteData {
   maxHp: number;
   hitFlash: number;
   defeated: boolean;
+  /** Present only on the dungeon boss monster's sprite — mirrors its HP into
+   *  a prominent bar fixed at the top of the battlefield (see createBossBar). */
+  bossBar?: BossBarData;
+}
+
+interface BossBarData {
+  fill: Graphics;
+  hpText: Text;
+  barX: number;
+  barY: number;
+  barW: number;
 }
 
 function createFighterSprite(
@@ -269,6 +287,46 @@ function createFighterSprite(
   };
 }
 
+/** A big, RPG-boss-style HP bar fixed at the top of the battlefield — reads
+ *  clearly at a glance, unlike the small bar under the boss's own sprite. */
+function createBossBar(scene: Container, canvasW: number, name: string, maxHp: number): BossBarData {
+  const barX = canvasW / 2 - BOSS_BAR_W / 2;
+  const barY = BOSS_BAR_Y;
+
+  const nameStyle = new TextStyle({
+    fill: 0xff4d6d,
+    fontSize: BOSS_BAR_NAME_SIZE,
+    fontFamily: 'monospace',
+    fontWeight: 'bold',
+  });
+  const nameText = new Text({ text: `☠ ${name}`, style: nameStyle });
+  nameText.anchor.set(0.5, 0);
+  nameText.x = canvasW / 2;
+  nameText.y = 2;
+  scene.addChild(nameText);
+
+  const frame = new Graphics();
+  frame.roundRect(barX - 2, barY - 2, BOSS_BAR_W + 4, BOSS_BAR_H + 4, 4).stroke({ width: 1.5, color: 0xff4d6d, alpha: 0.9 });
+  scene.addChild(frame);
+
+  const bg = new Graphics();
+  bg.roundRect(barX, barY, BOSS_BAR_W, BOSS_BAR_H, 3).fill({ color: 0x2a1015 });
+  scene.addChild(bg);
+
+  const fill = new Graphics();
+  fill.roundRect(barX, barY, BOSS_BAR_W, BOSS_BAR_H, 3).fill({ color: 0xe0304f });
+  scene.addChild(fill);
+
+  const hpTextStyle = new TextStyle({ fill: 0xffffff, fontSize: BOSS_BAR_HP_SIZE, fontFamily: 'monospace', fontWeight: 'bold' });
+  const hpText = new Text({ text: `${maxHp} / ${maxHp}`, style: hpTextStyle });
+  hpText.anchor.set(0.5, 0);
+  hpText.x = canvasW / 2;
+  hpText.y = barY + BOSS_BAR_H + 2;
+  scene.addChild(hpText);
+
+  return { fill, hpText, barX, barY, barW: BOSS_BAR_W };
+}
+
 function updateHpBar(sprite: FighterSpriteData): void {
   const pct = Math.max(0, sprite.hp / sprite.maxHp);
   const w = HP_BAR_W * pct;
@@ -278,6 +336,14 @@ function updateHpBar(sprite: FighterSpriteData): void {
     sprite.hpFill.roundRect(-HP_BAR_W / 2, sprite.hpBarY, w, HP_BAR_H, 2).fill({ color });
   }
   sprite.hpText.text = String(Math.max(0, Math.round(sprite.hp)));
+
+  if (sprite.bossBar) {
+    const { fill, hpText, barX, barY, barW } = sprite.bossBar;
+    const bw = barW * pct;
+    fill.clear();
+    if (bw > 0) fill.roundRect(barX, barY, bw, BOSS_BAR_H, 3).fill({ color: 0xe0304f });
+    hpText.text = `${Math.max(0, Math.round(sprite.hp))} / ${sprite.maxHp}`;
+  }
 }
 
 /** `progress`: 0 = just cast, 1 = ready. Full bar = "the skill is ready". */
@@ -423,6 +489,7 @@ function buildScene(app: Application, result: BattleOutcome, tier: number, w: nu
 
   result.monsters.forEach((m, i) => {
     const sprite = createFighterSprite(m.name, monsterX, monsterStartY + i * (FIGHTER_H + GAP + 20), m.maxHp, false, tier, '', m.targetId, false, m.isSuper, m.isBoss ?? false);
+    if (m.isBoss) sprite.bossBar = createBossBar(scene, w, m.name, m.maxHp);
     monsterSprites.push(sprite);
     scene.addChild(sprite.container);
   });
