@@ -27,7 +27,7 @@ export interface JobDef {
 
 export type AdventurerClass = 'warrior' | 'ranger' | 'mage';
 export type EquipSlot = 'weapon' | 'armor' | 'trinket';
-export type Rarity = 'common' | 'rare' | 'epic' | 'exalted';
+export type Rarity = 'common' | 'rare' | 'epic' | 'exalted' | 'ascendant';
 
 /** RPG attributes. LCK boosts material/equipment/shard find chances. */
 export type AttributeId = 'str' | 'dex' | 'int' | 'con' | 'res' | 'lck';
@@ -481,6 +481,8 @@ export interface GameStats {
   itemsFound: number;
   itemsCrafted: number;
   itemsDisassembled: number;
+  /** Exalted items upgraded to ascendant rarity (see guild.ts ascendItem). */
+  itemsAscended: number;
   /** Dungeon boss rooms beaten (full runs completed). */
   dungeonsCleared: number;
   shardsFound: number;

@@ -20,6 +20,7 @@ export const EMPTY_STATS: GameStats = {
   itemsFound: 0,
   itemsCrafted: 0,
   itemsDisassembled: 0,
+  itemsAscended: 0,
   dungeonsCleared: 0,
   shardsFound: 0,
 };

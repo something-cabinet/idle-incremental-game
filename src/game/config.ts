@@ -580,6 +580,7 @@ export const MATERIALS: MaterialDef[] = [
   { id: 'rare-essence', name: 'Rare Essence' },
   { id: 'epic-essence', name: 'Epic Essence' },
   { id: 'exalted-essence', name: 'Exalted Essence' },
+  { id: 'ascendant-essence', name: 'Ascendant Essence' },
 ];
 
 /**
@@ -972,10 +973,29 @@ export const EXALTED_MIN_TIER = 5;
 /** Exalted's roll chance at/above EXALTED_MIN_TIER, carved out of epic's slice. */
 export const EXALTED_WEIGHT = 0.015;
 
-export const RARITY_MULT: Record<Rarity, number> = { common: 1, rare: 1.6, epic: 2.5, exalted: 4 };
+/**
+ * Ascendant is never rolled (see RARITY_WEIGHTS/SUPER_RARITY_WEIGHTS above,
+ * which omit it, and rollRarity's default maxRarity of 'exalted') — the only
+ * way to get one is upgrading an exalted item at the Forge (see guild.ts
+ * ascendItem). Its budget mult is a much bigger jump than any other rarity
+ * step, since it's the endgame ceiling.
+ */
+export const RARITY_MULT: Record<Rarity, number> = {
+  common: 1,
+  rare: 1.6,
+  epic: 2.5,
+  exalted: 4,
+  ascendant: 10,
+};
 
 /** Number of bonus attributes rolled from the type's pool, by rarity. */
-export const RARITY_BONUS_ATTRS: Record<Rarity, number> = { common: 0, rare: 1, epic: 2, exalted: 3 };
+export const RARITY_BONUS_ATTRS: Record<Rarity, number> = {
+  common: 0,
+  rare: 1,
+  epic: 2,
+  exalted: 3,
+  ascendant: 5,
+};
 /** Bonus attribute points per roll: 1 + floor(tier / 2). */
 export const BONUS_ATTR_TIER_DIV = 2;
 
@@ -997,8 +1017,28 @@ export const EQUIP_TIER_RATE = 0.25;
  * ESSENCE_TIER_DIV)) — a stronger (higher-tier) item of the same rarity
  * yields more essence than a weak one.
  */
-export const RARITY_ESSENCE_BASE: Record<Rarity, number> = { common: 1, rare: 2, epic: 4, exalted: 8 };
+export const RARITY_ESSENCE_BASE: Record<Rarity, number> = {
+  common: 1,
+  rare: 2,
+  epic: 4,
+  exalted: 8,
+  ascendant: 16,
+};
 export const ESSENCE_TIER_DIV = 2;
+
+/**
+ * Ascending an exalted item to ascendant rarity (see guild.ts ascendItem)
+ * costs a mix of every essence tier at once, scaled by the item's own tier —
+ * by far the steepest material sink in the game, since it's the endgame
+ * equipment ceiling. E.g. a tier-6 item needs 600 exalted-essence, 1200
+ * epic-essence, 3000 rare-essence and 6000 common-essence.
+ */
+export const ASCEND_ESSENCE_PER_TIER: Record<'exalted' | 'epic' | 'rare' | 'common', number> = {
+  exalted: 100,
+  epic: 200,
+  rare: 500,
+  common: 1000,
+};
 
 // ---------------------------------------------------------------------------
 // Equipment types & name prefixes
@@ -1069,9 +1109,11 @@ export const ITEM_PREFIXES: ItemPrefixDef[] = [
 ];
 
 /**
- * Exclusive to exalted-rarity drops — never rolled on common/rare/epic items,
- * and exalted items never roll from ITEM_PREFIXES. Each grants a richer
- * multi-attribute spread than any normal prefix can.
+ * Exclusive to exalted- and ascendant-rarity items — never rolled on
+ * common/rare/epic items, which never roll from this pool either. Ascendant
+ * reuses the same pool rather than getting its own (its much bigger stat
+ * budget already sets it apart — see RARITY_MULT/RARITY_BONUS_ATTRS). Each
+ * prefix grants a richer multi-attribute spread than any normal prefix can.
  */
 export const EXALTED_PREFIXES: ItemPrefixDef[] = [
   { id: 'godslayers', name: "Godslayer's", weight: 10, atkMult: 1.5, attrs: { str: 1, dex: 1 } },

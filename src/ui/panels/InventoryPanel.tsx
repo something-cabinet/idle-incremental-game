@@ -23,6 +23,7 @@ const MATERIAL_ICON: Record<string, string> = {
   'rare-essence': '💠',
   'epic-essence': '🌟',
   'exalted-essence': '☄️',
+  'ascendant-essence': '🌌',
 };
 
 function materialName(id: string): string {
@@ -91,8 +92,8 @@ const SORT_LABEL: Record<SortMode, string> = {
   def: 'Defense',
 };
 
-const RARITY_ORDER: Record<Rarity, number> = { common: 0, rare: 1, epic: 2, exalted: 3 };
-const RARITIES: Rarity[] = ['common', 'rare', 'epic', 'exalted'];
+const RARITY_ORDER: Record<Rarity, number> = { common: 0, rare: 1, epic: 2, exalted: 3, ascendant: 4 };
+const RARITIES: Rarity[] = ['common', 'rare', 'epic', 'exalted', 'ascendant'];
 const SLOTS: EquipSlot[] = ['weapon', 'armor', 'trinket'];
 
 function sortInventory(items: Equipment[], mode: SortMode): Equipment[] {

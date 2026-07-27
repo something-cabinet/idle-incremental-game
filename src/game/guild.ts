@@ -1,8 +1,9 @@
-import { adventurerStats, generateAdventurer, isInjured, statsWithItem } from './adventurers';
+import { adventurerStats, ascendEquipment, generateAdventurer, isInjured, statsWithItem } from './adventurers';
 import {
   ADVENTURER_BASE,
   ADVENTURER_MAX,
   ADVENTURER_REP_SCALE,
+  ASCEND_ESSENCE_PER_TIER,
   BASE_ROSTER_CAP,
   CRAFT_GOLD_BASE,
   CRAFT_GOLD_TIER_EXP,
@@ -326,6 +327,83 @@ export function disassembleItems(state: GameState, itemIds: number[]): GameState
     },
     { itemsDisassembled: sold.length },
   );
+}
+
+// ---------------------------------------------------------------------------
+// Ascension (the Forge) — upgrade an exalted item to ascendant rarity by
+// burning a mix of essences instead of gold/base materials. Unlike crafting,
+// there's no timer: it resolves immediately, same as equip/unequip.
+// ---------------------------------------------------------------------------
+
+/** Essence cost to ascend an item of the given tier — see ASCEND_ESSENCE_PER_TIER. */
+export function ascendCost(tier: number): Record<string, number> {
+  return Object.fromEntries(
+    Object.entries(ASCEND_ESSENCE_PER_TIER).map(([rarity, perTier]) => [
+      essenceMaterialId(rarity as Equipment['rarity']),
+      perTier * tier,
+    ]),
+  );
+}
+
+/** Locate an item wherever it lives — unequipped in the shared inventory, or
+ *  equipped on one of the champions — since ascension works on either. */
+export function findEquipment(
+  state: GameState,
+  itemId: number,
+): { item: Equipment; advId?: number } | null {
+  const inInventory = state.inventory.find((i) => i.id === itemId);
+  if (inInventory) return { item: inInventory };
+  for (const adv of state.adventurers) {
+    for (const slot of EQUIP_SLOTS) {
+      const equipped = adv.equipment[slot];
+      if (equipped?.id === itemId) return { item: equipped, advId: adv.id };
+    }
+  }
+  return null;
+}
+
+/** Every exalted item across the roster's equipped gear and the shared
+ *  inventory — the Forge's Ascend subtab candidate list. */
+export function exaltedItems(state: GameState): { item: Equipment; advId?: number }[] {
+  const equipped: { item: Equipment; advId?: number }[] = [];
+  for (const adv of state.adventurers) {
+    for (const slot of EQUIP_SLOTS) {
+      const item = adv.equipment[slot];
+      if (item?.rarity === 'exalted') equipped.push({ item, advId: adv.id });
+    }
+  }
+  const unequipped = state.inventory
+    .filter((i) => i.rarity === 'exalted')
+    .map((item) => ({ item }));
+  return [...equipped, ...unequipped];
+}
+
+export function canAscendItem(state: GameState, itemId: number): boolean {
+  const found = findEquipment(state, itemId);
+  if (!found || found.item.rarity !== 'exalted') return false;
+  const cost = ascendCost(found.item.tier);
+  return Object.entries(cost).every(([id, n]) => (state.materials[id] ?? 0) >= n);
+}
+
+/** Upgrade an exalted item in place — wherever it lives, equipped or not —
+ *  to ascendant rarity, consuming the essence mix ascendCost calls for. */
+export function ascendItem(state: GameState, itemId: number, rng: Rng = Math.random): GameState {
+  if (!canAscendItem(state, itemId)) return state;
+  const found = findEquipment(state, itemId)!;
+  const cost = ascendCost(found.item.tier);
+  const materials = { ...state.materials };
+  for (const [id, n] of Object.entries(cost)) materials[id] = (materials[id] ?? 0) - n;
+  const ascended = ascendEquipment(found.item, rng);
+
+  const next =
+    found.advId === undefined
+      ? { ...state, materials, inventory: state.inventory.map((i) => (i.id === itemId ? ascended : i)) }
+      : updateAdventurer({ ...state, materials }, found.advId, (a) => ({
+          ...a,
+          equipment: { ...a.equipment, [ascended.slot]: ascended },
+        }));
+
+  return addStats(next, { itemsAscended: 1 });
 }
 
 // ---------------------------------------------------------------------------

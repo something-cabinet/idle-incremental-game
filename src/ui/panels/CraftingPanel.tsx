@@ -2,16 +2,22 @@ import { useState } from 'react';
 import { CRAFT_QUANTITIES, MATERIALS } from '../../game/config';
 import { formatDuration } from '../../game/format';
 import {
+  ascendCost,
+  ascendItem,
+  canAscendItem,
   canStartCraft,
   craftDurationSeconds,
   craftGoldCost,
   craftMaterialsCost,
+  exaltedItems,
   maxCraftableTier,
   startCraft,
 } from '../../game/guild';
-import type { CraftJob, EquipSlot } from '../../game/types';
+import type { AdventurerClass, CraftJob, EquipSlot, Equipment } from '../../game/types';
 import { useFormat } from '../../hooks/useFormat';
 import { useGameState, useGameStore } from '../../hooks/useGame';
+import { usePanelSection } from '../../hooks/usePanelSection';
+import { itemIcon, itemStatParts, itemTypeLabel } from '../itemDisplay';
 
 function materialName(id: string): string {
   return MATERIALS.find((m) => m.id === id)?.name ?? id;
@@ -31,7 +37,38 @@ const SLOT_ICON: Record<EquipSlot, string> = {
 
 const SLOTS: EquipSlot[] = ['weapon', 'armor', 'trinket'];
 
+const CLASS_ICON: Record<AdventurerClass, string> = {
+  warrior: '⚔️',
+  ranger: '🏹',
+  mage: '✨',
+};
+
 export function CraftingPanel() {
+  const [section, setSection] = usePanelSection<'craft' | 'ascend'>('crafting', 'craft');
+
+  return (
+    <div className="panel">
+      <div className="subtab-bar">
+        <button
+          className={`subtab ${section === 'craft' ? 'active' : ''}`}
+          onClick={() => setSection('craft')}
+        >
+          Craft
+        </button>
+        <button
+          className={`subtab ${section === 'ascend' ? 'active' : ''}`}
+          onClick={() => setSection('ascend')}
+        >
+          Ascend Equipment
+        </button>
+      </div>
+
+      {section === 'craft' ? <CraftSection /> : <AscendSection />}
+    </div>
+  );
+}
+
+function CraftSection() {
   const state = useGameState();
   const store = useGameStore();
   const fmt = useFormat();
@@ -52,78 +89,76 @@ export function CraftingPanel() {
   }
 
   return (
-    <div className="panel">
-      <section className="rows">
-        <h3 className="section-title">The Forge</h3>
-        <p className="detail-sub">
-          Spend gold and materials to forge equipment. Higher tiers need more — and
-          rarer — materials, and roll a bigger stat budget, but never change your
-          common/rare odds. The Forge can only produce common and rare gear —
-          epic and ✦ exalted only drop from monsters your champions defeat.
-        </p>
+    <section className="rows">
+      <h3 className="section-title">The Forge</h3>
+      <p className="detail-sub">
+        Spend gold and materials to forge equipment. Higher tiers need more — and
+        rarer — materials, and roll a bigger stat budget, but never change your
+        common/rare odds. The Forge can only produce common and rare gear —
+        epic and ✦ exalted only drop from monsters your champions defeat.
+      </p>
 
-        {job ? (
-          <CraftingProgress job={job} />
-        ) : maxTier === 0 ? (
-          <div className="row locked">Unlock a wilds zone before the forge has anything to work with.</div>
-        ) : (
-          <>
-            <h4 className="section-title">Slot</h4>
-            <div className="craft-options">
-              {SLOTS.map((s) => (
-                <button
-                  key={s}
-                  className={`small-button ${slot === s ? 'active' : ''}`}
-                  onClick={() => setSlot(s)}
-                >
-                  {SLOT_ICON[s]} {SLOT_LABEL[s]}
-                </button>
-              ))}
-            </div>
+      {job ? (
+        <CraftingProgress job={job} />
+      ) : maxTier === 0 ? (
+        <div className="row locked">Unlock a wilds zone before the forge has anything to work with.</div>
+      ) : (
+        <>
+          <h4 className="section-title">Slot</h4>
+          <div className="craft-options">
+            {SLOTS.map((s) => (
+              <button
+                key={s}
+                className={`small-button ${slot === s ? 'active' : ''}`}
+                onClick={() => setSlot(s)}
+              >
+                {SLOT_ICON[s]} {SLOT_LABEL[s]}
+              </button>
+            ))}
+          </div>
 
-            <h4 className="section-title">Tier</h4>
-            <div className="craft-options">
-              {Array.from({ length: maxTier }, (_, i) => i + 1).map((t) => (
-                <button
-                  key={t}
-                  className={`small-button ${clampedTier === t ? 'active' : ''}`}
-                  onClick={() => setTier(t)}
-                >
-                  T{t}
-                </button>
-              ))}
-            </div>
+          <h4 className="section-title">Tier</h4>
+          <div className="craft-options">
+            {Array.from({ length: maxTier }, (_, i) => i + 1).map((t) => (
+              <button
+                key={t}
+                className={`small-button ${clampedTier === t ? 'active' : ''}`}
+                onClick={() => setTier(t)}
+              >
+                T{t}
+              </button>
+            ))}
+          </div>
 
-            <h4 className="section-title">Quantity</h4>
-            <div className="craft-options">
-              {CRAFT_QUANTITIES.map((q) => (
-                <button
-                  key={q}
-                  className={`small-button ${quantity === q ? 'active' : ''}`}
-                  onClick={() => setQuantity(q)}
-                >
-                  ×{q}
-                </button>
-              ))}
-            </div>
+          <h4 className="section-title">Quantity</h4>
+          <div className="craft-options">
+            {CRAFT_QUANTITIES.map((q) => (
+              <button
+                key={q}
+                className={`small-button ${quantity === q ? 'active' : ''}`}
+                onClick={() => setQuantity(q)}
+              >
+                ×{q}
+              </button>
+            ))}
+          </div>
 
-            <div className="row locked">
-              {fmt(goldCost)} 🪙
-              {Object.entries(materialsCost).map(([id, n]) => (
-                <span key={id} className="mat-cost">
-                  {n} {materialName(id)}
-                </span>
-              ))}
-              <br />~{formatDuration(duration)} to finish
-            </div>
+          <div className="row locked">
+            {fmt(goldCost)} 🪙
+            {Object.entries(materialsCost).map(([id, n]) => (
+              <span key={id} className="mat-cost">
+                {n} {materialName(id)}
+              </span>
+            ))}
+            <br />~{formatDuration(duration)} to finish
+          </div>
 
-            <button className="small-button" disabled={!canCraft} onClick={handleCraft}>
-              🔨 Craft
-            </button>
-          </>
-        )}
-      </section>
-    </div>
+          <button className="small-button" disabled={!canCraft} onClick={handleCraft}>
+            🔨 Craft
+          </button>
+        </>
+      )}
+    </section>
   );
 }
 
@@ -147,6 +182,79 @@ function CraftingProgress({ job }: { job: CraftJob }) {
           <span className="progress-time">{formatDuration(remaining)} left</span>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Ascend equipment — upgrade an exalted item to ascendant rarity by burning
+// essence. Candidates: champions' currently equipped exalted gear first
+// (so the player sees what their roster is wearing), then unequipped exalted
+// items sitting in inventory.
+// ---------------------------------------------------------------------------
+
+function AscendSection() {
+  const state = useGameState();
+  const candidates = exaltedItems(state);
+
+  return (
+    <section className="rows">
+      <h3 className="section-title">Ascend Equipment</h3>
+      <p className="detail-sub">
+        Upgrade an ✦ exalted item into a ◆ ascendant one — a far bigger stat budget
+        and more bonus attributes, at the cost of a steep mix of essences scaled to
+        the item's own tier. The item keeps its slot; equipped gear stays equipped.
+      </p>
+
+      {candidates.length === 0 ? (
+        <div className="row locked">
+          No exalted equipment yet — it only drops from monsters your champions
+          defeat in the wilds.
+        </div>
+      ) : (
+        candidates.map(({ item, advId }) => (
+          <AscendRow key={item.id} item={item} advId={advId} />
+        ))
+      )}
+    </section>
+  );
+}
+
+function AscendRow({ item, advId }: { item: Equipment; advId?: number }) {
+  const state = useGameState();
+  const store = useGameStore();
+  const fmt = useFormat();
+  const cost = ascendCost(item.tier);
+  const canAscend = canAscendItem(state, item.id);
+  const wearer = advId !== undefined ? state.adventurers.find((a) => a.id === advId) : undefined;
+
+  return (
+    <div className={`row item-${item.rarity}`}>
+      <div className="row-info">
+        <span className="row-name">
+          {itemIcon(item)} {item.name} <span className="row-sub">T{item.tier}</span>
+        </span>
+        <span className="row-sub">
+          {itemTypeLabel(item)} · {itemStatParts(item).join(' · ')}
+        </span>
+        {wearer && (
+          <span className="row-good">
+            {CLASS_ICON[wearer.className]} Equipped by {wearer.name}
+          </span>
+        )}
+        <span className={canAscend ? 'row-desc' : 'row-bad'}>
+          {Object.entries(cost)
+            .map(([id, n]) => `${fmt(n)} ${materialName(id)}`)
+            .join(' · ')}
+        </span>
+      </div>
+      <button
+        className="small-button"
+        disabled={!canAscend}
+        onClick={() => store.dispatch((s) => ascendItem(s, item.id))}
+      >
+        ◆ Ascend
+      </button>
     </div>
   );
 }

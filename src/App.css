@@ -14,6 +14,7 @@
   --rare: #6fa8ff;
   --epic: #c07eff;
   --exalted: #ff9d3d;
+  --ascendant: #ff5ed4;
 }
 
 * {
@@ -791,6 +792,11 @@ button.row:disabled {
   box-shadow: 0 0 8px rgba(255, 157, 61, 0.35);
 }
 
+.item-ascendant {
+  border-color: var(--ascendant);
+  box-shadow: 0 0 8px rgba(255, 94, 212, 0.4);
+}
+
 .link-button {
   background: none;
   border: none;
@@ -848,6 +854,12 @@ button.row:disabled {
   box-shadow: 0 0 8px rgba(255, 157, 61, 0.3);
 }
 
+.equip-grid-item.item-ascendant {
+  border-color: var(--ascendant);
+  background: rgba(255, 94, 212, 0.16);
+  box-shadow: 0 0 8px rgba(255, 94, 212, 0.35);
+}
+
 /* Hover/focus/selected brighten the item without hiding its rarity tint. */
 .equip-grid-item:hover,
 .equip-grid-item:focus-visible {
@@ -872,6 +884,11 @@ button.row:disabled {
 .equip-grid-item.item-exalted:hover,
 .equip-grid-item.item-exalted:focus-visible {
   background: rgba(255, 157, 61, 0.22);
+}
+
+.equip-grid-item.item-ascendant:hover,
+.equip-grid-item.item-ascendant:focus-visible {
+  background: rgba(255, 94, 212, 0.24);
 }
 
 .equip-grid-item.selected {
@@ -1020,6 +1037,11 @@ button.row:disabled {
   border-color: var(--exalted);
 }
 
+.rarity-ascendant {
+  color: var(--ascendant);
+  border-color: var(--ascendant);
+}
+
 .equip-detail-stats {
   display: flex;
   gap: 14px;
@@ -1085,6 +1107,11 @@ button.row:disabled {
   box-shadow: 0 0 6px rgba(255, 157, 61, 0.25);
 }
 
+.equip-picker-item.item-ascendant {
+  background: rgba(255, 94, 212, 0.18);
+  box-shadow: 0 0 6px rgba(255, 94, 212, 0.3);
+}
+
 /* Section header with an action button on the right (e.g. Auto-equip). */
 .section-title-row {
   display: flex;
@@ -1146,6 +1173,10 @@ button.row:disabled {
 
 .equipped-slot.rarity-exalted {
   color: var(--exalted);
+}
+
+.equipped-slot.rarity-ascendant {
+  color: var(--ascendant);
 }
 
 @media (max-width: 480px) {

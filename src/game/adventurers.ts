@@ -52,6 +52,8 @@ import type {
 
 const CLASSES: AdventurerClass[] = ['warrior', 'ranger', 'mage'];
 const SLOTS: EquipSlot[] = ['weapon', 'armor', 'trinket'];
+// Ascendant is deliberately excluded — it's never rolled by rollRarity (see
+// ascendEquipment instead), so maxRarity here only ever caps up to exalted.
 const RARITY_ORDER: Rarity[] = ['common', 'rare', 'epic', 'exalted'];
 
 function pick<T>(items: T[], rng: Rng): T {
@@ -110,10 +112,11 @@ export function equipTypeDef(typeId: string): EquipTypeDef | undefined {
   return EQUIP_TYPES.find((t) => t.id === typeId);
 }
 
-/** Exalted items roll exclusively from EXALTED_PREFIXES; everything else
- *  rolls from the normal pool — the two never mix. */
+/** Ascendant rolls from the same exclusive pool as exalted (it's just the
+ *  next step up, not a new flavor of prefix); every other rarity shares the
+ *  normal pool — the two pools never mix. */
 function rollPrefix(rarity: Rarity, rng: Rng) {
-  const pool = rarity === 'exalted' ? EXALTED_PREFIXES : ITEM_PREFIXES;
+  const pool = rarity === 'exalted' || rarity === 'ascendant' ? EXALTED_PREFIXES : ITEM_PREFIXES;
   const total = pool.reduce((sum, p) => sum + p.weight, 0);
   let roll = rng() * total;
   for (const prefix of pool) {
@@ -129,24 +132,18 @@ function attrPointsForTier(tier: number): number {
 }
 
 /**
- * Generate a piece of equipment scaled to a location tier. `forcedSlot` pins
- * the slot instead of rolling one at random — used by crafting (guild.ts
- * startCraft/engine.ts processCrafting), where the player picks the slot.
- * `maxRarity` caps what can roll (see rollRarity) — crafting uses this to
- * keep the Forge to common/rare (see CRAFT_MAX_RARITY). `isSuper` boosts the
- * rarity roll toward epic/exalted — loot from a Super monster (see combat.ts).
+ * Roll the tier/rarity-scaled stat budget for one equipment type into a
+ * concrete name + atk/def/hp/attrs. Shared by generateEquipment (a fresh
+ * drop/craft, which also rolls the slot/type/rarity) and ascendEquipment (an
+ * upgrade, which keeps the existing item's type/tier and forces rarity to
+ * 'ascendant') so the two stay on exactly the same budget math.
  */
-export function generateEquipment(
-  id: number,
+function rollEquipmentStats(
+  type: EquipTypeDef,
   tier: number,
+  rarity: Rarity,
   rng: Rng,
-  forcedSlot?: EquipSlot,
-  maxRarity: Rarity = 'exalted',
-  isSuper = false,
-): Equipment {
-  const slot = forcedSlot ?? pick(SLOTS, rng);
-  const type = pick(EQUIP_TYPES.filter((t) => t.slot === slot), rng);
-  const rarity = rollRarity(tier, rng, maxRarity, isSuper);
+): { name: string; atk: number; def: number; hp: number; attrs: Partial<Attributes> } {
   const prefix = rollPrefix(rarity, rng);
   const mult = RARITY_MULT[rarity];
   const budget =
@@ -178,17 +175,49 @@ export function generateEquipment(
   }
 
   return {
-    id,
-    slot,
-    typeId: type.id,
-    rarity,
-    tier,
     name: `${prefix.name} ${pick(type.names, rng)}`,
     atk: Math.round(atk),
     def: Math.round(def),
     hp: Math.round(hp),
     attrs,
   };
+}
+
+/**
+ * Generate a piece of equipment scaled to a location tier. `forcedSlot` pins
+ * the slot instead of rolling one at random — used by crafting (guild.ts
+ * startCraft/engine.ts processCrafting), where the player picks the slot.
+ * `maxRarity` caps what can roll (see rollRarity) — crafting uses this to
+ * keep the Forge to common/rare (see CRAFT_MAX_RARITY). `isSuper` boosts the
+ * rarity roll toward epic/exalted — loot from a Super monster (see combat.ts).
+ */
+export function generateEquipment(
+  id: number,
+  tier: number,
+  rng: Rng,
+  forcedSlot?: EquipSlot,
+  maxRarity: Rarity = 'exalted',
+  isSuper = false,
+): Equipment {
+  const slot = forcedSlot ?? pick(SLOTS, rng);
+  const type = pick(EQUIP_TYPES.filter((t) => t.slot === slot), rng);
+  const rarity = rollRarity(tier, rng, maxRarity, isSuper);
+  const rolled = rollEquipmentStats(type, tier, rarity, rng);
+  return { id, slot, typeId: type.id, rarity, tier, ...rolled };
+}
+
+/**
+ * Upgrade an exalted item to ascendant rarity in place — same id/slot/typeId
+ * (whoever it's equipped on keeps wearing the same "slot"; see guild.ts
+ * ascendItem) and tier, but its atk/def/hp/attrs/name are fully re-rolled at
+ * ascendant's much bigger budget (RARITY_MULT/RARITY_BONUS_ATTRS) via the
+ * same rollEquipmentStats used for a fresh drop.
+ */
+export function ascendEquipment(item: Equipment, rng: Rng): Equipment {
+  const type = equipTypeDef(item.typeId);
+  if (!type) return item;
+  const rolled = rollEquipmentStats(type, item.tier, 'ascendant', rng);
+  return { ...item, rarity: 'ascendant', ...rolled };
 }
 
 // ---------------------------------------------------------------------------
