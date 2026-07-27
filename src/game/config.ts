@@ -50,7 +50,7 @@ export const AUTOSAVE_INTERVAL_MS = 10_000;
  * interval firing on schedule — see useGameLoop's visibility listeners.
  */
 export const BACKGROUND_CATCHUP_GAP_MS = 3_000;
-export const SAVE_VERSION = 16;
+export const SAVE_VERSION = 17;
 
 // ---------------------------------------------------------------------------
 // Act 1 — town income (low numbers by design)

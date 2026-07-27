@@ -44,6 +44,7 @@ import {
 } from './config';
 import { autoExploreMembers, locationDef, targetsForLocation } from './guild';
 import { computeModifiers } from './perks';
+import { addStats } from './stats';
 import type {
   Adventurer,
   AdventurerClass,
@@ -840,7 +841,7 @@ export function applyBattleResult(
     activityLog = [...state.activityLog, entry];
   }
 
-  return {
+  const next: GameState = {
     ...state,
     adventurers,
     gold: state.gold + result.rewards.gold,
@@ -852,6 +853,17 @@ export function applyBattleResult(
     nextEntityId: logKind ? logId + 1 : logId,
     activityLog,
   };
+
+  // Every battle in the game — manual Explore, Auto-Explore, dungeon rooms —
+  // lands here, so this is the one place lifetime combat counters are kept.
+  return addStats(next, {
+    battlesWon: result.outcome === 'win' ? 1 : 0,
+    battlesLost: result.outcome === 'win' ? 0 : 1,
+    monstersDefeated: result.party.reduce((n, p) => n + p.enemiesDefeated, 0),
+    injuries: result.party.filter((p) => p.knockedOut).length,
+    itemsFound: equipCount,
+    shardsFound: result.rewards.timeShards,
+  });
 }
 
 /** A win from *manual* Explore (never Auto-Explore — see processAutoExplore,

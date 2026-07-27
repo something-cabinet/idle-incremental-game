@@ -2,6 +2,7 @@ import { applyBattleResult, rollMonsterGroup, simulateBattle } from './combat';
 import type { BattleCarryIn, BattleOutcome, MonsterInstance } from './combat';
 import { DUNGEONS, DUNGEON_COMPLETION_MATERIAL_AMOUNT, DUNGEON_ROOM_COUNT, DUNGEON_BOSS_STAT_MULT, SUPER_STAT_MULT } from './config';
 import { locationDef } from './guild';
+import { addStats } from './stats';
 import type { Adventurer, DungeonDef, DungeonProgress, GameState, Rng } from './types';
 
 /** Dungeons: a repeatable multi-room gauntlet per zone (DUNGEON_ROOM_COUNT
@@ -84,6 +85,7 @@ export function fightDungeonRoom(
   const result = simulateBattle(state, party, monsters, locationId, rng, true, carryIn);
   let next = applyBattleResult(state, result, rng, 'dungeon');
   if (dungeon && result.outcome === 'win' && roomIndex === DUNGEON_ROOM_COUNT) {
+    next = addStats(next, { dungeonsCleared: 1 });
     const materialId = locationDef(locationId)?.materialId;
     if (materialId) {
       const materials = { ...next.materials };

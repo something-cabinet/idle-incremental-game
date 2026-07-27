@@ -15,6 +15,7 @@ import { localStorageAdapter } from './platform/storage';
 import { playClick, playNotify } from './ui/sfx';
 import { StoryModal } from './ui/StoryModal';
 import { TabBar, type TabId } from './ui/TabBar';
+import { OverviewPanel } from './ui/panels/OverviewPanel';
 import { TownPanel } from './ui/panels/TownPanel';
 import { GuildPanel } from './ui/panels/GuildPanel';
 import { MapPanel } from './ui/panels/MapPanel';
@@ -54,7 +55,7 @@ function initGame(): { store: GameStore; offline: OfflineReport | null } {
 export default function App() {
   const [init] = useState(initGame);
   const [offlineReport, setOfflineReport] = useState(init.offline);
-  const [tab, setTab] = useState<TabId>('town');
+  const [tab, setTab] = useState<TabId>('overview');
 
   // Backgrounded tabs don't remount the app, so a long absence (tab switch,
   // minimized browser, mobile suspension) needs the same "welcome back"
@@ -72,6 +73,7 @@ export default function App() {
       <div className="game">
         <Header />
         <main className="panel-host">
+          {tab === 'overview' && <OverviewPanel />}
           {tab === 'town' && <TownPanel />}
           {tab === 'guild' && <GuildPanel />}
           {tab === 'map' && <MapPanel />}

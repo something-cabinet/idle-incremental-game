@@ -29,6 +29,7 @@ export function timeTravel(state: GameState, now = Date.now()): GameState {
     lifetimeGoldEarned: state.lifetimeGoldEarned + state.totalGoldEarned,
     perks: state.perks,
     hometownSaved: state.hometownSaved,
+    stats: state.stats,
     settings: state.settings,
     // Returning travelers skip the intro beat; they've lived this before.
     storyFlags: { 'a1-arrival': true },

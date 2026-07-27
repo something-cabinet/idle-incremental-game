@@ -457,6 +457,36 @@ export interface StoryBeatDef {
 }
 
 // ---------------------------------------------------------------------------
+// Lifetime stats (display only — see game/stats.ts)
+// ---------------------------------------------------------------------------
+
+/**
+ * Running totals across every timeline, shown in the Overview tab. Purely
+ * cosmetic: no game rule reads these, so new counters can be added freely
+ * (see stats.ts migrateStats).
+ */
+export interface GameStats {
+  clicks: number;
+  /** Game seconds simulated, including credited offline time. */
+  timePlayedSeconds: number;
+  battlesWon: number;
+  battlesLost: number;
+  monstersDefeated: number;
+  /** Times a champion was knocked out in a battle. */
+  injuries: number;
+  championsHired: number;
+  /** Quest-board batches completed (one per adventurer per round). */
+  questsCompleted: number;
+  /** Equipment dropped by monsters. */
+  itemsFound: number;
+  itemsCrafted: number;
+  itemsDisassembled: number;
+  /** Dungeon boss rooms beaten (full runs completed). */
+  dungeonsCleared: number;
+  shardsFound: number;
+}
+
+// ---------------------------------------------------------------------------
 // Settings & state
 // ---------------------------------------------------------------------------
 
@@ -523,6 +553,9 @@ export interface GameState {
   prestigeCount: number; // timelines traveled
   perks: Record<string, number>;
   hometownSaved: boolean;
+
+  /** Lifetime display counters; persist across timelines (see stats.ts). */
+  stats: GameStats;
 
   settings: Settings;
   /** unix ms of last tick, used for offline progress */

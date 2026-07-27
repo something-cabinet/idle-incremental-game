@@ -11,6 +11,7 @@ import {
 } from './guild';
 import { productionPerSecond } from './logic';
 import { computeModifiers } from './perks';
+import { addStats } from './stats';
 import { checkStoryTriggers } from './story';
 import type { CraftJob, Equipment, GameState, Quest, Rng } from './types';
 
@@ -64,6 +65,12 @@ export function tick(
   next.inventory = craft.inventory;
   next.nextEntityId = craft.nextEntityId;
 
+  next.stats = addStats(next, {
+    timePlayedSeconds: dtSeconds,
+    questsCompleted: quest.completions,
+    itemsCrafted: craft.crafted,
+  }).stats;
+
   // Auto-Explore: assigned champions fight the zone they're posted to. Returns
   // a fresh state (roster/gold/materials/inventory/shards/log all updated), so
   // reassign rather than mutate. Offline catch-up replays this same loop.
@@ -85,6 +92,8 @@ interface QuestOutput {
   goldSpent: number;
   reputation: number;
   quests: Quest[];
+  /** Batches finished this tick, for the lifetime counter (see stats.ts). */
+  completions: number;
 }
 
 /**
@@ -110,7 +119,13 @@ interface QuestOutput {
  * so a huge offline dt can't overshoot past the quest's own limit.
  */
 function processQuests(state: GameState, dtSeconds: number, townGold: number): QuestOutput {
-  const out: QuestOutput = { materials: {}, goldSpent: 0, reputation: 0, quests: state.quests };
+  const out: QuestOutput = {
+    materials: {},
+    goldSpent: 0,
+    reputation: 0,
+    quests: state.quests,
+    completions: 0,
+  };
   if (state.quests.length === 0) return out;
 
   const allocation = allocateAdventurers(state);
@@ -150,6 +165,7 @@ function processQuests(state: GameState, dtSeconds: number, townGold: number): Q
     }
     out.goldSpent += r.completions * questTotalGold(r.quest);
     out.reputation += r.completions * questTotalReputation(r.quest);
+    out.completions += r.completions;
 
     const completedCount = r.quest.completedCount + r.completions;
     const finished = r.quest.repeatCount > 0 && completedCount >= r.quest.repeatCount;
@@ -171,6 +187,8 @@ interface CraftOutput {
   crafting: CraftJob | null;
   inventory: Equipment[];
   nextEntityId: number;
+  /** Items minted this tick, for the lifetime counter (see stats.ts). */
+  crafted: number;
 }
 
 /**
@@ -184,14 +202,24 @@ interface CraftOutput {
 function processCrafting(state: GameState, rng: Rng): CraftOutput {
   const job = state.crafting;
   if (!job || state.runTimeSeconds < job.endsAt) {
-    return { crafting: job, inventory: state.inventory, nextEntityId: state.nextEntityId };
+    return {
+      crafting: job,
+      inventory: state.inventory,
+      nextEntityId: state.nextEntityId,
+      crafted: 0,
+    };
   }
   let nextId = state.nextEntityId;
   const items: Equipment[] = [];
   for (let i = 0; i < job.quantity; i++) {
     items.push(generateEquipment(nextId++, job.tier, rng, job.slot, CRAFT_MAX_RARITY));
   }
-  return { crafting: null, inventory: [...state.inventory, ...items], nextEntityId: nextId };
+  return {
+    crafting: null,
+    inventory: [...state.inventory, ...items],
+    nextEntityId: nextId,
+    crafted: items.length,
+  };
 }
 
 // ---------------------------------------------------------------------------

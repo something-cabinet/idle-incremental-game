@@ -17,6 +17,7 @@ import {
 } from './config';
 import { computeModifiers } from './perks';
 import { computeTownSkillBonuses } from './skills';
+import { addStats, EMPTY_STATS, migrateStats } from './stats';
 import type { Adventurer, Attributes, Equipment, GameState, SaveData, Settings } from './types';
 
 /** Town economy + state lifecycle. Every function is pure: (state) => state. */
@@ -64,6 +65,7 @@ export function createInitialState(now = Date.now()): GameState {
     prestigeCount: 0,
     perks: {},
     hometownSaved: false,
+    stats: { ...EMPTY_STATS },
     settings: { ...DEFAULT_SETTINGS },
     lastUpdate: now,
   };
@@ -123,6 +125,10 @@ export function migrateSave(data: SaveData, now = Date.now()): GameState {
     // that never had that stat scaling in the first place.
     // v16 added per-zone dungeon-unlock tracking; older saves start unlocked nowhere.
     dungeonProgress: s.dungeonProgress ?? {},
+    // v17 added the Overview tab's lifetime counters. They're display-only, so
+    // an older save just starts every counter at 0 rather than back-deriving
+    // history it never recorded.
+    stats: migrateStats(s.stats),
   };
 }
 
@@ -219,7 +225,7 @@ export function earnGold(state: GameState, amount: number): GameState {
 }
 
 export function click(state: GameState): GameState {
-  return earnGold(state, effectiveClickPower(state));
+  return addStats(earnGold(state, effectiveClickPower(state)), { clicks: 1 });
 }
 
 // ---------------------------------------------------------------------------

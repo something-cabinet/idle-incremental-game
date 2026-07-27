@@ -2,7 +2,7 @@ import { forgeUnlocked } from '../game/guild';
 import { isTimeTravelUnlocked } from '../game/prestige';
 import { useGameState } from '../hooks/useGame';
 
-export type TabId = 'town' | 'guild' | 'map' | 'inventory' | 'crafting' | 'timeline' | 'settings';
+export type TabId = 'overview' | 'town' | 'guild' | 'map' | 'inventory' | 'crafting' | 'timeline' | 'settings';
 
 interface TabDef {
   id: TabId;
@@ -11,6 +11,7 @@ interface TabDef {
 }
 
 const TABS: TabDef[] = [
+  { id: 'overview', label: 'Overview', icon: '📊' },
   { id: 'town', label: 'Town', icon: '🏘' },
   { id: 'guild', label: 'Guild', icon: '🛡' },
   { id: 'map', label: 'Map', icon: '🗺' },

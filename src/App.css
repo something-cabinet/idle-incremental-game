@@ -140,7 +140,9 @@ body {
 }
 
 .tab-label {
-  font-size: 0.66rem;
+  /* Eight tabs share the bar, so labels must never wrap or reflow it. */
+  font-size: 0.62rem;
+  white-space: nowrap;
 }
 
 /* ---- Panels & rows ---- */
@@ -1533,3 +1535,53 @@ button.row:disabled {
   background: rgba(255, 139, 122, 0.25);
 }
 
+
+/* ---- Overview dashboard ---- */
+.overview-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 13px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.overview-hero-title {
+  font-weight: 700;
+}
+
+/* Milestones are read-only status lines, so they sit flatter than a .row
+   the player can act on. */
+.overview-milestone {
+  padding: 8px 13px;
+  background: transparent;
+}
+
+.overview-milestone.done {
+  border-color: var(--green);
+}
+
+.overview-milestone.done .row-desc {
+  color: var(--text);
+}
+
+.overview-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.overview-chip {
+  padding: 4px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.overview-chip strong {
+  color: var(--text);
+}

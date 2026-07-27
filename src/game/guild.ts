@@ -37,6 +37,7 @@ import {
 } from './config';
 import { productionPerSecond } from './logic';
 import { computeModifiers } from './perks';
+import { addStats } from './stats';
 import type {
   Adventurer,
   EquipSlot,
@@ -109,12 +110,15 @@ export function hireAdventurer(state: GameState, rng: Rng = Math.random): GameSt
   const cost = hireCost(state);
   if (state.gold < cost) return state;
   const adv = generateAdventurer(state.nextEntityId, rng);
-  return {
-    ...state,
-    gold: state.gold - cost,
-    nextEntityId: state.nextEntityId + 1,
-    adventurers: [...state.adventurers, adv],
-  };
+  return addStats(
+    {
+      ...state,
+      gold: state.gold - cost,
+      nextEntityId: state.nextEntityId + 1,
+      adventurers: [...state.adventurers, adv],
+    },
+    { championsHired: 1 },
+  );
 }
 
 export function hireCandidate(state: GameState, candidateId: number): GameState {
@@ -124,12 +128,15 @@ export function hireCandidate(state: GameState, candidateId: number): GameState 
   if (state.gold < cost) return state;
   const candidate = state.recruitCandidates.find((c) => c.id === candidateId);
   if (!candidate) return state;
-  return {
-    ...state,
-    gold: state.gold - cost,
-    adventurers: [...state.adventurers, candidate],
-    recruitCandidates: state.recruitCandidates.filter((c) => c.id !== candidateId),
-  };
+  return addStats(
+    {
+      ...state,
+      gold: state.gold - cost,
+      adventurers: [...state.adventurers, candidate],
+      recruitCandidates: state.recruitCandidates.filter((c) => c.id !== candidateId),
+    },
+    { championsHired: 1 },
+  );
 }
 
 /** Permanently remove a champion from the roster: unequips all their gear
@@ -289,14 +296,17 @@ export function disassembleItem(state: GameState, itemId: number): GameState {
   const item = state.inventory.find((i) => i.id === itemId);
   if (!item) return state;
   const materialId = essenceMaterialId(item.rarity);
-  return {
-    ...state,
-    inventory: state.inventory.filter((i) => i.id !== itemId),
-    materials: {
-      ...state.materials,
-      [materialId]: (state.materials[materialId] ?? 0) + essenceYield(item),
+  return addStats(
+    {
+      ...state,
+      inventory: state.inventory.filter((i) => i.id !== itemId),
+      materials: {
+        ...state.materials,
+        [materialId]: (state.materials[materialId] ?? 0) + essenceYield(item),
+      },
     },
-  };
+    { itemsDisassembled: 1 },
+  );
 }
 
 export function disassembleItems(state: GameState, itemIds: number[]): GameState {
@@ -308,11 +318,14 @@ export function disassembleItems(state: GameState, itemIds: number[]): GameState
     const materialId = essenceMaterialId(item.rarity);
     materials[materialId] = (materials[materialId] ?? 0) + essenceYield(item);
   }
-  return {
-    ...state,
-    inventory: state.inventory.filter((i) => !ids.has(i.id)),
-    materials,
-  };
+  return addStats(
+    {
+      ...state,
+      inventory: state.inventory.filter((i) => !ids.has(i.id)),
+      materials,
+    },
+    { itemsDisassembled: sold.length },
+  );
 }
 
 // ---------------------------------------------------------------------------
