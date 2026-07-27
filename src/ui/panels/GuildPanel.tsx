@@ -31,6 +31,7 @@ import type { Adventurer, AdventurerClass, Attributes, EquipSlot, Quest } from '
 import { useFormat } from '../../hooks/useFormat';
 import { useGameState, useGameStore } from '../../hooks/useGame';
 import { usePanelSection } from '../../hooks/usePanelSection';
+import { GearPerkBadge } from '../GearPerkBadge';
 import { itemIcon, itemStatParts, itemTypeLabel } from '../itemDisplay';
 
 type Section = 'adventurers' | 'quests' | 'upgrades';
@@ -540,6 +541,7 @@ function ChampionDetailModal({ adv, onClose }: { adv: Adventurer; onClose: () =>
                     )}
                   </div>
                 </div>
+                {item && <GearPerkBadge item={item} />}
                 {pickerSlot === slot && (
                   <div className="equip-picker">
                     {candidates.length === 0 ? (

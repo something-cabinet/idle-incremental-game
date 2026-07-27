@@ -5,6 +5,7 @@ import type { EquipSlot, Equipment, Rarity } from '../../game/types';
 import { useFormat } from '../../hooks/useFormat';
 import { useGameState, useGameStore } from '../../hooks/useGame';
 import { usePanelSection } from '../../hooks/usePanelSection';
+import { GearPerkBadge } from '../GearPerkBadge';
 import { itemIcon, itemStatParts, itemTypeLabel } from '../itemDisplay';
 
 type Section = 'materials' | 'equipment';
@@ -280,6 +281,7 @@ function EquipmentSection() {
                 <span key={part}>{part}</span>
               ))}
             </div>
+            <GearPerkBadge item={selected} />
             <button className="small-button" onClick={() => handleDisassemble(selected)}>
               Disassemble for {essenceYield(selected)} {materialName(essenceMaterialId(selected.rarity))}
             </button>

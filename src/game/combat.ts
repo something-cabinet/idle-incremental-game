@@ -13,6 +13,7 @@ import {
   COMBAT_DAMAGE_VARIANCE,
   COMBAT_DEF_MITIGATION_K,
   ENCOUNTER_INTERVAL,
+  EQUIPMENT_PERK_CAP,
   EXPLORE_EQUIPMENT_CHANCE,
   EXPLORE_MAX_PARTY_SIZE,
   EXPLORE_MAX_TURNS,
@@ -42,6 +43,7 @@ import {
   SUPER_STAT_MULT,
   tierXp,
 } from './config';
+import { equippedPerkEffects } from './equipmentPerks';
 import { autoExploreMembers, locationDef, targetsForLocation } from './guild';
 import { computeModifiers } from './perks';
 import { addStats } from './stats';
@@ -52,6 +54,7 @@ import type {
   ClassSkillDef,
   ClassSkillEffect,
   Equipment,
+  EquipmentPerkEffect,
   GameState,
   LogEntry,
   LogKind,
@@ -195,6 +198,64 @@ export interface PartyBattleResult {
  *  half-charged skill — how a dungeon run carries state from room to room
  *  (see dungeon.ts). Keyed by champion id. */
 export type BattleCarryIn = Record<number, { hp: number; skillCooldownRemaining: number }>;
+
+/**
+ * One champion's ascendant-gear perks, flattened into the handful of numbers
+ * the battle loop actually needs (see equipmentPerks.ts / EQUIPMENT_PERKS).
+ * A champion can wear up to three ascendant items, so duplicates of a kind
+ * stack; each field is already tier-scaled and capped.
+ */
+interface GearPerks {
+  thorns: number;
+  block: number;
+  pierce: number;
+  twinstrike: number;
+  execute: { threshold: number; mult: number } | null;
+  aegis: number;
+  regen: number;
+}
+
+const NO_GEAR_PERKS: GearPerks = {
+  thorns: 0,
+  block: 0,
+  pierce: 0,
+  twinstrike: 0,
+  execute: null,
+  aegis: 0,
+  regen: 0,
+};
+
+/**
+ * Fold a champion's equipped perk effects into one GearPerks. Same-kind perks
+ * on different items add together (then re-clamp to the kind's cap, so three
+ * Bulwarks can't reach certainty); `execute` instead keeps the single
+ * strongest, since two different HP thresholds can't be summed coherently.
+ */
+function aggregateGearPerks(effects: EquipmentPerkEffect[]): GearPerks {
+  const out: GearPerks = { ...NO_GEAR_PERKS };
+  for (const e of effects) {
+    switch (e.kind) {
+      case 'thorns': out.thorns += e.fraction; break;
+      case 'pierce': out.pierce += e.fraction; break;
+      case 'aegis': out.aegis += e.fraction; break;
+      case 'regen': out.regen += e.fraction; break;
+      case 'block': out.block += e.chance; break;
+      case 'twinstrike': out.twinstrike += e.chance; break;
+      case 'execute':
+        if (!out.execute || e.mult > out.execute.mult) {
+          out.execute = { threshold: e.threshold, mult: e.mult };
+        }
+        break;
+    }
+  }
+  out.thorns = Math.min(EQUIPMENT_PERK_CAP.thorns, out.thorns);
+  out.pierce = Math.min(EQUIPMENT_PERK_CAP.pierce, out.pierce);
+  out.aegis = Math.min(EQUIPMENT_PERK_CAP.aegis, out.aegis);
+  out.regen = Math.min(EQUIPMENT_PERK_CAP.regen, out.regen);
+  out.block = Math.min(EQUIPMENT_PERK_CAP.block, out.block);
+  out.twinstrike = Math.min(EQUIPMENT_PERK_CAP.twinstrike, out.twinstrike);
+  return out;
+}
 
 export interface BattleOutcome {
   locationId: string;
@@ -347,12 +408,14 @@ export function simulateBattle(
   // Live-combat perk effects keyed by champion id (empty unless `live`).
   const critById: Record<number, { chance: number; mult: number }> = {};
   const lifestealById: Record<number, number> = {};
+  const gearById: Record<number, GearPerks> = {};
   if (live) {
     for (const a of party) {
       for (const e of championPerkEffects(a)) {
         if (e.kind === 'crit') critById[a.id] = { chance: e.chance, mult: e.mult };
         else if (e.kind === 'lifesteal') lifestealById[a.id] = e.fraction;
       }
+      gearById[a.id] = aggregateGearPerks(equippedPerkEffects(a));
     }
   }
 
@@ -495,9 +558,24 @@ export function simulateBattle(
     });
   }
 
-  /** One hit: mitigated damage (× crit for party), lifesteal, and a log line. */
+  /** A champion's aggregated ascendant-gear perks (all zero outside `live`). */
+  const gearOf = (c: Combatant): GearPerks =>
+    (c.side === 'party' ? gearById[c.refId] : undefined) ?? NO_GEAR_PERKS;
+
+  /**
+   * One hit: mitigated damage (× crit for party), lifesteal, and a log line.
+   *
+   * Ascendant-gear perks layer on around that (all no-ops outside `live`):
+   * the attacker's `pierce` thins the target's Defense and `execute` amplifies
+   * the blow against a wounded enemy, while a defending champion's `block`
+   * can void it outright, `aegis` softens whatever lands, and `thorns` bounces
+   * a share of the damage actually taken back at the attacker.
+   */
   function strike(attacker: Combatant, target: Combatant, power: number, skillName?: string) {
-    let damage = rollDamage(atkOf(attacker) * power, defOf(target), rng);
+    const gear = gearOf(attacker);
+    const targetGear = gearOf(target);
+
+    let damage = rollDamage(atkOf(attacker) * power, defOf(target) * (1 - gear.pierce), rng);
     let crit = false;
     if (attacker.side === 'party') {
       const c = critById[attacker.refId];
@@ -505,7 +583,23 @@ export function simulateBattle(
         damage = Math.round(damage * c.mult);
         crit = true;
       }
+      const ex = gear.execute;
+      if (ex && target.maxHp > 0 && target.hp / target.maxHp <= ex.threshold) {
+        damage = Math.round(damage * ex.mult);
+      }
     }
+
+    // Defender-side gear: a block voids the hit, otherwise aegis softens it.
+    let blocked = false;
+    if (target.side === 'party') {
+      if (targetGear.block > 0 && rng() < targetGear.block) {
+        damage = 0;
+        blocked = true;
+      } else if (targetGear.aegis > 0) {
+        damage = Math.round(damage * (1 - targetGear.aegis));
+      }
+    }
+
     target.hp -= damage;
     if (attacker.side === 'party') {
       const steal = lifestealById[attacker.refId];
@@ -523,7 +617,29 @@ export function simulateBattle(
       defenderDefeated: target.hp <= 0,
       ...(skillName ? { skillName, kind: 'skill' as const } : {}),
       ...(crit ? { crit: true } : {}),
+      ...(blocked ? { effectLabel: 'Blocked' } : {}),
     });
+
+    // Thorns pays back a share of the damage that actually landed, as its own
+    // non-lunge log line (kind 'dot') so the viewer flashes the attacker in
+    // place rather than replaying it as a second attack.
+    if (target.side === 'party' && targetGear.thorns > 0 && damage > 0 && attacker.hp > 0) {
+      const reflected = Math.max(1, Math.round(damage * targetGear.thorns));
+      attacker.hp -= reflected;
+      turns++;
+      pushLog({
+        attackerSide: target.side,
+        attackerName: target.name,
+        defenderSide: attacker.side,
+        defenderName: attacker.name,
+        damage: reflected,
+        defenderHpAfter: Math.max(0, attacker.hp),
+        defenderMaxHp: attacker.maxHp,
+        defenderDefeated: attacker.hp <= 0,
+        kind: 'dot',
+        effectLabel: 'Thorns',
+      });
+    }
   }
 
   function applyDamageEffect(caster: Combatant, eff: Extract<ClassSkillEffect, { kind: 'damage' }>, skillName: string) {
@@ -650,6 +766,29 @@ export function simulateBattle(
         if (slot.cooldownRemaining > 0) slot.cooldownRemaining -= 1;
       }
 
+      // Regen gear mends its bearer at the start of their own turn — before
+      // any DoT tick, so a poisoned champion nets the difference.
+      const regen = gearOf(attacker).regen;
+      if (regen > 0 && attacker.hp < attacker.maxHp) {
+        const healed = Math.min(
+          attacker.maxHp - attacker.hp,
+          Math.max(1, Math.round(attacker.maxHp * regen)),
+        );
+        attacker.hp += healed;
+        pushLog({
+          attackerSide: attacker.side,
+          attackerName: attacker.name,
+          defenderSide: attacker.side,
+          defenderName: attacker.name,
+          damage: 0,
+          defenderHpAfter: attacker.hp,
+          defenderMaxHp: attacker.maxHp,
+          defenderDefeated: false,
+          kind: 'buff',
+          effectLabel: `+${healed}`,
+        });
+      }
+
       // Damage-over-time first (only ever populated in live battles).
       let canAct = true;
       if (attacker.statuses.length > 0) {
@@ -673,7 +812,18 @@ export function simulateBattle(
           castSkill(attacker, ready);
         } else {
           const enemies = livingEnemies(attacker);
-          if (enemies.length > 0) strike(attacker, enemies[Math.floor(rng() * enemies.length)], 1);
+          if (enemies.length > 0) {
+            strike(attacker, enemies[Math.floor(rng() * enemies.length)], 1);
+            // Twinstrike only ever doubles a *basic* attack, and only once —
+            // it re-rolls its target rather than chaining off the first hit.
+            const twin = gearOf(attacker).twinstrike;
+            if (twin > 0 && rng() < twin && turns < EXPLORE_MAX_TURNS) {
+              const stillAlive = livingEnemies(attacker);
+              if (stillAlive.length > 0) {
+                strike(attacker, stillAlive[Math.floor(rng() * stillAlive.length)], 1);
+              }
+            }
+          }
         }
       }
 

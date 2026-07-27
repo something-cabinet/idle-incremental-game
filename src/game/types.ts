@@ -84,6 +84,12 @@ export interface Equipment {
   typeId: string;
   name: string;
   rarity: Rarity;
+  /**
+   * EquipmentPerkDef id — ascendant items only (granted when ascending; see
+   * guild.ts ascendItem). Absent on every other rarity, and on pre-ascension
+   * saves, so it stays optional rather than needing a save migration.
+   */
+  perkId?: string;
   /** Location/craft tier this item was generated at — drives its stat
    * budget (see generateEquipment) and, on disassembly, its essence yield. */
   tier: number;
@@ -146,6 +152,56 @@ export interface ChampionPerkDef {
   /** Human-readable summary shown in the champion detail view. */
   description: string;
   effects: ChampionPerkEffect[];
+}
+
+// ---------------------------------------------------------------------------
+// Equipment perks (ascendant-rarity gear only)
+// ---------------------------------------------------------------------------
+
+/**
+ * Properties of the *gear itself*, granted when an exalted item is ascended
+ * (see guild.ts ascendItem). Deliberately disjoint from ChampionPerkEffect:
+ * champion perks shape who a champion innately *is* (attributes, HP, growth,
+ * XP, recovery), while these describe what a piece of equipment *does* in a
+ * fight — reflecting blows, turning them aside, biting through armor.
+ *
+ * All of them are live-combat only, the same rule champion crit/lifesteal
+ * already follow: they fire in manual Explore and Dungeon battles, and
+ * Auto-Explore/offline ignores them (see combat.ts simulateBattle `live`).
+ *
+ * Every effect is a pure upside — ascending costs a fortune in essence, so
+ * the reward is never a gamble that can leave gear worse than it was.
+ *
+ * Potency scales with the item's tier (see equipmentPerks.ts
+ * scaledEquipmentPerkEffect); the numbers stored here are the tier-1 base.
+ */
+export type EquipmentPerkEffect =
+  /** Reflect `fraction` of incoming damage back at the attacker. */
+  | { kind: 'thorns'; fraction: number }
+  /** `chance` to negate an incoming hit outright. */
+  | { kind: 'block'; chance: number }
+  /** Ignore `fraction` of the target's Defense when striking. */
+  | { kind: 'pierce'; fraction: number }
+  /** `chance` for a basic attack to land a second time. */
+  | { kind: 'twinstrike'; chance: number }
+  /** Multiply damage by `mult` against enemies at/below `threshold` HP. */
+  | { kind: 'execute'; threshold: number; mult: number }
+  /** Reduce all incoming damage by `fraction`. */
+  | { kind: 'aegis'; fraction: number }
+  /** Heal `fraction` of max HP at the start of each of the wearer's turns. */
+  | { kind: 'regen'; fraction: number };
+
+/** One perk an ascendant item can carry. Unlike a champion perk, an
+ *  equipment perk is always exactly one effect — its single defining trait. */
+export interface EquipmentPerkDef {
+  id: string;
+  name: string;
+  /**
+   * Display text with `{v}` (and `{t}` for execute) substituted with this
+   * item's tier-scaled numbers — see equipmentPerks.ts equipmentPerkText.
+   */
+  description: string;
+  effect: EquipmentPerkEffect;
 }
 
 // ---------------------------------------------------------------------------

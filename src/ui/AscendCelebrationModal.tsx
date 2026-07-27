@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import type { Equipment } from '../game/types';
 import { useGameState } from '../hooks/useGame';
+import { GearPerkBadge } from './GearPerkBadge';
 import { itemIcon, itemStatDelta } from './itemDisplay';
 import { playAscend } from './sfx';
 
@@ -83,6 +84,14 @@ export function AscendCelebrationModal({
                 </span>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* The perk is the headline reward of ascending, not a footnote. */}
+        {after.perkId && (
+          <div className="ascend-perk-reveal">
+            <span className="ascend-perk-heading">Perk awakened</span>
+            <GearPerkBadge item={after} />
           </div>
         )}
 

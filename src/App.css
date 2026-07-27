@@ -270,6 +270,16 @@ button.row:disabled {
   background: color-mix(in srgb, var(--blue, #4a7fd0) 9%, transparent);
 }
 
+/* An ascendant item's own perk — magenta, matching the rarity. */
+.gear-perk-row {
+  border-left: 3px solid var(--ascendant);
+  background: color-mix(in srgb, var(--ascendant) 10%, transparent);
+}
+
+.gear-perk-row .row-name {
+  color: var(--ascendant);
+}
+
 .perk-tag {
   margin-left: 0.5em;
   padding: 0.05em 0.45em;
@@ -1746,6 +1756,23 @@ button.row:disabled {
 
 .ascend-delta-after.down {
   color: var(--red);
+}
+
+.ascend-perk-reveal {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  text-align: left;
+}
+
+.ascend-perk-heading {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ascendant);
+  text-align: center;
 }
 
 /* Reduced motion: no pulse/pop/sparkles, just the static end state. */

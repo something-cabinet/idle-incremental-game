@@ -208,9 +208,10 @@ function AscendSection() {
     <section className="rows">
       <h3 className="section-title">Ascend Equipment</h3>
       <p className="detail-sub">
-        Upgrade an ✦ exalted item into a ◆ ascendant one — a far bigger stat budget
-        and more bonus attributes, at the cost of a steep mix of essences scaled to
-        the item's own tier. The item keeps its slot; equipped gear stays equipped.
+        Upgrade an ✦ exalted item into a ◆ ascendant one — a far bigger stat budget,
+        more bonus attributes, and a <strong>gear perk</strong> that only ascendant
+        equipment can carry, at the cost of a steep mix of essences scaled to the
+        item's own tier. The item keeps its slot; equipped gear stays equipped.
       </p>
 
       {candidates.length === 0 ? (

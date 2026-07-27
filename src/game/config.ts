@@ -7,6 +7,8 @@ import type {
   ClassSkillDef,
   DungeonDef,
   EquipTypeDef,
+  EquipmentPerkDef,
+  EquipmentPerkEffect,
   GuildUpgradeDef,
   ItemPrefixDef,
   JobDef,
@@ -370,6 +372,72 @@ export const CHAMPION_PERKS: ChampionPerkDef[] = [
     ],
   },
 ];
+
+/**
+ * Perks an ascendant item can carry — one is rolled when an exalted item is
+ * ascended (see guild.ts ascendItem). Every one is a pure upside describing
+ * what the *gear* does in a fight, never what its wearer innately is (that's
+ * CHAMPION_PERKS' job) — see EquipmentPerkEffect.
+ *
+ * The numbers below are the tier-1 base; a perk on a higher-tier item scales
+ * up by EQUIPMENT_PERK_TIER_RATE per tier, clamped by EQUIPMENT_PERK_CAP
+ * (see equipmentPerks.ts). `{v}`/`{t}` in a description are substituted with
+ * the item's own scaled numbers, so the text always matches what it does.
+ */
+export const EQUIPMENT_PERKS: EquipmentPerkDef[] = [
+  {
+    id: 'thornmail', name: 'Thornmail',
+    description: 'Reflects {v} of the damage its bearer takes back at the attacker.',
+    effect: { kind: 'thorns', fraction: 0.18 },
+  },
+  {
+    id: 'bulwark', name: 'Bulwark',
+    description: '{v} chance to turn an incoming blow aside entirely.',
+    effect: { kind: 'block', chance: 0.08 },
+  },
+  {
+    id: 'rending', name: 'Rending Edge',
+    description: 'Bites through {v} of the target’s Defense.',
+    effect: { kind: 'pierce', fraction: 0.15 },
+  },
+  {
+    id: 'twinstrike', name: 'Twinstrike',
+    description: '{v} chance for a basic attack to land a second time.',
+    effect: { kind: 'twinstrike', chance: 0.1 },
+  },
+  {
+    id: 'executioner', name: "Executioner's Mark",
+    description: 'Deals {v}× damage to enemies at or below {t} health.',
+    effect: { kind: 'execute', threshold: 0.3, mult: 1.4 },
+  },
+  {
+    id: 'aegis', name: 'Aegis',
+    description: 'Reduces all incoming damage by {v}.',
+    effect: { kind: 'aegis', fraction: 0.07 },
+  },
+  {
+    id: 'lifewell', name: 'Lifewell',
+    description: 'Mends {v} of its bearer’s max HP at the start of each of their turns.',
+    effect: { kind: 'regen', fraction: 0.03 },
+  },
+];
+
+/** Per-tier potency growth for an equipment perk: tier 1 is the listed base,
+ *  each tier above adds this much of it (tier 6 ⇒ 1.75× the base). */
+export const EQUIPMENT_PERK_TIER_RATE = 0.15;
+
+/** Ceiling per effect kind, so stacking three ascendant items (and high tiers)
+ *  can't push a chance/reduction toward certainty. `execute` caps the *bonus*
+ *  above 1× rather than the multiplier itself. */
+export const EQUIPMENT_PERK_CAP: Record<EquipmentPerkEffect['kind'], number> = {
+  thorns: 0.6,
+  block: 0.35,
+  pierce: 0.6,
+  twinstrike: 0.4,
+  execute: 1.5,
+  aegis: 0.35,
+  regen: 0.15,
+};
 
 /**
  * Class active skills — every champion rolls one from their class's pool at

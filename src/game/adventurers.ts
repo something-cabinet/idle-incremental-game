@@ -31,6 +31,7 @@ import {
   WEAPON_SCALE_MAX,
   xpToNext,
 } from './config';
+import { rollEquipmentPerk } from './equipmentPerks';
 import { computeModifiers } from './perks';
 import type {
   Adventurer,
@@ -212,12 +213,15 @@ export function generateEquipment(
  * ascendItem) and tier, but its atk/def/hp/attrs/name are fully re-rolled at
  * ascendant's much bigger budget (RARITY_MULT/RARITY_BONUS_ATTRS) via the
  * same rollEquipmentStats used for a fresh drop.
+ *
+ * Ascending also grants the item a perk — a combat trait belonging to the
+ * gear itself, exclusive to this rarity (see equipmentPerks.ts).
  */
 export function ascendEquipment(item: Equipment, rng: Rng): Equipment {
   const type = equipTypeDef(item.typeId);
   if (!type) return item;
   const rolled = rollEquipmentStats(type, item.tier, 'ascendant', rng);
-  return { ...item, rarity: 'ascendant', ...rolled };
+  return { ...item, rarity: 'ascendant', perkId: rollEquipmentPerk(rng), ...rolled };
 }
 
 // ---------------------------------------------------------------------------

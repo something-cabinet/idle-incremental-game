@@ -405,6 +405,8 @@ const CRIT_COLOR = 0xff5a3c;
 const BUFF_COLOR = 0x5ad06a;
 const STATUS_COLOR = 0xb06ad0;
 const DOT_COLOR = 0xe08a3a;
+/** Bulwark gear voiding a hit — reads as a shield, not a damage number. */
+const BLOCK_COLOR = 0x8fd0ff;
 const SKILL_LABEL_COLOR = 0xffffff;
 const CAST_MS = 360;
 
@@ -997,12 +999,14 @@ export function BattleViewer({
             const dmg = entry.damage;
             const crit = !!entry.crit;
             anyCrit = anyCrit || crit;
+            // A hit voided by Bulwark gear floats "Blocked" rather than "0".
+            const blocked = !!entry.effectLabel && dmg === 0;
             const floater = createFloater(
               defender.container.x,
               defender.container.y - defender.height / 2 - 10,
-              crit ? `${dmg}!` : String(dmg),
-              crit ? CRIT_COLOR : 0xffdd44,
-              crit ? 22 : 16,
+              blocked ? entry.effectLabel! : crit ? `${dmg}!` : String(dmg),
+              blocked ? BLOCK_COLOR : crit ? CRIT_COLOR : 0xffdd44,
+              crit ? 22 : blocked ? 13 : 16,
             );
             st.floaters.push(floater);
             st.floatLayer.addChild(floater.text);
