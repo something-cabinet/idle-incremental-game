@@ -2,11 +2,12 @@ import { useEffect } from 'react';
 import type { Equipment } from '../game/types';
 import { useGameState } from '../hooks/useGame';
 import { GearPerkBadge } from './GearPerkBadge';
-import { itemIcon, itemStatDelta } from './itemDisplay';
+import { itemIcon, itemStatDelta } from './display';
+import { Icon } from './icons';
 import { playAscend } from './sfx';
 
-/** Sparkle glyphs scattered around the item icon, each on its own delay/angle. */
-const SPARKLES = ['✨', '⭐', '✦', '✧', '💫', '⭐'];
+/** Sparkles scattered around the item icon, each on its own delay and angle. */
+const SPARKLE_COUNT = 6;
 
 /**
  * Shown once after an exalted item successfully ascends (see
@@ -40,23 +41,25 @@ export function AscendCelebrationModal({
         className={`story-modal detail-modal ascend-modal ${reducedMotion ? 'reduced-motion' : ''}`}
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="story-title">✦ Ascension Complete!</h2>
+        <h2 className="story-title">Ascension Complete</h2>
 
         <div className="ascend-stage">
           <div className="ascend-glow" />
           <div className="ascend-glow ascend-glow-fade" />
-          <span className="ascend-icon">{itemIcon(after)}</span>
+          <span className="ascend-icon">
+            <Icon name={itemIcon(after)} />
+          </span>
           {!reducedMotion &&
-            SPARKLES.map((glyph, i) => (
+            Array.from({ length: SPARKLE_COUNT }, (_, i) => (
               <span
                 key={i}
                 className="ascend-sparkle"
                 style={{
-                  '--sparkle-rot': `${(360 / SPARKLES.length) * i}deg`,
+                  '--sparkle-rot': `${(360 / SPARKLE_COUNT) * i}deg`,
                   animationDelay: `${i * 0.18}s`,
                 } as React.CSSProperties}
               >
-                {glyph}
+                <Icon name="sparkle" />
               </span>
             ))}
         </div>
@@ -76,7 +79,9 @@ export function AscendCelebrationModal({
           <div className="ascend-delta-list">
             {deltas.map((d) => (
               <div key={d.label} className="ascend-delta-row">
-                <span className="ascend-delta-label">{d.label}</span>
+                <span className="ascend-delta-label">
+                  {d.icon && <Icon name={d.icon} />} {d.label}
+                </span>
                 <span className="ascend-delta-before">{d.before}</span>
                 <span className="ascend-delta-arrow">→</span>
                 <span className={`ascend-delta-after ${d.after >= d.before ? 'up' : 'down'}`}>
@@ -95,7 +100,7 @@ export function AscendCelebrationModal({
           </div>
         )}
 
-        <button className="small-button" onClick={onClose}>
+        <button className="small-button primary" onClick={onClose}>
           Continue
         </button>
       </div>

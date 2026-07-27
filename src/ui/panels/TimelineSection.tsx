@@ -13,8 +13,15 @@ import { canTimeTravel, timeTravel } from '../../game/prestige';
 import type { PerkDef } from '../../game/types';
 import { useFormat } from '../../hooks/useFormat';
 import { useGameState, useGameStore } from '../../hooks/useGame';
+import { NoteRow } from '../components';
+import { Icon } from '../icons';
 
-export function TimelinePanel() {
+/**
+ * Prestige, as an Overview section rather than its own tab — it appears only
+ * after the demon king falls, and competing for a permanent nav slot from the
+ * start meant either a dead tab or a bar that reflows late in the run.
+ */
+export function TimelineSection() {
   const store = useGameStore();
   const state = useGameState();
   const fmt = useFormat();
@@ -39,12 +46,14 @@ export function TimelinePanel() {
     <div className="panel">
       {state.hometownSaved && (
         <div className="ending-banner">
-          🕊 The hometown stands. In this timeline, they live. You are at peace.
+          The hometown stands. In this timeline, they live. You are at peace.
         </div>
       )}
 
       <div className="currency-banner">
-        <span className="currency-amount">⏳ {fmt(state.timeShards)}</span>
+        <span className="currency-amount">
+          <Icon name="hourglass" /> {fmt(state.timeShards)}
+        </span>
         <span className="currency-label">
           time shards · timeline #{state.prestigeCount + 1} · day {day}
         </span>
@@ -62,7 +71,7 @@ export function TimelinePanel() {
               : `To save the hometown, a future timeline must fell him before day ${HOMETOWN_DEADLINE_DAY}.`}
           </p>
           <button className="prestige-button" onClick={travel}>
-            ⏳ Travel Back in Time
+            <Icon name="hourglass" /> Travel Back in Time
           </button>
         </div>
       )}
@@ -92,9 +101,11 @@ function PerkCard({ def }: { def: PerkDef }) {
       .map((r) => perkDef(r)?.name ?? r)
       .join(', ');
     return (
-      <div className="row locked">
-        🔒 {def.name} — requires {reqNames}
-      </div>
+      <NoteRow icon="lock" tone="muted">
+        <span className="row-desc">
+          {def.name} — requires {reqNames}
+        </span>
+      </NoteRow>
     );
   }
 
@@ -111,7 +122,13 @@ function PerkCard({ def }: { def: PerkDef }) {
         <span className="row-desc">{def.description}</span>
       </div>
       <div className="row-cost">
-        {maxed ? 'Max' : `${fmt(perkCost(state, def.id))} ⏳`}
+        {maxed ? (
+          'Max'
+        ) : (
+          <span>
+            <Icon name="hourglass" /> {fmt(perkCost(state, def.id))}
+          </span>
+        )}
       </div>
     </button>
   );

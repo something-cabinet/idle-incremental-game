@@ -25,6 +25,10 @@ import type { Adventurer, GameState, LogEntry } from '../../game/types';
 import { useFormat } from '../../hooks/useFormat';
 import { useGameState } from '../../hooks/useGame';
 import { usePanelSection } from '../../hooks/usePanelSection';
+import { Stat } from '../components';
+import { CLASS_ICON } from '../display';
+import { Icon } from '../icons';
+import { TimelineSection } from './TimelineSection';
 
 /**
  * The Overview tab: a read-only dashboard of everything at once — the run,
@@ -35,39 +39,41 @@ import { usePanelSection } from '../../hooks/usePanelSection';
  */
 
 const RECENT_LOG_COUNT = 12;
-const CLASS_ICON: Record<Adventurer['className'], string> = {
-  warrior: '⚔️',
-  ranger: '🏹',
-  mage: '✨',
-};
 const ACT_TITLE: Record<number, string> = {
   1: 'Act I — A Refugee’s Odd Jobs',
   2: 'Act II — Master of the Guild',
   3: 'Act III — The Long Way Back',
 };
 
+type Section = 'status' | 'records' | 'timeline';
+
 export function OverviewPanel() {
   const state = useGameState();
-  const [section, setSection] = usePanelSection<'status' | 'records'>('overview', 'status');
+  const timeline = isTimeTravelUnlocked(state) || state.timeShards > 0 || state.prestigeCount > 0;
+  const [section, setSection] = usePanelSection<Section>('overview', 'status');
+  const active = section === 'timeline' && !timeline ? 'status' : section;
+
+  const tabs: { id: Section; label: string }[] = [
+    { id: 'status', label: 'Status' },
+    { id: 'records', label: 'Records' },
+    ...(timeline ? ([{ id: 'timeline', label: 'Timeline' }] as const) : []),
+  ];
 
   return (
     <div className="panel">
       <div className="subtab-bar">
-        <button
-          className={`subtab ${section === 'status' ? 'active' : ''}`}
-          onClick={() => setSection('status')}
-        >
-          Status
-        </button>
-        <button
-          className={`subtab ${section === 'records' ? 'active' : ''}`}
-          onClick={() => setSection('records')}
-        >
-          Records
-        </button>
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            className={`subtab ${active === t.id ? 'active' : ''}`}
+            onClick={() => setSection(t.id)}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
 
-      {section === 'status' ? (
+      {active === 'status' && (
         <>
           <RunSection />
           <EconomySection />
@@ -76,19 +82,9 @@ export function OverviewPanel() {
           <ProgressSection />
           <RecentActivitySection />
         </>
-      ) : (
-        <RecordsSection />
       )}
-    </div>
-  );
-}
-
-/** A labelled tile in one of the 3-across stat grids. */
-function Stat({ value, label }: { value: string; label: string }) {
-  return (
-    <div className="stat">
-      <span className="stat-value">{value}</span>
-      <span className="stat-label">{label}</span>
+      {active === 'records' && <RecordsSection />}
+      {active === 'timeline' && <TimelineSection />}
     </div>
   );
 }
@@ -97,10 +93,9 @@ function Stat({ value, label }: { value: string; label: string }) {
 function Milestone({ done, children }: { done: boolean; children: React.ReactNode }) {
   return (
     <div className={`row overview-milestone ${done ? 'done' : ''}`}>
+      <Icon name={done ? 'check' : 'lock'} className={done ? 'milestone-done' : 'milestone-todo'} />
       <div className="row-info">
-        <span className="row-desc">
-          {done ? '✔' : '🔒'} {children}
-        </span>
+        <span className="row-desc">{children}</span>
       </div>
     </div>
   );
@@ -124,12 +119,11 @@ function RunSection() {
         </span>
       </div>
       <div className="detail-stats">
-        <Stat value={fmt(state.gold)} label="Gold" />
-        <Stat value={`${fmt(productionPerSecond(state))}/s`} label="Income" />
-        <Stat
-          value={isTimeTravelUnlocked(state) || state.timeShards > 0 ? `⏳ ${fmt(state.timeShards)}` : '—'}
-          label="Time Shards"
-        />
+        <Stat value={fmt(state.gold)} label="Gold" icon="coin" tone="accent" />
+        <Stat value={`${fmt(productionPerSecond(state))}/s`} label="Income" tone="green" />
+        {(isTimeTravelUnlocked(state) || state.timeShards > 0) && (
+          <Stat value={fmt(state.timeShards)} label="Time Shards" icon="hourglass" tone="shard" />
+        )}
       </div>
     </section>
   );
@@ -151,8 +145,6 @@ function EconomySection() {
         <Stat value={fmt(jobsOwned)} label="Jobs Running" />
         <Stat value={fmt(state.workers)} label="Workers" />
         <Stat value={fmt(effectiveClickPower(state))} label="Per Click" />
-      </div>
-      <div className="detail-stats">
         <Stat value={fmt(state.totalGoldEarned)} label="Earned This Run" />
         <Stat value={fmt(state.inventory.length)} label="Items Held" />
       </div>
@@ -176,7 +168,7 @@ function GuildSection() {
     <section className="rows">
       <h3 className="section-title">The Guild</h3>
       <div className="detail-stats">
-        <Stat value={`★ ${fmt(Math.floor(state.reputation))}`} label="Reputation" />
+        <Stat value={fmt(Math.floor(state.reputation))} label="Reputation" icon="star" tone="accent" />
         <Stat value={`${state.adventurers.length}/${rosterCap(state)}`} label="Champions" />
         <Stat value={fmt(adventurerCount(state))} label="Adventurers" />
       </div>
@@ -203,7 +195,10 @@ function QuestBoardSection() {
     return (
       <section className="rows">
         <h3 className="section-title">Quest Board</h3>
-        <div className="row locked">Nothing posted — the board is empty</div>
+        <div className="row row-static row-muted">
+          <Icon name="info" className="row-static-icon" />
+          <div className="row-info">Nothing posted — the board is empty</div>
+        </div>
       </section>
     );
   }
@@ -264,7 +259,7 @@ function ProgressSection() {
       )}
       {state.act >= 2 && nextZone && (
         <Milestone done={false}>
-          {nextZone.name} opens at ★ {fmt(nextZone.repRequired ?? 0)} (
+          {nextZone.name} opens at {fmt(nextZone.repRequired ?? 0)} reputation (
           {fmt(Math.max(0, Math.ceil((nextZone.repRequired ?? 0) - state.reputation)))} to go)
         </Milestone>
       )}
@@ -329,8 +324,6 @@ function RecordsSection() {
           <Stat value={formatDuration(stats.timePlayedSeconds)} label="Time Played" />
           <Stat value={fmt(state.prestigeCount)} label="Timelines" />
           <Stat value={fmt(stats.clicks)} label="Odd Jobs Worked" />
-        </div>
-        <div className="detail-stats">
           <Stat value={fmt(state.lifetimeGoldEarned + state.totalGoldEarned)} label="Gold Earned" />
           <Stat value={fmt(stats.questsCompleted)} label="Quests Done" />
           <Stat value={fmt(stats.championsHired)} label="Champions Hired" />
@@ -343,8 +336,6 @@ function RecordsSection() {
           <Stat value={fmt(battles)} label="Battles" />
           <Stat value={`${winRate}%`} label="Win Rate" />
           <Stat value={fmt(stats.monstersDefeated)} label="Monsters Slain" />
-        </div>
-        <div className="detail-stats">
           <Stat value={fmt(stats.dungeonsCleared)} label="Dungeons Cleared" />
           <Stat value={fmt(stats.injuries)} label="Injuries" />
           <Stat value={fmt(stats.shardsFound)} label="Shards Found" />
@@ -353,7 +344,8 @@ function RecordsSection() {
           <div className="row">
             <div className="row-info">
               <span className="row-name">
-                {CLASS_ICON[best.className]} {best.name} <span className="row-sub">Lv {best.level}</span>
+                <Icon name={CLASS_ICON[best.className]} /> {best.name}{' '}
+                <span className="row-sub">Lv {best.level}</span>
               </span>
               <span className="row-desc">
                 Your finest champion — {fmt(best.enemiesDefeated)} kills,{' '}

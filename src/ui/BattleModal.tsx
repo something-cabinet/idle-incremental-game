@@ -1,15 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { BattleOutcome } from '../game/combat';
-import type { AdventurerClass } from '../game/types';
-import { itemIcon } from './itemDisplay';
+import { CLASS_ICON } from './display';
+import { Icon } from './icons';
 import { BattleViewer } from './BattleViewer';
 import type { PartyStatusEntry } from './BattleViewer';
-
-const CLASS_ICON: Record<AdventurerClass, string> = {
-  warrior: '🗡️',
-  ranger: '🏹',
-  mage: '🔮',
-};
 
 /**
  * Blocking battle modal: no close button/overlay-dismiss until playback of
@@ -119,17 +113,19 @@ function BattleSummary({
   const win = result.outcome === 'win';
   const injured = result.party.filter((p) => p.knockedOut);
   return (
-    <div className={`row ${win ? 'item-common' : 'row-bad'}`}>
+    <div className={`row has-actions ${win ? 'item-common' : 'row-warning'}`}>
       <div className="row-info">
-        <span className="row-name">{win ? '🏆 Victory!' : '💀 Defeat...'}</span>
+        <span className="row-name">
+          <Icon name={win ? 'trophy' : 'skull'} /> {win ? 'Victory' : 'Defeat'}
+        </span>
         {win ? (
           <span className="row-desc">
-            +{result.rewards.gold} 🪙 · +{result.rewards.xp} XP
+            +{result.rewards.gold} gold · +{result.rewards.xp} XP
             {Object.keys(result.rewards.materials).length > 0 &&
               ` · ${Object.entries(result.rewards.materials).map(([, n]) => `+${n} material`).join(', ')}`}
             {result.rewards.equipment.length > 0 &&
-              ` · ${result.rewards.equipment.map((e) => `${itemIcon(e)} ${e.name}`).join(', ')}`}
-            {result.rewards.timeShards > 0 && ` · +${result.rewards.timeShards} ⏳`}
+              ` · ${result.rewards.equipment.map((e) => e.name).join(', ')}`}
+            {result.rewards.timeShards > 0 && ` · +${result.rewards.timeShards} time shards`}
           </span>
         ) : (
           <span className="row-desc">The party was overwhelmed and driven back to town.</span>
@@ -141,7 +137,7 @@ function BattleSummary({
           {autoAdvance ? (
             <span className="row-sub">Continuing…</span>
           ) : (
-            <button className="small-button" onClick={onClose}>
+            <button className="small-button primary" onClick={onClose}>
               Continue
             </button>
           )}
@@ -167,7 +163,7 @@ function PartyStatusPanel({ status }: { status: PartyStatusEntry[] }) {
           <div key={p.advId} className={`row party-status-row ${knockedOut ? 'disabled' : ''}`}>
             <div className="row-info">
               <span className="row-name">
-                {CLASS_ICON[p.className]} {p.name}
+                <Icon name={CLASS_ICON[p.className]} /> {p.name}
               </span>
               <span className="row-sub">
                 HP {p.hp}/{p.maxHp}

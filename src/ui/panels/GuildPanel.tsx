@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { adventurerStats, championPerk, championSkill, effectiveAttributes, equipDelta, isInjured, maxHp } from '../../game/adventurers';
-import { ATTRIBUTES, GUILD_UPGRADES, MATERIALS, xpToNext } from '../../game/config';
+import { ATTRIBUTES, GUILD_UPGRADES, xpToNext } from '../../game/config';
 import { formatDuration } from '../../game/format';
 import {
   adventurerCount,
@@ -27,42 +27,27 @@ import {
   unequipItem,
   zones,
 } from '../../game/guild';
-import type { Adventurer, AdventurerClass, Attributes, EquipSlot, Quest } from '../../game/types';
+import type { Adventurer, Attributes, EquipSlot, Quest } from '../../game/types';
 import { useFormat } from '../../hooks/useFormat';
 import { useGameState, useGameStore } from '../../hooks/useGame';
 import { usePanelSection } from '../../hooks/usePanelSection';
+import { InfoNote, Modal, NoteRow, Stat, StatChips } from '../components';
+import {
+  CLASS_DESCRIPTION,
+  CLASS_ICON,
+  CLASS_LABEL,
+  SLOT_ICON,
+  itemIcon,
+  itemStatParts,
+  itemStatText,
+  itemTypeLabel,
+  materialName,
+  rate,
+} from '../display';
 import { GearPerkBadge } from '../GearPerkBadge';
-import { itemIcon, itemStatParts, itemTypeLabel } from '../itemDisplay';
+import { Icon } from '../icons';
 
-type Section = 'adventurers' | 'quests' | 'upgrades';
-
-function materialName(id: string): string {
-  return MATERIALS.find((m) => m.id === id)?.name ?? id;
-}
-
-const CLASS_ICON: Record<AdventurerClass, string> = {
-  warrior: '🗡️',
-  ranger: '🏹',
-  mage: '🔮',
-};
-
-const CLASS_LABEL: Record<AdventurerClass, string> = {
-  warrior: 'Warrior',
-  ranger: 'Ranger',
-  mage: 'Mage',
-};
-
-const CLASS_DESCRIPTION: Record<AdventurerClass, string> = {
-  warrior: 'Front-line brawler — high STR/CON, soaks damage',
-  ranger: 'Agile skirmisher — high DEX/LCK, balanced offense',
-  mage: 'Spellcaster — high INT, fragile but powerful',
-};
-
-const SLOT_FALLBACK_ICON: Record<EquipSlot, string> = {
-  weapon: '⚔️',
-  armor: '🛡️',
-  trinket: '💍',
-};
+type Section = 'champions' | 'quests' | 'upgrades';
 
 const EQUIP_SLOTS: EquipSlot[] = ['weapon', 'armor', 'trinket'];
 
@@ -71,10 +56,10 @@ function PerkBadge({ adv }: { adv: Adventurer }) {
   const perk = championPerk(adv.perkId);
   if (!perk) return null;
   return (
-    <div className={`row perk-row perk-${perk.tier}`}>
+    <div className={`row perk-row perk-${perk.tier} has-actions`}>
       <div className="row-info">
         <span className="row-name">
-          {perk.tier === 'major' ? '⭐' : '✨'} {perk.name}
+          <Icon name={perk.tier === 'major' ? 'star' : 'sparkle'} /> {perk.name}
           <span className="perk-tag">{perk.tier === 'major' ? 'Major' : 'Minor'} Perk</span>
         </span>
         <span className="row-desc">{perk.description}</span>
@@ -88,10 +73,10 @@ function SkillBadge({ adv }: { adv: Adventurer }) {
   const skill = championSkill(adv.skillId);
   if (!skill) return null;
   return (
-    <div className="row skill-row">
+    <div className="row skill-row has-actions">
       <div className="row-info">
         <span className="row-name">
-          🎯 {skill.name}
+          <Icon name="target" /> {skill.name}
           <span className="perk-tag">{skill.cooldownTurns}-turn CD</span>
         </span>
         <span className="row-desc">{skill.description}</span>
@@ -100,24 +85,17 @@ function SkillBadge({ adv }: { adv: Adventurer }) {
   );
 }
 
-function rate(n: number): string {
-  if (n === 0) return '0';
-  if (n < 10) return n.toFixed(2);
-  if (n < 100) return n.toFixed(1);
-  return Math.round(n).toLocaleString();
-}
-
 export function GuildPanel() {
-  const [section, setSection] = usePanelSection<Section>('guild', 'adventurers');
+  const [section, setSection] = usePanelSection<Section>('guild', 'champions');
 
   return (
     <div className="panel">
       <div className="subtab-bar">
         <button
-          className={`subtab ${section === 'adventurers' ? 'active' : ''}`}
-          onClick={() => setSection('adventurers')}
+          className={`subtab ${section === 'champions' ? 'active' : ''}`}
+          onClick={() => setSection('champions')}
         >
-          Adventurers
+          Champions
         </button>
         <button
           className={`subtab ${section === 'quests' ? 'active' : ''}`}
@@ -133,7 +111,7 @@ export function GuildPanel() {
         </button>
       </div>
 
-      {section === 'adventurers' && <AdventurersSection />}
+      {section === 'champions' && <ChampionsSection />}
       {section === 'quests' && <QuestsSection />}
       {section === 'upgrades' && <UpgradesSection />}
     </div>
@@ -141,10 +119,11 @@ export function GuildPanel() {
 }
 
 // ---------------------------------------------------------------------------
-// Adventurers — the numerous town pool, driven by reputation
+// Champions — the hand-picked roster, plus the anonymous town pool that
+// reputation draws in to work the quest board.
 // ---------------------------------------------------------------------------
 
-function AdventurersSection() {
+function ChampionsSection() {
   const state = useGameState();
   const store = useGameStore();
   const fmt = useFormat();
@@ -164,51 +143,42 @@ function AdventurersSection() {
 
   return (
     <section className="rows">
-      <h3 className="section-title">The Guild’s Adventurers</h3>
-
       <div className="detail-stats">
-        <div className="stat">
-          <span className="stat-value">{count}</span>
-          <span className="stat-label">Adventurers</span>
-        </div>
-        <div className="stat">
-          <span className="stat-value">★ {fmt(Math.floor(state.reputation))}</span>
-          <span className="stat-label">Reputation</span>
-        </div>
-        <div className="stat">
-          <span className="stat-value">{state.quests.length}</span>
-          <span className="stat-label">Active Quests</span>
-        </div>
+        <Stat value={fmt(Math.floor(state.reputation))} label="Reputation" icon="star" tone="accent" />
+        <Stat value={count} label="Adventurers" />
+        <Stat value={`${state.adventurers.length}/${cap}`} label="Champions" />
+        <Stat value={state.quests.length} label="Quests" />
       </div>
 
-      <p className="detail-sub">
-        These adventurers come and go, taking whatever bounties the guild posts. As
-        your <strong>reputation</strong> grows, more of them turn up — and they split
-        their effort across every quest on the board.
-      </p>
+      <InfoNote
+        id="guild-roster"
+        title="Adventurers vs. champions"
+        defaultOpen={state.adventurers.length === 0}
+      >
+        Adventurers are the anonymous crowd your <strong>reputation</strong> attracts — they split
+        their effort across every quest on the board. Champions are the few you recruit, equip and
+        send out yourself.
+      </InfoNote>
 
-      {nextZone ? (
-        <div className="row locked">
-          🔒 {nextZone.name} unlocks at ★ {fmt(nextZone.repRequired ?? 0)} reputation
-          ({fmt(Math.max(0, Math.ceil((nextZone.repRequired ?? 0) - state.reputation)))} to go)
-        </div>
-      ) : (
-        <div className="row item-common">All wilds unlocked.</div>
+      {nextZone && (
+        <NoteRow icon="lock" tone="muted">
+          <span className="row-desc">
+            {nextZone.name} unlocks at {fmt(nextZone.repRequired ?? 0)} reputation —{' '}
+            {fmt(Math.max(0, Math.ceil((nextZone.repRequired ?? 0) - state.reputation)))} to go
+          </span>
+        </NoteRow>
       )}
 
       <h3 className="section-title">
-        Guild Champions ({state.adventurers.length}/{cap})
+        Champions ({state.adventurers.length}/{cap})
       </h3>
-      <p className="detail-sub">
-        A hand-picked few you recruit, equip, and command directly.
-      </p>
       <div className="rows">
         {state.adventurers.map((adv) => (
           <ChampionCard key={adv.id} adv={adv} onOpen={() => setDetailId(adv.id)} />
         ))}
         {Array.from({ length: Math.max(0, cap - state.adventurers.length) }, (_, i) => (
           <button key={i} className="empty-slot" onClick={openRecruit}>
-            + Recruit Champion
+            <Icon name="plus" /> Recruit Champion
           </button>
         ))}
       </div>
@@ -221,45 +191,34 @@ function AdventurersSection() {
 
 function ChampionCard({ adv, onOpen }: { adv: Adventurer; onOpen: () => void }) {
   const state = useGameState();
-  const store = useGameStore();
   const stats = adventurerStats(adv);
-  const hpMax = maxHp(adv);
   const injured = isInjured(adv, state.runTimeSeconds);
+  const exploring = adv.assignment?.mode === 'auto-explore';
   return (
-    <button className="row candidate-row adventurer-card" onClick={onOpen}>
+    <button className="row adventurer-card" onClick={onOpen}>
       <div className="row-info">
         <span className="row-name">
-          {CLASS_ICON[adv.className]} {adv.name}
-        </span>
-        <span className="row-desc">
-          {CLASS_LABEL[adv.className]} · Lv {adv.level}
+          <Icon name={CLASS_ICON[adv.className]} /> {adv.name}
+          <span className="row-sub"> Lv {adv.level}</span>
         </span>
         <span className="row-sub">
-          ATK {stats.atk} · DEF {stats.def} · HP {hpMax}
+          <StatChips parts={[
+            { key: 'atk', icon: 'sword', text: String(stats.atk) },
+            { key: 'def', icon: 'shield', text: String(stats.def) },
+            { key: 'hp', icon: 'heart', text: String(maxHp(adv)) },
+          ]} />
         </span>
-        {adv.assignment?.mode === 'auto-explore' && (
-          <>
-            <span className="row-good">
-              🗺️ Auto-Exploring {locationDef(adv.assignment.locationId)?.name ?? adv.assignment.locationId}
-            </span>
-            <div className="equip-detail-actions">
-              <button
-                className="small-button danger"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  store.dispatch((s) => recallAdventurer(s, adv.id));
-                }}
-              >
-                Recall
-              </button>
-            </div>
-          </>
-        )}
-        {injured && (
+        {injured ? (
           <span className="row-bad">
-            🩹 Recovering — {formatDuration(Math.max(0, adv.injuredUntil - state.runTimeSeconds))} left
+            <Icon name="bandage" /> Recovering —{' '}
+            {formatDuration(Math.max(0, adv.injuredUntil - state.runTimeSeconds))} left
           </span>
-        )}
+        ) : exploring ? (
+          <span className="row-good">
+            <Icon name="map" /> Auto-exploring{' '}
+            {locationDef(adv.assignment!.locationId)?.name ?? adv.assignment!.locationId}
+          </span>
+        ) : null}
       </div>
     </button>
   );
@@ -273,6 +232,7 @@ function ChampionCard({ adv, onOpen }: { adv: Adventurer; onOpen: () => void }) 
 function RecruitDialog({ onClose }: { onClose: () => void }) {
   const store = useGameStore();
   const state = useGameState();
+  const fmt = useFormat();
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const candidates = state.recruitCandidates;
   const selected = candidates.find((c) => c.id === selectedId) ?? null;
@@ -286,91 +246,75 @@ function RecruitDialog({ onClose }: { onClose: () => void }) {
     onClose();
   }
 
-  function handleReroll() {
-    store.dispatch((s) => rerollRecruits(s));
-    setSelectedId(null);
-  }
-
   return (
-    <div className="story-overlay" onClick={onClose}>
-      <div className="story-modal detail-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="detail-header">
-          <h2 className="story-title">Recruit a Champion</h2>
-          <button className="small-button" onClick={onClose}>✕</button>
-        </div>
-
-        {!selected ? (
-          <>
-            <p className="detail-sub">Pick one of these three adventurers to recruit.</p>
-            <div className="rows">
-              {candidates.map((c) => (
-                <button key={c.id} className="row candidate-row" onClick={() => setSelectedId(c.id)}>
-                  <div className="row-info">
-                    <span className="row-name">
-                      {CLASS_ICON[c.className]} {c.name}
-                    </span>
-                    <span className="row-desc">
-                      {CLASS_LABEL[c.className]} — {CLASS_DESCRIPTION[c.className]}
-                    </span>
-                    <span className="row-sub">{compactStats(c)}</span>
-                  </div>
-                </button>
-              ))}
-            </div>
-            <button
-              className="small-button"
-              disabled={!canAffordReroll}
-              onClick={handleReroll}
-            >
-              🎲 Reroll for {Math.floor(rerollPrice).toLocaleString()} 🪙
-            </button>
-          </>
-        ) : (
+    <Modal
+      title={selected ? selected.name : 'Recruit a Champion'}
+      onClose={onClose}
+      footer={
+        selected ? (
           <>
             <button className="small-button" onClick={() => setSelectedId(null)}>
-              ← Back
+              Back
             </button>
-            <ChampionDetail adv={selected} />
             <button
-              className="small-button"
+              className="small-button primary"
               disabled={!canAfford}
               onClick={() => handleRecruit(selected.id)}
             >
-              Recruit for {Math.floor(cost).toLocaleString()} 🪙
+              Recruit — {fmt(cost)} gold
             </button>
           </>
-        )}
-      </div>
-    </div>
+        ) : (
+          <button className="small-button" disabled={!canAffordReroll} onClick={() => {
+            store.dispatch((s) => rerollRecruits(s));
+            setSelectedId(null);
+          }}>
+            <Icon name="dice" /> Reroll — {fmt(rerollPrice)} gold
+          </button>
+        )
+      }
+    >
+      {selected ? (
+        <ChampionDetail adv={selected} />
+      ) : (
+        <div className="rows">
+          {candidates.map((c) => {
+            const stats = adventurerStats(c);
+            return (
+              <button key={c.id} className="row" onClick={() => setSelectedId(c.id)}>
+                <div className="row-info">
+                  <span className="row-name">
+                    <Icon name={CLASS_ICON[c.className]} /> {c.name}
+                  </span>
+                  <span className="row-desc">{CLASS_DESCRIPTION[c.className]}</span>
+                  <span className="row-sub">
+                    <StatChips parts={[
+                      { key: 'atk', icon: 'sword', text: String(stats.atk) },
+                      { key: 'def', icon: 'shield', text: String(stats.def) },
+                      { key: 'hp', icon: 'heart', text: String(stats.maxHp) },
+                    ]} />
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </Modal>
   );
-}
-
-function compactStats(adv: Adventurer): string {
-  const stats = adventurerStats(adv);
-  return `ATK ${stats.atk} · DEF ${stats.def} · HP ${stats.maxHp}`;
 }
 
 function ChampionDetail({ adv }: { adv: Adventurer }) {
   const stats = adventurerStats(adv);
   return (
     <div className="rows">
-      <h3 className="section-title">{adv.name}</h3>
       <p className="detail-sub">
-        {CLASS_ICON[adv.className]} {CLASS_LABEL[adv.className]} · Level {adv.level}
+        <Icon name={CLASS_ICON[adv.className]} /> {CLASS_LABEL[adv.className]} · Level {adv.level}
       </p>
       <div className="detail-stats">
-        <div className="stat">
-          <span className="stat-value">{stats.atk}</span>
-          <span className="stat-label">Attack</span>
-        </div>
-        <div className="stat">
-          <span className="stat-value">{stats.def}</span>
-          <span className="stat-label">Defense</span>
-        </div>
-        <div className="stat">
-          <span className="stat-value">{stats.maxHp}</span>
-          <span className="stat-label">Max HP</span>
-        </div>
+        <Stat value={stats.atk} label="Attack" icon="sword" />
+        <Stat value={stats.def} label="Defense" icon="shield" />
+        <Stat value={stats.maxHp} label="Max HP" icon="heart" />
       </div>
       <AttributeBars attributes={adv.attributes} />
       <PerkBadge adv={adv} />
@@ -401,20 +345,175 @@ function AttributeBars({ attributes }: { attributes: Attributes }) {
 }
 
 // ---------------------------------------------------------------------------
-// Champion detail modal — full stats plus equipment slots (weapon/armor/
-// trinket), with a picker per slot showing candidates from the shared
-// inventory and their stat delta versus what's currently equipped.
+// Champion detail modal
+//
+// Split into three tabs. As one scroll it ran to ~20 distinct blocks — XP,
+// three stats, six attribute bars, perk, skill, lifetime counters, three
+// equipment slots each with their own picker, then recall and fire — which is
+// far past what anyone holds in working memory, and buried the equipment
+// controls (the reason you open this) under a wall of numbers.
 // ---------------------------------------------------------------------------
 
+type DetailTab = 'stats' | 'gear' | 'manage';
+
 function ChampionDetailModal({ adv, onClose }: { adv: Adventurer; onClose: () => void }) {
+  const [tab, setTab] = useState<DetailTab>('stats');
+
+  return (
+    <Modal
+      title={
+        <>
+          <Icon name={CLASS_ICON[adv.className]} /> {adv.name}
+        </>
+      }
+      onClose={onClose}
+    >
+      <p className="detail-sub">
+        Level {adv.level} {CLASS_LABEL[adv.className]}
+      </p>
+
+      <div className="subtab-bar">
+        {(['stats', 'gear', 'manage'] as DetailTab[]).map((t) => (
+          <button
+            key={t}
+            className={`subtab ${tab === t ? 'active' : ''}`}
+            onClick={() => setTab(t)}
+          >
+            {t === 'stats' ? 'Stats' : t === 'gear' ? 'Equipment' : 'Manage'}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'stats' && <ChampionStatsTab adv={adv} />}
+      {tab === 'gear' && <ChampionGearTab adv={adv} />}
+      {tab === 'manage' && <ChampionManageTab adv={adv} onClose={onClose} />}
+    </Modal>
+  );
+}
+
+function ChampionStatsTab({ adv }: { adv: Adventurer }) {
+  const stats = adventurerStats(adv);
+  const attrs = effectiveAttributes(adv);
+  const xpPct = Math.floor((adv.xp / xpToNext(adv.level)) * 100);
+
+  return (
+    <div className="rows">
+      <div className="progress-line">
+        <div className="progress-track">
+          <div className="progress-fill xp" style={{ width: `${xpPct}%` }} />
+        </div>
+        <span className="progress-time">
+          {adv.xp}/{xpToNext(adv.level)} XP
+        </span>
+      </div>
+
+      <div className="detail-stats">
+        <Stat value={stats.atk} label="Attack" icon="sword" />
+        <Stat value={stats.def} label="Defense" icon="shield" />
+        <Stat value={maxHp(adv)} label="Max HP" icon="heart" />
+      </div>
+
+      <AttributeBars attributes={attrs} />
+      <PerkBadge adv={adv} />
+      <SkillBadge adv={adv} />
+
+      {(adv.enemiesDefeated > 0 || adv.totalDamageDealt > 0) && (
+        <div className="detail-stats">
+          <Stat value={adv.enemiesDefeated} label="Enemies Defeated" />
+          <Stat value={adv.totalDamageDealt} label="Total Damage" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ChampionGearTab({ adv }: { adv: Adventurer }) {
   const store = useGameStore();
   const state = useGameState();
   const [pickerSlot, setPickerSlot] = useState<EquipSlot | null>(null);
+
+  return (
+    <div className="rows">
+      <div className="section-title-row">
+        <h3 className="section-title">Equipment</h3>
+        <button
+          className="small-button"
+          disabled={state.inventory.length === 0}
+          onClick={() => store.dispatch((s) => autoEquipBest(s, adv.id))}
+        >
+          <Icon name="sparkle" /> Auto-equip
+        </button>
+      </div>
+
+      {EQUIP_SLOTS.map((slot) => {
+        const item = adv.equipment[slot];
+        const candidates = state.inventory.filter((i) => i.slot === slot);
+        return (
+          <div key={slot}>
+            <div className={`row has-actions ${item ? `item-${item.rarity}` : 'row-locked'}`}>
+              <div className="row-info">
+                <span className="row-name">
+                  <Icon name={item ? itemIcon(item) : SLOT_ICON[slot]} />{' '}
+                  {item ? item.name : `No ${slot}`}
+                </span>
+                {item && (
+                  <span className="row-desc">
+                    {item.rarity} {itemTypeLabel(item)} · {itemStatText(item)}
+                  </span>
+                )}
+              </div>
+              <div className="equip-detail-actions">
+                <button
+                  className="small-button"
+                  disabled={candidates.length === 0}
+                  onClick={() => setPickerSlot(pickerSlot === slot ? null : slot)}
+                >
+                  {item ? 'Change' : 'Equip'}
+                  {candidates.length > 0 ? ` (${candidates.length})` : ''}
+                </button>
+                {item && (
+                  <button
+                    className="small-button"
+                    onClick={() => store.dispatch((s) => unequipItem(s, adv.id, slot))}
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+            </div>
+            {item && <GearPerkBadge item={item} />}
+            {pickerSlot === slot && (
+              <div className="equip-picker">
+                {candidates.map((cand) => (
+                  <button
+                    key={cand.id}
+                    className={`equip-picker-item item-${cand.rarity}`}
+                    onClick={() => {
+                      store.dispatch((s) => equipItem(s, adv.id, cand.id));
+                      setPickerSlot(null);
+                    }}
+                  >
+                    <span className="row-name">
+                      <Icon name={itemIcon(cand)} /> {cand.name}
+                    </span>
+                    <span className="row-desc">
+                      {cand.rarity} · <StatChips parts={itemStatParts(cand)} />
+                    </span>
+                    <EquipDeltaChips delta={equipDelta(adv, cand)} />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ChampionManageTab({ adv, onClose }: { adv: Adventurer; onClose: () => void }) {
+  const store = useGameStore();
   const [confirmFire, setConfirmFire] = useState(false);
-  const stats = adventurerStats(adv);
-  const attrs = effectiveAttributes(adv);
-  const hpMax = maxHp(adv);
-  const xpPct = Math.floor((adv.xp / xpToNext(adv.level)) * 100);
   const onExpedition = adv.assignment?.mode === 'expedition';
 
   function handleFire() {
@@ -423,182 +522,59 @@ function ChampionDetailModal({ adv, onClose }: { adv: Adventurer; onClose: () =>
   }
 
   return (
-    <div className="story-overlay" onClick={onClose}>
-      <div className="story-modal detail-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="detail-header">
-          <h2 className="story-title">{adv.name}</h2>
-          <button className="small-button" onClick={onClose}>✕</button>
-        </div>
-        <p className="detail-sub">
-          {CLASS_ICON[adv.className]} Level {adv.level} {CLASS_LABEL[adv.className]}
-        </p>
-
-        {confirmFire && (
-          <div className="row row-bad">
-            <div className="row-info">
-              <span className="row-name">Fire {adv.name}?</span>
-              <span className="row-desc">
-                They leave the guild for good — no permadeath, but this can't be undone.
-                Equipped gear returns to your inventory first.
-              </span>
-            </div>
-            <div className="equip-detail-actions">
-              <button className="small-button danger" onClick={handleFire}>Confirm</button>
-              <button className="small-button" onClick={() => setConfirmFire(false)}>Cancel</button>
-            </div>
+    <div className="rows">
+      {adv.assignment?.mode === 'auto-explore' && (
+        <div className="row has-actions">
+          <div className="row-info">
+            <span className="row-name">Auto-exploring</span>
+            <span className="row-desc">Bring them home to reassign or equip them.</span>
           </div>
-        )}
-
-        <div className="progress-line">
-          <div className="progress-track">
-            <div className="progress-fill xp" style={{ width: `${xpPct}%` }} />
-          </div>
-          <span className="progress-time">
-            {adv.xp}/{xpToNext(adv.level)} XP
-          </span>
-        </div>
-
-        <div className="detail-stats">
-          <div className="stat">
-            <span className="stat-value">{stats.atk}</span>
-            <span className="stat-label">Attack</span>
-          </div>
-          <div className="stat">
-            <span className="stat-value">{stats.def}</span>
-            <span className="stat-label">Defense</span>
-          </div>
-          <div className="stat">
-            <span className="stat-value">{hpMax}</span>
-            <span className="stat-label">Max HP</span>
-          </div>
-        </div>
-
-        <AttributeBars attributes={attrs} />
-
-        <PerkBadge adv={adv} />
-        <SkillBadge adv={adv} />
-
-        {(adv.enemiesDefeated > 0 || adv.totalDamageDealt > 0) && (
-          <div className="detail-stats">
-            {adv.enemiesDefeated > 0 && (
-              <div className="stat">
-                <span className="stat-value">{adv.enemiesDefeated}</span>
-                <span className="stat-label">Enemies Defeated</span>
-              </div>
-            )}
-            {adv.totalDamageDealt > 0 && (
-              <div className="stat">
-                <span className="stat-value">{adv.totalDamageDealt}</span>
-                <span className="stat-label">Total Damage</span>
-              </div>
-            )}
-          </div>
-        )}
-
-        <div className="section-title-row">
-          <h3 className="section-title">Equipment</h3>
           <button
             className="small-button"
-            disabled={state.inventory.length === 0}
-            onClick={() => store.dispatch((s) => autoEquipBest(s, adv.id))}
+            onClick={() => store.dispatch((s) => recallAdventurer(s, adv.id))}
           >
-            ✨ Auto-equip
+            Recall
           </button>
         </div>
-        <div className="rows">
-          {EQUIP_SLOTS.map((slot) => {
-            const item = adv.equipment[slot];
-            const candidates = state.inventory.filter((i) => i.slot === slot);
-            return (
-              <div key={slot}>
-                <div className={`row ${item ? `item-${item.rarity}` : 'locked'}`}>
-                  <div className="row-info">
-                    <span className="row-name">
-                      {item ? `${itemIcon(item)} ${item.name}` : `${SLOT_FALLBACK_ICON[slot]} No ${slot}`}
-                    </span>
-                    {item && (
-                      <span className="row-desc">
-                        {item.rarity} {itemTypeLabel(item)} · {itemStatParts(item).join(' · ')}
-                      </span>
-                    )}
-                  </div>
-                  <div className="equip-detail-actions">
-                    <button
-                      className="small-button"
-                      disabled={candidates.length === 0}
-                      onClick={() => setPickerSlot(pickerSlot === slot ? null : slot)}
-                    >
-                      {item ? 'Change' : 'Equip'}
-                      {candidates.length > 0 ? ` (${candidates.length})` : ''}
-                    </button>
-                    {item && (
-                      <button
-                        className="small-button"
-                        onClick={() => store.dispatch((s) => unequipItem(s, adv.id, slot))}
-                      >
-                        Unequip
-                      </button>
-                    )}
-                  </div>
-                </div>
-                {item && <GearPerkBadge item={item} />}
-                {pickerSlot === slot && (
-                  <div className="equip-picker">
-                    {candidates.length === 0 ? (
-                      <div className="row locked">No {slot} in inventory.</div>
-                    ) : (
-                      candidates.map((cand) => (
-                        <button
-                          key={cand.id}
-                          className={`equip-picker-item item-${cand.rarity}`}
-                          onClick={() => {
-                            store.dispatch((s) => equipItem(s, adv.id, cand.id));
-                            setPickerSlot(null);
-                          }}
-                        >
-                          <span className="row-name">{itemIcon(cand)} {cand.name}</span>
-                          <span className="row-desc">
-                            {cand.rarity} · {itemStatParts(cand).join(' · ')}
-                          </span>
-                          <EquipDeltaChips delta={equipDelta(adv, cand)} />
-                        </button>
-                      ))
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+      )}
 
-        <div className="zone-actions">
-          {adv.assignment?.mode === 'auto-explore' && (
-            <button
-              className="small-button danger"
-              onClick={() => store.dispatch((s) => recallAdventurer(s, adv.id))}
-            >
-              Recall
-            </button>
-          )}
-          <button
-            className="small-button danger"
-            disabled={onExpedition}
-            onClick={() => setConfirmFire(true)}
-          >
-            🔥 Fire
-          </button>
+      {confirmFire ? (
+        <div className="row row-warning has-actions">
+          <div className="row-info">
+            <span className="row-name">Dismiss {adv.name}?</span>
+            <span className="row-desc">
+              They leave the guild for good — no permadeath, but this can't be undone. Equipped
+              gear returns to your inventory first.
+            </span>
+            <div className="equip-detail-actions">
+              <button className="small-button" onClick={() => setConfirmFire(false)}>
+                Cancel
+              </button>
+              <button className="small-button danger" onClick={handleFire}>
+                Dismiss
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
+      ) : (
+        <button
+          className="small-button danger"
+          disabled={onExpedition}
+          onClick={() => setConfirmFire(true)}
+        >
+          Dismiss from guild
+        </button>
+      )}
     </div>
   );
 }
 
-/** Green/red ▲▼ chips showing how a candidate item changes atk/def/HP. */
+/** Green/red chips showing how a candidate item changes atk/def/HP. */
 function EquipDeltaChips({ delta }: { delta: ReturnType<typeof equipDelta> }) {
-  const parts: { label: string; value: number }[] = [
-    { label: '⚔', value: delta.atk },
-    { label: '🛡', value: delta.def },
-    { label: '❤', value: delta.hp },
+  const parts = [
+    { key: 'atk', icon: 'sword' as const, value: delta.atk },
+    { key: 'def', icon: 'shield' as const, value: delta.def },
+    { key: 'hp', icon: 'heart' as const, value: delta.hp },
   ].filter((p) => p.value !== 0);
   if (parts.length === 0) {
     return (
@@ -610,8 +586,10 @@ function EquipDeltaChips({ delta }: { delta: ReturnType<typeof equipDelta> }) {
   return (
     <span className="equip-delta-row">
       {parts.map((p) => (
-        <span key={p.label} className={`equip-delta ${p.value > 0 ? 'up' : 'down'}`}>
-          {p.label} {p.value > 0 ? '▲' : '▼'}{Math.abs(p.value)}
+        <span key={p.key} className={`equip-delta ${p.value > 0 ? 'up' : 'down'}`}>
+          <Icon name={p.icon} />
+          <Icon name={p.value > 0 ? 'up' : 'down'} />
+          {Math.abs(p.value)}
         </span>
       ))}
     </span>
@@ -632,20 +610,25 @@ function QuestsSection() {
     <section className="rows">
       <div className="section-title-row">
         <h3 className="section-title">Running Quests ({state.quests.length})</h3>
-        <button className="small-button" onClick={() => setShowPerSecond((v) => !v)}>
-          {showPerSecond ? 'Show round totals' : 'Show per-second rates'}
-        </button>
+        {state.quests.length > 0 && (
+          <button className="small-button" onClick={() => setShowPerSecond((v) => !v)}>
+            {showPerSecond ? 'Round totals' : 'Per-second'}
+          </button>
+        )}
       </div>
-      {state.quests.length > 0 && (
-        <div className="row locked">
-          Total upkeep: <strong>{fmt(totalGoldPerSec)} 🪙/s</strong> across the whole board
-        </div>
-      )}
-      {state.quests.length === 0 && (
-        <div className="row locked">
+
+      {state.quests.length === 0 ? (
+        <NoteRow icon="info" tone="muted">
           No quests posted. Open the Map tab and post a bounty on a monster or gatherable.
-        </div>
+        </NoteRow>
+      ) : (
+        <NoteRow icon="coin">
+          <span className="row-desc">
+            Total upkeep <strong>{fmt(totalGoldPerSec)} gold/s</strong> across the whole board
+          </span>
+        </NoteRow>
       )}
+
       {state.quests.map((q) => (
         <QuestRow key={q.id} quest={q} showPerSecond={showPerSecond} />
       ))}
@@ -656,12 +639,6 @@ function QuestsSection() {
 function repeatsLabel(remaining: number, repeatCount: number, completedCount: number): string {
   if (repeatCount <= 0) return 'unlimited';
   return `${completedCount}/${repeatCount} done, ${Number.isFinite(remaining) ? remaining : '∞'} left`;
-}
-
-/** "5 Beast Pelt, 3 Wild Herbs" — one requirement's name isn't shown here
- * since a quest can bundle several different targets into one payout. */
-function materialsSummary(materials: { materialId: string; amount: number }[]): string {
-  return materials.map((m) => `${m.amount} ${materialName(m.materialId)}`).join(', ');
 }
 
 function questTitle(quest: Quest): string {
@@ -679,29 +656,36 @@ function QuestRow({ quest, showPerSecond }: { quest: Quest; showPerSecond: boole
   const summary = questBatchSummary(state, quest);
   if (!summary) return null;
 
+  const stalled = rates.goldStarved || rates.adventurerStarved;
+
   return (
-    <div className="row item-common">
+    <div className={`row has-actions ${stalled ? 'row-warning' : 'item-common'}`}>
       <div className="row-info">
         <span className="row-name">{questTitle(quest)}</span>
         {rates.goldStarved ? (
-          <span className="row-bad">⚠ Not enough gold — this quest is stalled.</span>
+          <span className="row-bad">
+            <Icon name="warning" /> Not enough gold — this quest is stalled.
+          </span>
         ) : rates.adventurerStarved ? (
-          <span className="row-bad">⚠ No adventurers assigned right now.</span>
+          <span className="row-bad">
+            <Icon name="warning" /> No adventurers assigned right now.
+          </span>
         ) : showPerSecond ? (
           <>
             <span className="row-desc">
               {Object.entries(rates.materialsPerSec)
                 .map(([id, perSec]) => `~${rate(perSec)} ${materialName(id)}/s`)
-                .join(' · ')} · −{rate(rates.goldPerSec)} 🪙/s · +{rate(rates.reputationPerSec)} ★/s
-              (reference)
+                .join(' · ')}{' '}
+              · −{rate(rates.goldPerSec)} gold/s · +{rate(rates.reputationPerSec)} rep/s
             </span>
             <span className="row-good">{rates.adventurers} adventurers assigned</span>
           </>
         ) : (
           <span className="row-desc">
-            {materialsSummary(summary.materials)} · −{rate(summary.gold)} 🪙 · +{rate(summary.reputation)} ★
-            · {formatDuration(summary.timeSeconds)}/round · {summary.assigned}/{summary.maxAdventurers}{' '}
-            adventurers
+            {summary.materials.map((m) => `${m.amount} ${materialName(m.materialId)}`).join(', ')} ·
+            −{rate(summary.gold)} gold · +{rate(summary.reputation)} rep ·{' '}
+            {formatDuration(summary.timeSeconds)}/round · {summary.assigned}/
+            {summary.maxAdventurers} adventurers
           </span>
         )}
         <span className="row-sub">
@@ -719,10 +703,11 @@ function QuestRow({ quest, showPerSecond }: { quest: Quest; showPerSecond: boole
         </div>
       </div>
       <button
-        className="small-button danger"
+        className="icon-button"
+        aria-label={`Delete ${questTitle(quest)}`}
         onClick={() => store.dispatch((s) => deleteQuest(s, quest.id))}
       >
-        Delete
+        <Icon name="close" />
       </button>
     </div>
   );
@@ -739,7 +724,6 @@ function UpgradesSection() {
 
   return (
     <section className="rows">
-      <h3 className="section-title">Guild Upgrades</h3>
       {GUILD_UPGRADES.map((def) => {
         const level = state.guildUpgrades[def.id] ?? 0;
         const maxed = level >= def.maxLevel;
@@ -749,7 +733,7 @@ function UpgradesSection() {
         return (
           <button
             key={def.id}
-            className={`row ${affordable ? '' : 'unaffordable'}`}
+            className={`row ${affordable ? '' : 'unaffordable'} ${maxed ? 'maxed' : ''}`}
             disabled={!affordable}
             onClick={() => store.dispatch((s) => buyGuildUpgrade(s, def.id))}
           >
@@ -760,7 +744,8 @@ function UpgradesSection() {
               <span className="row-desc">{def.description}</span>
               {repLocked && (
                 <span className="row-bad">
-                  🔒 Requires ★ {fmt(cost.reputation)} reputation ({fmt(Math.floor(state.reputation))} so far)
+                  <Icon name="lock" /> Requires {fmt(cost.reputation)} reputation (
+                  {fmt(Math.floor(state.reputation))} so far)
                 </span>
               )}
             </div>
@@ -769,7 +754,9 @@ function UpgradesSection() {
                 'Max'
               ) : (
                 <>
-                  {fmt(cost.gold)} 🪙
+                  <span>
+                    <Icon name="coin" /> {fmt(cost.gold)}
+                  </span>
                   {Object.entries(cost.materials).map(([id, n]) => (
                     <span key={id} className="mat-cost">
                       {n} {materialName(id)}

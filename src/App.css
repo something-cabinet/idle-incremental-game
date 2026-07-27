@@ -15,10 +15,36 @@
   --epic: #c07eff;
   --exalted: #ff9d3d;
   --ascendant: #ff5ed4;
+
+  /* Spacing scale — everything below is a multiple of these, so tightening
+     density is a change to four numbers rather than two hundred. */
+  --gap-xs: 4px;
+  --gap-sm: 6px;
+  --gap-md: 10px;
+  --gap-lg: 14px;
+
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+
+  /* Minimum comfortable touch target. Below ~44px, thumbs mis-tap; the game
+     is mobile-first and several of these buttons are destructive. */
+  --touch: 44px;
+
+  /* Text tones. `--text-dim` is the dimmest we go for real content: it sits
+     at ~6:1 on --panel. Anything fainter must not carry information. */
+  --text-faint: #7d765f;
 }
 
 * {
   box-sizing: border-box;
+}
+
+/* Icons inherit their colour and size from the text they sit in. */
+.icon {
+  display: inline-block;
+  vertical-align: -0.14em;
+  flex-shrink: 0;
 }
 
 body {
@@ -32,51 +58,69 @@ body {
   max-width: 520px;
   margin: 0 auto;
   /* bottom padding clears the fixed bottom tab bar */
-  padding: 20px 16px 96px;
+  padding: 0 12px calc(76px + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--gap-md);
 }
 
-/* ---- Header ---- */
+/* ---- Header ----
+   A sticky resource bar rather than a title block. The old header spent ~110px
+   on a game title the player already knows and a 2.4rem gold figure, then
+   scrolled away — so the number you most need while buying things was the
+   first thing to leave the screen. Now it's one compact row that stays put. */
 .header {
-  text-align: center;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: var(--gap-md);
+  padding: 8px 2px;
+  background: linear-gradient(180deg, var(--bg) 78%, transparent);
 }
 
-.header h1 {
-  margin: 0 0 6px;
-  font-size: 1.2rem;
-  color: var(--text-dim);
-  font-weight: 600;
-}
-
-.energy-display {
+.header-primary {
   display: flex;
   align-items: baseline;
-  justify-content: center;
-  gap: 8px;
+  gap: 5px;
+  min-width: 0;
 }
 
 .energy-amount {
-  font-size: 2.4rem;
+  font-size: 1.5rem;
   font-weight: 700;
   color: var(--accent);
   font-variant-numeric: tabular-nums;
+  line-height: 1.1;
 }
 
-.energy-label {
-  color: var(--text-dim);
-}
-
-.header-sub {
-  display: flex;
-  justify-content: center;
-  gap: 14px;
-  font-variant-numeric: tabular-nums;
+.energy-amount .icon {
+  font-size: 0.78em;
 }
 
 .eps {
   color: var(--green);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.header-sub {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--gap-md);
+  margin-left: auto;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.header-sub > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
 }
 
 .day-counter {
@@ -85,6 +129,32 @@ body {
 
 .shard-counter {
   color: var(--shard);
+}
+
+.rep-counter {
+  color: var(--accent);
+}
+
+/* Settings moved out of the tab bar into the header, freeing a nav slot. */
+.header-settings {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.header-settings.active {
+  color: var(--accent);
+  border-color: var(--accent-dim);
 }
 
 /* ---- Tabs (fixed bottom navbar) ---- */
@@ -116,10 +186,12 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: 7px 2px;
+  justify-content: center;
+  gap: 3px;
+  min-height: var(--touch);
+  padding: 5px 2px;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: none;
   color: var(--text-dim);
   cursor: pointer;
@@ -137,12 +209,14 @@ body {
 }
 
 .tab-icon {
-  font-size: 1rem;
+  font-size: 1.15rem;
+  line-height: 1;
 }
 
 .tab-label {
-  /* Eight tabs share the bar, so labels must never wrap or reflow it. */
-  font-size: 0.62rem;
+  /* Down from eight tabs to five, so labels can be legible instead of 10px. */
+  font-size: 0.7rem;
+  font-weight: 600;
   white-space: nowrap;
 }
 
@@ -150,22 +224,25 @@ body {
 .panel {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--gap-md);
 }
 
 .rows {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--gap-sm);
 }
 
 .section-title {
-  margin: 4px 0 0;
-  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0 0;
+  font-size: 0.72rem;
   color: var(--text-dim);
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
 }
 
 .row,
@@ -174,35 +251,113 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
-  padding: 11px 13px;
+  gap: var(--gap-md);
+  padding: 9px 11px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--panel);
   color: var(--text);
   text-align: left;
   font: inherit;
 }
 
-button.row {
+/* Interactive rows are visually distinct from static ones: a lifted surface,
+   a chevron affordance, and press feedback. Previously a tappable job row and
+   an untappable monster catalogue row were pixel-identical, so players learned
+   "cards are buttons" and then tapped ones that did nothing. */
+button.row,
+.row-interactive {
   cursor: pointer;
-  transition: background 0.1s;
+  background: linear-gradient(180deg, var(--panel-hover), var(--panel));
+  transition: background 0.12s, border-color 0.12s, transform 0.06s;
 }
 
-button.row:hover:not(:disabled) {
-  background: var(--panel-hover);
+button.row::after,
+.row-interactive::after {
+  content: '';
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border-right: 1.5px solid var(--text-faint);
+  border-bottom: 1.5px solid var(--text-faint);
+  transform: rotate(-45deg);
+  margin-left: -2px;
 }
 
-.row.unaffordable,
-button.row:disabled {
-  opacity: 0.55;
-  cursor: default;
+button.row:hover:not(:disabled),
+.row-interactive:hover {
+  border-color: var(--accent-dim);
 }
 
-.row.locked {
+button.row:active:not(:disabled),
+.row-interactive:active {
+  transform: scale(0.995);
+}
+
+/* Rows that own their own action buttons don't get a row-level chevron. */
+.row.has-actions::after,
+.quest-checklist-row::after {
+  content: none;
+}
+
+/* ---- Static (non-interactive) rows ----
+   Full-contrast body text. This is information, not a disabled control, so it
+   must stay readable — the old `.row.locked` at 45% opacity dropped live craft
+   costs and quest previews to roughly 2.3:1, well under the 4.5:1 minimum. */
+.row-static {
+  justify-content: flex-start;
+  gap: var(--gap-sm);
+  background: transparent;
+  color: var(--text);
+}
+
+.row-static .row-info {
+  flex: 1;
+}
+
+.row-static-icon {
   color: var(--text-dim);
-  justify-content: center;
-  opacity: 0.45;
+  align-self: flex-start;
+  margin-top: 0.15em;
+}
+
+.row-muted {
+  color: var(--text-dim);
+}
+
+.row-warning {
+  border-color: color-mix(in srgb, var(--red) 45%, var(--border));
+  background: color-mix(in srgb, var(--red) 8%, transparent);
+}
+
+.row-warning .row-static-icon {
+  color: var(--red);
+}
+
+/* Genuinely unavailable: dimmed, but via an explicit colour that still clears
+   AA rather than an opacity multiplier that compounds unpredictably. */
+.row.unaffordable,
+button.row:disabled,
+.row-locked {
+  cursor: default;
+  color: var(--text-faint);
+  background: var(--panel);
+  border-style: dashed;
+}
+
+.row.unaffordable .row-name,
+button.row:disabled .row-name,
+.row-locked .row-name {
+  color: var(--text-dim);
+}
+
+.row.unaffordable::after,
+button.row:disabled::after {
+  opacity: 0.3;
+}
+
+.row-locked {
+  justify-content: flex-start;
 }
 
 .row.maxed {
@@ -322,18 +477,20 @@ button.row:disabled {
 
 /* ---- Click & act buttons ---- */
 .click-button {
-  padding: 18px;
-  font-size: 1.2rem;
+  position: relative;
+  padding: 14px;
+  font-size: 1.1rem;
   font-weight: 700;
   border: 2px solid var(--accent-dim);
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   background: linear-gradient(180deg, #2a2410, #1e1a0c);
   color: var(--accent);
   cursor: pointer;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
+  font-family: inherit;
   transition: transform 0.05s;
 }
 
@@ -341,10 +498,63 @@ button.row:disabled {
   transform: scale(0.97);
 }
 
+.click-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .click-power {
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   font-weight: 400;
   color: var(--text-dim);
+}
+
+/* Floating "+N" on tap. The core loop's only feedback was a scale nudge, so
+   clicks read as inert — this ties the action to its result immediately. */
+.click-pops {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.click-pop {
+  position: absolute;
+  left: 50%;
+  top: 8px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--accent);
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.7);
+  animation: click-pop-rise 0.7s ease-out forwards;
+}
+
+@keyframes click-pop-rise {
+  0% { transform: translate(-50%, 0) scale(0.8); opacity: 0; }
+  20% { transform: translate(-50%, -6px) scale(1.1); opacity: 1; }
+  100% { transform: translate(-50%, -42px) scale(1); opacity: 0; }
+}
+
+.reduced-motion .click-pop {
+  animation: none;
+  opacity: 0;
+}
+
+.found-guild-track {
+  display: block;
+  width: 100%;
+  height: 5px;
+  margin: 6px 0 2px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.35);
+  border: none;
+  overflow: hidden;
+}
+
+.found-guild-track .progress-fill {
+  display: block;
+  background: var(--green);
 }
 
 .found-guild {
@@ -381,16 +591,30 @@ button.row:disabled {
   align-items: center;
 }
 
+.subtab-bar {
+  /* Panels with four sections (Items) scroll horizontally rather than
+     shrinking every label past legibility. */
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.subtab-bar::-webkit-scrollbar {
+  display: none;
+}
+
 .subtab {
-  flex: 1;
-  padding: 8px;
+  flex: 1 0 auto;
+  min-height: 38px;
+  padding: 0 12px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--panel);
   color: var(--text-dim);
   font: inherit;
+  font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .subtab.active {
@@ -401,8 +625,9 @@ button.row:disabled {
 
 .buy-amount-bar .subtab {
   flex: 0 0 auto;
-  padding: 5px 12px;
-  font-size: 0.8rem;
+  min-width: 46px;
+  padding: 0 10px;
+  font-size: 0.82rem;
 }
 
 .buy-amount-label {
@@ -560,7 +785,7 @@ button.row:disabled {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  max-height: 260px;
+  max-height: 220px;
   overflow-y: auto;
   padding: 8px 10px;
   border: 1px solid var(--border);
@@ -596,18 +821,17 @@ button.row:disabled {
 /* ---- Adventurer detail modal ---- */
 .detail-modal {
   width: 100%;
-  max-height: 85vh;
-  overflow-y: auto;
+  max-height: 88vh;
   display: flex;
   flex-direction: column;
-  gap: 10px;
 }
 
 .detail-header {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
-  gap: 10px;
+  align-items: center;
+  gap: var(--gap-md);
+  flex-shrink: 0;
 }
 
 .detail-header .story-title {
@@ -620,10 +844,14 @@ button.row:disabled {
   font-size: 0.85rem;
 }
 
-.detail-stats {
+/* Fits as many tiles per row as will actually fit, instead of forcing three.
+   A 2-tile group used to leave an orphaned empty cell, and at 320px three
+   columns crushed labels like "Dungeons Cleared" into unreadable slivers. */
+.detail-stats,
+.stat-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
+  gap: var(--gap-sm);
 }
 
 .stat-bars {
@@ -673,26 +901,99 @@ button.row:disabled {
   justify-content: flex-end;
 }
 
+/* ---- Buttons ----
+   One base with three intents. Every one clears the 44px touch minimum: these
+   are the controls for Craft, Explore, Recruit, Recall, Fire and Disassemble,
+   and at the old 29px they were a mis-tap away from something destructive. */
 .small-button {
-  padding: 6px 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: var(--touch);
+  padding: 0 14px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--panel-hover);
   color: var(--text);
   font: inherit;
-  font-size: 0.8rem;
+  font-size: 0.85rem;
+  font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
+  transition: background 0.12s, border-color 0.12s, transform 0.06s;
+}
+
+.small-button:hover:not(:disabled) {
+  border-color: var(--accent-dim);
+}
+
+.small-button:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 .small-button:disabled {
-  opacity: 0.45;
+  color: var(--text-faint);
+  background: transparent;
+  border-style: dashed;
   cursor: default;
+}
+
+/* The one action a screen is actually for — filled, so it reads first. */
+.small-button.primary {
+  border-color: var(--accent-dim);
+  background: linear-gradient(180deg, #4a3d16, #332a0f);
+  color: var(--accent);
+}
+
+.small-button.primary:disabled {
+  background: transparent;
+  color: var(--text-faint);
+  border-color: var(--border);
 }
 
 .small-button.danger {
   border-color: #703038;
   color: var(--red);
+  background: transparent;
+}
+
+.small-button.danger:hover:not(:disabled) {
+  border-color: var(--red);
+}
+
+/* Icon-only controls (modal close). Square, and still a full touch target. */
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--touch);
+  height: var(--touch);
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 1.15rem;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.icon-button:hover {
+  background: var(--panel-hover);
+  color: var(--text);
+}
+
+/* A row of buttons that should wrap rather than overflow on a narrow phone. */
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap-sm);
+}
+
+.button-row .small-button {
+  flex: 1 1 auto;
 }
 
 /* ---- Map ---- */
@@ -772,21 +1073,99 @@ button.row:disabled {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 10px 4px;
+  gap: 1px;
+  padding: 8px 4px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   background: var(--panel);
 }
 
 .stat-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 
+.stat-value.tone-accent {
+  color: var(--accent);
+}
+
+.stat-value.tone-shard {
+  color: var(--shard);
+}
+
+.stat-value.tone-green {
+  color: var(--green);
+}
+
 .stat-label {
-  font-size: 0.68rem;
+  font-size: 0.66rem;
   color: var(--text-dim);
   text-align: center;
+  line-height: 1.25;
+}
+
+/* ---- Stat chips (item ATK / DEF / HP) ---- */
+.stat-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+
+.stat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-chip .icon {
+  color: var(--text-dim);
+}
+
+/* ---- Collapsible help ---- */
+.info-note {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--panel) 60%, transparent);
+}
+
+.info-note-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
+  width: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+  border: none;
+  background: none;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 0.78rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.info-note-toggle span {
+  flex: 1;
+}
+
+.info-note-chevron {
+  transition: transform 0.15s;
+}
+
+.info-note.open .info-note-chevron {
+  transform: rotate(180deg);
+}
+
+.info-note-body {
+  margin: 0;
+  padding: 0 10px 10px;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--text-dim);
 }
 
 .item-rare {
@@ -950,7 +1329,10 @@ button.row:disabled {
 }
 
 .equip-menu-option {
-  padding: 6px 8px;
+  display: flex;
+  align-items: center;
+  min-height: 38px;
+  padding: 0 10px;
   border: none;
   border-radius: 6px;
   background: none;
@@ -1250,21 +1632,87 @@ button.row:disabled {
 .story-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.72);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
+  padding: 16px;
   z-index: 10;
 }
 
 .story-modal {
+  width: 100%;
   max-width: 440px;
-  padding: 24px;
+  padding: 18px;
   background: var(--panel);
   border: 1px solid var(--accent-dim);
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+}
+
+/* The modal shell splits into a fixed header, a scrolling body and a pinned
+   footer, so a long dialog's primary action stays reachable instead of being
+   stranded at the bottom of a 90vh scroll. */
+.detail-modal {
+  padding: 0;
+  overflow: hidden;
+}
+
+.detail-modal .detail-header {
+  padding: 10px 8px 10px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-md);
+  padding: var(--gap-lg);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.modal-footer {
+  display: flex;
+  gap: var(--gap-sm);
+  padding: 10px var(--gap-lg) calc(10px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.modal-footer .small-button {
+  flex: 1;
+}
+
+/* On phones, dialogs dock to the bottom as a sheet — reachable by thumb, and
+   the taller viewport share means less internal scrolling. */
+@media (max-width: 560px) {
+  .story-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .story-modal {
+    max-width: 100%;
+    max-height: 92vh;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    border-bottom: none;
+    animation: sheet-rise 0.18s ease-out;
+  }
+
+  .detail-modal {
+    display: flex;
+    flex-direction: column;
+  }
+}
+
+@keyframes sheet-rise {
+  from { transform: translateY(12px); }
+  to { transform: none; }
+}
+
+.reduced-motion .story-modal {
+  animation: none;
 }
 
 .story-title {
@@ -1370,7 +1818,8 @@ button.row:disabled {
 /* ---- Offline toast ---- */
 .offline-toast {
   position: fixed;
-  bottom: 20px;
+  /* Clears the fixed tab bar instead of covering navigation. */
+  bottom: calc(72px + env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%);
   max-width: 440px;
@@ -1378,10 +1827,14 @@ button.row:disabled {
   padding: 14px 18px;
   background: var(--panel);
   border: 1px solid var(--accent-dim);
-  border-radius: 12px;
-  cursor: pointer;
+  border-radius: var(--radius-md);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
-  z-index: 5;
+  z-index: 6;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--gap-md);
+  font-size: 0.85rem;
+  line-height: 1.5;
 }
 
 /* ---- Quest board (map location detail + posted quests) ---- */
@@ -1458,14 +1911,15 @@ button.row:disabled {
 }
 
 .field-label input {
-  width: 56px;
+  width: 68px;
+  min-height: 38px;
   background: var(--panel);
   color: var(--text);
   border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  padding: 0 8px;
   font: inherit;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
 }
 
 .field-label input:disabled {

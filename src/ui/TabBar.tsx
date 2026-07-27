@@ -1,24 +1,27 @@
-import { forgeUnlocked } from '../game/guild';
-import { isTimeTravelUnlocked } from '../game/prestige';
 import { useGameState } from '../hooks/useGame';
+import { Icon, type IconName } from './icons';
 
-export type TabId = 'overview' | 'town' | 'guild' | 'map' | 'inventory' | 'crafting' | 'timeline' | 'settings';
+export type TabId = 'overview' | 'town' | 'guild' | 'map' | 'items';
 
 interface TabDef {
   id: TabId;
   label: string;
-  icon: string;
+  icon: IconName;
 }
 
+/**
+ * Five destinations, down from eight. Inventory and Crafting merged into
+ * "Items" (they're the same mental category — your stuff), Settings moved to a
+ * header button, and Timeline became an Overview section. Eight tabs forced
+ * 10px labels and put eight top-level choices in front of the player at once;
+ * five leaves room for legible text and a proper thumb target each.
+ */
 const TABS: TabDef[] = [
-  { id: 'overview', label: 'Overview', icon: '📊' },
-  { id: 'town', label: 'Town', icon: '🏘' },
-  { id: 'guild', label: 'Guild', icon: '🛡' },
-  { id: 'map', label: 'Map', icon: '🗺' },
-  { id: 'inventory', label: 'Inventory', icon: '🎒' },
-  { id: 'crafting', label: 'Crafting', icon: '🔨' },
-  { id: 'timeline', label: 'Timeline', icon: '⏳' },
-  { id: 'settings', label: 'Settings', icon: '⚙' },
+  { id: 'overview', label: 'Overview', icon: 'chart' },
+  { id: 'town', label: 'Town', icon: 'home' },
+  { id: 'guild', label: 'Guild', icon: 'banner' },
+  { id: 'map', label: 'Map', icon: 'map' },
+  { id: 'items', label: 'Items', icon: 'pack' },
 ];
 
 export function TabBar({
@@ -30,28 +33,27 @@ export function TabBar({
 }) {
   const state = useGameState();
 
+  // Tabs reveal as the acts unfold. They're dropped rather than hidden-in-place:
+  // holding the slot avoided a one-time reflow, but with five tabs instead of
+  // eight it left most of the bar as empty gaps through the whole of Act 1.
+  const visible = TABS.filter(
+    (tab) => state.act >= 2 || !['guild', 'map', 'items'].includes(tab.id),
+  );
+
   return (
     <nav className="tab-bar">
-      {TABS.map((tab) => {
-        // Tabs reveal as the acts unfold; locked tabs keep their slot so the
-        // bar doesn't reflow when they appear.
-        const locked =
-          (state.act < 2 && ['guild', 'map', 'inventory'].includes(tab.id)) ||
-          (tab.id === 'crafting' && !forgeUnlocked(state)) ||
-          (tab.id === 'timeline' && !isTimeTravelUnlocked(state));
-        return (
-          <button
-            key={tab.id}
-            className={`tab ${active === tab.id ? 'active' : ''} ${locked ? 'tab-locked' : ''}`}
-            aria-hidden={locked}
-            tabIndex={locked ? -1 : undefined}
-            onClick={() => onChange(tab.id)}
-          >
-            <span className="tab-icon">{tab.icon}</span>
-            <span className="tab-label">{tab.label}</span>
-          </button>
-        );
-      })}
+      {visible.map((tab) => (
+        <button
+          key={tab.id}
+          className={`tab ${active === tab.id ? 'active' : ''}`}
+          onClick={() => onChange(tab.id)}
+        >
+          <span className="tab-icon">
+            <Icon name={tab.icon} />
+          </span>
+          <span className="tab-label">{tab.label}</span>
+        </button>
+      ))}
     </nav>
   );
 }

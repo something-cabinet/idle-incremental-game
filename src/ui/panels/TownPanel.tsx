@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { JOBS, MATERIALS, TOWN_SKILLS, WORKER_CAP, WORKER_PRODUCTION } from '../../game/config';
+import { JOBS, TOWN_SKILLS, WORKER_CAP, WORKER_PRODUCTION } from '../../game/config';
 import {
   buyJob,
   click,
@@ -21,6 +21,8 @@ import type { TownSkillDef } from '../../game/types';
 import { useFormat } from '../../hooks/useFormat';
 import { useGameState, useGameStore } from '../../hooks/useGame';
 import { usePanelSection } from '../../hooks/usePanelSection';
+import { materialName } from '../display';
+import { Icon } from '../icons';
 
 const BUY_AMOUNTS = [1, 5, 10, 100] as const;
 
@@ -30,12 +32,35 @@ export function TownPanel() {
   const fmt = useFormat();
   const [section, setSection] = usePanelSection<'jobs' | 'skills'>('town', 'jobs');
   const [buyAmount, setBuyAmount] = useState<number>(1);
+  // Each click spawns a short-lived "+N" that floats off the button. The core
+  // loop had no feedback beyond a 0.97 scale, so taps felt unacknowledged.
+  const [pops, setPops] = useState<{ id: number; amount: number }[]>([]);
+
+  function handleClick() {
+    const amount = effectiveClickPower(state);
+    const id = Date.now() + Math.random();
+    setPops((p) => [...p.slice(-6), { id, amount }]);
+    setTimeout(() => setPops((p) => p.filter((x) => x.id !== id)), 700);
+    store.dispatch(click);
+  }
+
+  const foundingCost = guildFoundingCost(state);
+  const foundingProgress = Math.min(1, state.gold / foundingCost);
 
   return (
     <div className="panel">
-      <button className="click-button" onClick={() => store.dispatch(click)}>
-        Work Odd Jobs 🪙
+      <button className="click-button" onClick={handleClick}>
+        <span className="click-label">
+          <Icon name="coin" /> Work Odd Jobs
+        </span>
         <span className="click-power">+{fmt(effectiveClickPower(state))} gold per click</span>
+        <span className="click-pops" aria-hidden="true">
+          {pops.map((p) => (
+            <span key={p.id} className="click-pop">
+              +{fmt(p.amount)}
+            </span>
+          ))}
+        </span>
       </button>
 
       {state.act === 1 && (
@@ -44,9 +69,18 @@ export function TownPanel() {
           disabled={!canFoundGuild(state)}
           onClick={() => store.dispatch(foundGuild)}
         >
-          🛡 Found the Guild — {fmt(guildFoundingCost(state))} gold
+          <span>
+            <Icon name="banner" /> Found the Guild — {fmt(foundingCost)} gold
+          </span>
+          {/* Goal-gradient: showing how close you are is what makes the last
+              stretch of a long save-up feel worth grinding. */}
+          <span className="progress-track found-guild-track">
+            <span className="progress-fill" style={{ width: `${foundingProgress * 100}%` }} />
+          </span>
           <span className="found-guild-hint">
-            Take your place as the town’s leader
+            {canFoundGuild(state)
+              ? 'Take your place as the town’s leader'
+              : `${fmt(Math.max(0, foundingCost - state.gold))} to go`}
           </span>
         </button>
       )}
@@ -112,7 +146,22 @@ function JobsSection({
           const affordable = state.gold >= cost;
           const unlocked = !job.requiresUpgrade || (state.guildUpgrades[job.requiresUpgrade] ?? 0) >= 1;
           const revealed = unlocked && (owned > 0 || state.totalGoldEarned >= job.baseCost * 0.5);
-          if (!revealed) return <div key={job.id} className="row locked">???</div>;
+          // A bare "???" hid how close the next job was. Showing the threshold
+          // turns dead rows into something to aim at.
+          if (!revealed) {
+            return (
+              <div key={job.id} className="row row-locked">
+                <div className="row-info">
+                  <span className="row-name">
+                    <Icon name="lock" /> Locked
+                  </span>
+                  <span className="row-desc">
+                    Earn {fmt(job.baseCost * 0.5)} gold total to discover this job
+                  </span>
+                </div>
+              </div>
+            );
+          }
           return (
             <button
               key={job.id}
@@ -131,7 +180,7 @@ function JobsSection({
                 </span>
               </div>
               <div className="row-cost">
-                {fmt(cost)} 🪙
+                <span><Icon name="coin" /> {fmt(cost)}</span>
                 {buyAmount > 1 && <span className="mat-cost">for {buyAmount}</span>}
               </div>
             </button>
@@ -172,7 +221,7 @@ function WorkerRow({ buyAmount }: { buyAmount: number }) {
         <div className="row-cost">
           {state.workers >= WORKER_CAP ? 'Max' : (
             <>
-              {fmt(cost)} 🪙
+              <span><Icon name="coin" /> {fmt(cost)}</span>
               {buyable > 1 && <span className="mat-cost">for {buyable}</span>}
             </>
           )}
@@ -187,8 +236,8 @@ function WorkerRow({ buyAmount }: { buyAmount: number }) {
 // ---------------------------------------------------------------------------
 
 const BRANCH_TITLES: Record<string, string> = {
-  industry: '🏭 Industry',
-  hustle: '🪙 Hustle',
+  industry: 'Industry',
+  hustle: 'Hustle',
 };
 
 function SkillsSection() {
@@ -237,10 +286,10 @@ function SkillNode({ def, isRoot }: { def: TownSkillDef; isRoot: boolean }) {
           <div className="row-cost">
             {maxed ? 'Max' : (
               <>
-                {fmt(cost.gold)} 🪙
+                <span><Icon name="coin" /> {fmt(cost.gold)}</span>
                 {Object.entries(cost.materials).map(([id, n]) => (
                   <span key={id} className="mat-cost">
-                    {n} {MATERIALS.find((m) => m.id === id)?.name ?? id}
+                    {n} {materialName(id)}
                   </span>
                 ))}
               </>
@@ -248,7 +297,11 @@ function SkillNode({ def, isRoot }: { def: TownSkillDef; isRoot: boolean }) {
           </div>
         </button>
       ) : (
-        <div className="row locked skill-node">🔒 {def.name}</div>
+        <div className="row row-locked skill-node">
+          <span className="row-name">
+            <Icon name="lock" /> {def.name}
+          </span>
+        </div>
       )}
     </>
   );

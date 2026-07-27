@@ -5,7 +5,6 @@ import type { BattleCarryIn, BattleOutcome } from '../../game/combat';
 import {
   DUNGEON_WINS_REQUIRED,
   EXPLORE_MAX_PARTY_SIZE,
-  MATERIALS,
   QUEST_DEFAULT_MAX_ADVENTURERS,
   QUEST_MAX_BATCH,
   QUEST_MAX_REPEATS_INPUT,
@@ -25,27 +24,12 @@ import {
   targetsForLocation,
   zones,
 } from '../../game/guild';
-import type { Adventurer, AdventurerClass, DungeonDef, LocationDef, QuestRequirement, QuestTargetDef } from '../../game/types';
+import type { Adventurer, DungeonDef, LocationDef, QuestRequirement, QuestTargetDef } from '../../game/types';
 import { useGameState, useGameStore } from '../../hooks/useGame';
 import { BattleModal } from '../BattleModal';
-
-function materialName(id: string): string {
-  return MATERIALS.find((m) => m.id === id)?.name ?? id;
-}
-
-const CLASS_LABEL: Record<AdventurerClass, string> = {
-  warrior: 'Warrior',
-  ranger: 'Ranger',
-  mage: 'Mage',
-};
-
-/** Compact rate number: 12.3, 0.45, 1,240. */
-function rate(n: number): string {
-  if (n === 0) return '0';
-  if (n < 10) return n.toFixed(2);
-  if (n < 100) return n.toFixed(1);
-  return Math.round(n).toLocaleString();
-}
+import { InfoNote, Modal, NoteRow } from '../components';
+import { CLASS_LABEL, materialName, rate } from '../display';
+import { Icon } from '../icons';
 
 export function MapPanel() {
   const [subtab, setSubtab] = useState<'explore' | 'dungeons'>('explore');
@@ -67,11 +51,10 @@ export function MapPanel() {
       </div>
       {subtab === 'explore' ? (
         <section className="rows">
-          <h3 className="section-title">Wilds</h3>
-          <p className="detail-sub">
-            Browse each zone's monsters and gatherables, then post a quest there for
-            whichever of them you need — see Guild → Quests to manage what's running.
-          </p>
+          <InfoNote id="wilds-help" title="How the wilds work">
+            Browse each zone's monsters and gatherables, then post a quest there for whichever of
+            them you need — see Guild → Quests to manage what's running.
+          </InfoNote>
           {zones().map((zone) => (
             <ZoneCard key={zone.id} zone={zone} />
           ))}
@@ -92,12 +75,11 @@ export function MapPanel() {
 function DungeonsSection() {
   return (
     <section className="rows">
-      <h3 className="section-title">Dungeons</h3>
-      <p className="detail-sub">
+      <InfoNote id="dungeon-help" title="How dungeons work">
         Win {DUNGEON_WINS_REQUIRED} manual Explore battles in a zone to discover its dungeon — a
         multi-room gauntlet capped by a tougher boss fight. Repeatable, with a bonus haul on every
         full clear.
-      </p>
+      </InfoNote>
       {zones().map((zone) => (
         <DungeonCard key={zone.id} zone={zone} />
       ))}
@@ -123,14 +105,16 @@ function DungeonCard({ zone }: { zone: LocationDef }) {
       </div>
       <div className="zone-detail">
         {progress.unlocked ? (
-          <button className="small-button" onClick={() => setOpen(true)}>
-            ⚔ Enter Dungeon
+          <button className="small-button primary" onClick={() => setOpen(true)}>
+            <Icon name="sword" /> Enter Dungeon
           </button>
         ) : (
-          <div className="row locked">
-            🔒 Win {progress.wins}/{DUNGEON_WINS_REQUIRED} Explore battles at {zone.name} to discover
-            this dungeon.
-          </div>
+          <NoteRow icon="lock" tone="muted">
+            <span className="row-desc">
+              Win {progress.wins}/{DUNGEON_WINS_REQUIRED} Explore battles at {zone.name} to
+              discover this dungeon.
+            </span>
+          </NoteRow>
         )}
       </div>
       {open && <DungeonRunDialog dungeon={dungeon} zone={zone} onClose={() => setOpen(false)} />}
@@ -227,59 +211,57 @@ function DungeonRunDialog({
 
   if (finished) {
     return (
-      <div className="story-overlay" onClick={onClose}>
-        <div className="story-modal detail-modal" onClick={(e) => e.stopPropagation()}>
-          <div className="detail-header">
-            <h2 className="story-title">{dungeon.name}</h2>
-            <button className="small-button" onClick={onClose}>✕</button>
-          </div>
-          <p className="detail-sub">
+      <Modal
+        title={dungeon.name}
+        onClose={onClose}
+        footer={
+          <button className="small-button primary" onClick={onClose}>
+            Close
+          </button>
+        }
+      >
+        <NoteRow icon={finished === 'cleared' ? 'trophy' : 'bandage'}>
+          <span className="row-desc">
             {finished === 'cleared'
               ? `Cleared! The party defeated ${dungeon.bossName} and returned with a bonus haul.`
-              : "The party was overwhelmed and had to retreat. No permadeath — champions are recovering in town."}
-          </p>
-          <button className="small-button" onClick={onClose}>Close</button>
-        </div>
-      </div>
+              : 'The party was overwhelmed and had to retreat. No permadeath — champions are recovering in town.'}
+          </span>
+        </NoteRow>
+      </Modal>
     );
   }
 
   return (
-    <div className="story-overlay" onClick={onClose}>
-      <div className="story-modal detail-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="detail-header">
-          <h2 className="story-title">{dungeon.name}</h2>
-          <button className="small-button" onClick={onClose}>✕</button>
-        </div>
-        <p className="detail-sub">
-          {dungeon.description} {DUNGEON_TOTAL_ROOMS - 1} rooms, then {dungeon.bossName} — clear every
-          room in one run for a bonus haul. Knocked-out champions sit out the rest of the run (no
-          permadeath), and a wipe ends the run with whatever's already been earned.
-        </p>
+    <Modal
+      title={dungeon.name}
+      onClose={onClose}
+      footer={
+        <button className="small-button primary" disabled={partyIds.length === 0} onClick={begin}>
+          <Icon name="sword" /> Enter Dungeon ({partyIds.length}/{EXPLORE_MAX_PARTY_SIZE})
+        </button>
+      }
+    >
+      <InfoNote id="dungeon-run-help" title={`${DUNGEON_TOTAL_ROOMS - 1} rooms, then ${dungeon.bossName}`}>
+        Clear every room in one run for a bonus haul. Knocked-out champions sit out the rest of the
+        run (no permadeath), and a wipe ends the run with whatever's already been earned.
+      </InfoNote>
 
-        <div className="rows">
+      <div className="rows">
           {state.adventurers.length === 0 && (
-            <div className="row locked">Recruit champions in the Guild tab first.</div>
+            <NoteRow icon="info" tone="muted">Recruit champions in the Guild tab first.</NoteRow>
           )}
-          {state.adventurers.map((adv) => (
-            <ExplorePartyRow
-              key={adv.id}
-              adv={adv}
-              selected={partyIds.includes(adv.id)}
-              disabled={!canExplore(state, adv) && !partyIds.includes(adv.id)}
-              injured={isInjured(adv, state.runTimeSeconds)}
-              onToggle={() => toggle(adv.id)}
-            />
-          ))}
-        </div>
-
-        <div className="zone-actions">
-          <button className="small-button" disabled={partyIds.length === 0} onClick={begin}>
-            ⚔ Enter Dungeon ({partyIds.length}/{EXPLORE_MAX_PARTY_SIZE})
-          </button>
-        </div>
+        {state.adventurers.map((adv) => (
+          <ExplorePartyRow
+            key={adv.id}
+            adv={adv}
+            selected={partyIds.includes(adv.id)}
+            disabled={!canExplore(state, adv) && !partyIds.includes(adv.id)}
+            injured={isInjured(adv, state.runTimeSeconds)}
+            onToggle={() => toggle(adv.id)}
+          />
+        ))}
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -292,9 +274,11 @@ function ZoneCard({ zone }: { zone: LocationDef }) {
 
   if (!unlocked) {
     return (
-      <div className="row locked">
-        🔒 {zone.name} — reach {zone.repRequired} reputation
-      </div>
+      <NoteRow icon="lock" tone="muted">
+        <span className="row-desc">
+          {zone.name} — reach {zone.repRequired} reputation
+        </span>
+      </NoteRow>
     );
   }
 
@@ -309,26 +293,32 @@ function ZoneCard({ zone }: { zone: LocationDef }) {
           {zone.name} <span className="row-sub">tier {zone.tier}</span>
         </span>
         <span className="row-desc">{zone.description}</span>
-        <span className="zone-toggle">{open ? ' ▲' : ' ▼'}</span>
+        <span className={`zone-toggle ${open ? 'open' : ''}`}>
+          <Icon name="chevron" />
+        </span>
       </button>
 
       {open && (
         <div className="zone-detail">
           <div className="section-title-row">
-            <h4 className="section-title">👹 Monsters</h4>
+            <h4 className="section-title">
+              <Icon name="beast" /> Monsters
+            </h4>
             <div className="zone-actions">
-              <button className="small-button" onClick={() => setExploreOpen(true)}>
-                ⚔ Explore
+              <button className="small-button primary" onClick={() => setExploreOpen(true)}>
+                <Icon name="sword" /> Explore
               </button>
               <button className="small-button" onClick={() => setDialogOpen(true)}>
-                + Post Quest
+                <Icon name="plus" /> Post Quest
               </button>
             </div>
           </div>
           {monsters.map((t) => (
             <TargetCatalogRow key={t.id} target={t} />
           ))}
-          <h4 className="section-title">🌿 Gatherables</h4>
+          <h4 className="section-title">
+            <Icon name="flora" /> Gatherables
+          </h4>
           {gatherables.map((t) => (
             <TargetCatalogRow key={t.id} target={t} />
           ))}
@@ -434,39 +424,47 @@ function ExploreDialog({ zone, onClose }: { zone: LocationDef; onClose: () => vo
   const unlocked = autoExploreUnlocked(state);
 
   return (
-    <div className="story-overlay" onClick={onClose}>
-      <div className="story-modal detail-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="detail-header">
-          <h2 className="story-title">Explore — {zone.name}</h2>
-          <button className="small-button" onClick={onClose}>✕</button>
-        </div>
-        <p className="detail-sub">
-          Pick up to {EXPLORE_MAX_PARTY_SIZE} champions. <strong>Begin Explore</strong> fights
-          right now, turn-by-turn.{' '}
-          {unlocked ? (
-            <>
-              <strong>Send on Auto-Explore</strong> posts them here to auto-battle on their own —
-              they keep earning XP and loot while you're away, and rest to recover if a fight goes
-              badly.
-            </>
-          ) : (
-            <>Auto-Explore is locked — unlock it in Guild → Upgrades.</>
-          )}{' '}
-          No permadeath.
-        </p>
+    <Modal
+      title={`Explore — ${zone.name}`}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="small-button primary" disabled={partyIds.length === 0} onClick={begin}>
+            <Icon name="sword" /> Explore ({partyIds.length}/{EXPLORE_MAX_PARTY_SIZE})
+          </button>
+          <button
+            className="small-button"
+            disabled={!unlocked || partyIds.length === 0 || autoExploreSlotsLeft <= 0}
+            onClick={sendOnAutoExplore}
+            title={!unlocked ? 'Unlock Auto-Explore in Guild → Upgrades' : undefined}
+          >
+            <Icon name="map" /> Auto
+          </button>
+        </>
+      }
+    >
+      <InfoNote id="explore-help" title="Explore vs. auto-explore" defaultOpen={!unlocked}>
+        <strong>Explore</strong> fights right now, turn by turn, and keeps going until you stop or
+        the squad is knocked out.{' '}
+        {unlocked
+          ? 'Auto sends the party to battle here on their own, earning XP and loot while you are away and resting when a fight goes badly.'
+          : 'Auto-Explore is locked — unlock it in Guild → Upgrades.'}{' '}
+        No permadeath either way.
+      </InfoNote>
 
         {autoExploring.length > 0 && (
           <div className="rows">
             <h3 className="section-title">
-              🗺️ Auto-Exploring here ({autoExploring.length}/{EXPLORE_MAX_PARTY_SIZE})
+              <Icon name="map" /> Auto-exploring here ({autoExploring.length}/
+              {EXPLORE_MAX_PARTY_SIZE})
             </h3>
             {autoExploring.map((adv) => (
-              <div key={adv.id} className="row item-common">
+              <div key={adv.id} className="row item-common has-actions">
                 <div className="row-info">
                   <span className="row-name">{adv.name}</span>
                   <span className="row-desc">
                     Lv {adv.level}
-                    {isInjured(adv, state.runTimeSeconds) ? ' · 🩹 resting' : ' · auto-exploring'}
+                    {isInjured(adv, state.runTimeSeconds) ? ' · resting' : ' · auto-exploring'}
                   </span>
                 </div>
                 <button
@@ -482,7 +480,7 @@ function ExploreDialog({ zone, onClose }: { zone: LocationDef; onClose: () => vo
 
         <div className="rows">
           {state.adventurers.length === 0 && (
-            <div className="row locked">Recruit champions in the Guild tab first.</div>
+            <NoteRow icon="info" tone="muted">Recruit champions in the Guild tab first.</NoteRow>
           )}
           {state.adventurers.map((adv) => (
             <ExplorePartyRow
@@ -496,32 +494,15 @@ function ExploreDialog({ zone, onClose }: { zone: LocationDef; onClose: () => vo
           ))}
         </div>
 
-        <div className="quest-post">
-          <label className="field-label checkbox-label">
-            <input
-              type="checkbox"
-              checked={autoContinue}
-              onChange={(e) => setAutoContinue(e.target.checked)}
-            />
-            auto continue
-          </label>
-        </div>
-
-        <div className="zone-actions">
-          <button className="small-button" disabled={partyIds.length === 0} onClick={begin}>
-            ⚔ Begin Explore ({partyIds.length}/{EXPLORE_MAX_PARTY_SIZE}) ∞
-          </button>
-          <button
-            className="small-button"
-            disabled={!unlocked || partyIds.length === 0 || autoExploreSlotsLeft <= 0}
-            onClick={sendOnAutoExplore}
-            title={!unlocked ? 'Unlock Auto-Explore in Guild → Upgrades' : undefined}
-          >
-            🗺️ Send on Auto-Explore
-          </button>
-        </div>
-      </div>
-    </div>
+      <label className="field-label checkbox-label">
+        <input
+          type="checkbox"
+          checked={autoContinue}
+          onChange={(e) => setAutoContinue(e.target.checked)}
+        />
+        Keep fighting without asking
+      </label>
+    </Modal>
   );
 }
 
@@ -564,7 +545,7 @@ function TargetCatalogRow({ target }: { target: QuestTargetDef }) {
       <div className="row-info">
         <span className="row-name">{target.name}</span>
         <span className="row-desc">
-          {verb} → {materialName(target.materialId)}
+          {verb} · yields {materialName(target.materialId)}
         </span>
       </div>
     </div>
@@ -625,16 +606,23 @@ function QuestCreationDialog({ zone, onClose }: { zone: LocationDef; onClose: ()
   }
 
   return (
-    <div className="story-overlay" onClick={onClose}>
-      <div className="story-modal detail-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="detail-header">
-          <h2 className="story-title">Post a Quest — {zone.name}</h2>
-          <button className="small-button" onClick={onClose}>✕</button>
-        </div>
-        <p className="detail-sub">
-          Check everything this quest requires (up to {QUEST_MAX_REQUIREMENTS}) — the whole
-          bundle must be fulfilled together before it pays out. Max {QUEST_MAX_BATCH} per material type.
-        </p>
+    <Modal
+      title={`Post a Quest — ${zone.name}`}
+      onClose={onClose}
+      footer={
+        <button
+          className="small-button primary"
+          disabled={requirements.length === 0}
+          onClick={handlePost}
+        >
+          Post Quest
+        </button>
+      }
+    >
+      <InfoNote id="quest-help" title="Bundling requirements" defaultOpen={state.quests.length === 0}>
+        Check everything this quest requires (up to {QUEST_MAX_REQUIREMENTS}) — the whole bundle
+        must be fulfilled together before it pays out. Max {QUEST_MAX_BATCH} per material type.
+      </InfoNote>
 
         <div className="rows">
           {targets.map((target) => {
@@ -701,25 +689,20 @@ function QuestCreationDialog({ zone, onClose }: { zone: LocationDef; onClose: ()
 
         <h3 className="section-title">Preview</h3>
         {summary ? (
-          <div className="row locked">
-            {summary.materials.map((m) => `${m.amount} ${materialName(m.materialId)}`).join(' · ')}
-            <br />
-            −{rate(summary.gold)} 🪙 · +{rate(summary.reputation)} ★ · ~
-            {formatDuration(summary.timeSeconds)}/round · {summary.assigned}/{summary.maxAdventurers}{' '}
-            adventurers
-          </div>
+          <NoteRow icon="check">
+            <span className="row-name">
+              {summary.materials.map((m) => `${m.amount} ${materialName(m.materialId)}`).join(' · ')}
+            </span>
+            <span className="row-desc">
+              −{rate(summary.gold)} gold · +{rate(summary.reputation)} rep · ~
+              {formatDuration(summary.timeSeconds)}/round · {summary.assigned}/
+              {summary.maxAdventurers} adventurers
+            </span>
+          </NoteRow>
         ) : (
-          <div className="row locked">Check at least one monster or gatherable.</div>
+          <NoteRow icon="info" tone="muted">Check at least one monster or gatherable.</NoteRow>
         )}
 
-        <button
-          className="small-button"
-          disabled={requirements.length === 0}
-          onClick={handlePost}
-        >
-          Post Quest
-        </button>
-      </div>
-    </div>
+    </Modal>
   );
 }

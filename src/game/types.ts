@@ -382,6 +382,8 @@ export interface Quest {
 export interface MaterialDef {
   id: string;
   name: string;
+  /** Icon vocabulary name, resolved to artwork by the UI (see ui/icons.tsx). */
+  icon: string;
 }
 
 export interface GuildUpgradeDef {

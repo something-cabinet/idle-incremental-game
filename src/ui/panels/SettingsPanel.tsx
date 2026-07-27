@@ -8,6 +8,7 @@ import {
 import type { NumberFormat } from '../../game/types';
 import { useGameState, useGameStore } from '../../hooks/useGame';
 import { localStorageAdapter } from '../../platform/storage';
+import { Icon } from '../icons';
 
 export function SettingsPanel() {
   const store = useGameStore();
@@ -81,13 +82,13 @@ export function SettingsPanel() {
             className="small-button"
             onClick={() => store.dispatch((s) => debugAddGold(s, 10_000))}
           >
-            +10K 🪙
+            +10K <Icon name="coin" />
           </button>
           <button
             className="small-button"
             onClick={() => store.dispatch((s) => debugAddGold(s, 1_000_000))}
           >
-            +1M 🪙
+            +1M <Icon name="coin" />
           </button>
           <button
             className="small-button"
@@ -99,7 +100,7 @@ export function SettingsPanel() {
             className="small-button"
             onClick={() => store.dispatch((s) => debugAddShards(s, 10))}
           >
-            +10 ⏳
+            +10 <Icon name="hourglass" />
           </button>
         </div>
       </Row>

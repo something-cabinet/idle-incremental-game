@@ -1,5 +1,6 @@
 import { equipmentPerkDef, equipmentPerkText } from '../game/equipmentPerks';
 import type { Equipment } from '../game/types';
+import { Icon } from './icons';
 
 /**
  * An ascendant item's perk, as a badge row — mirrors the champion PerkBadge
@@ -12,10 +13,10 @@ export function GearPerkBadge({ item }: { item: Equipment }) {
   const text = equipmentPerkText(item);
   if (!def || !text) return null;
   return (
-    <div className="row gear-perk-row">
+    <div className="row gear-perk-row has-actions">
       <div className="row-info">
         <span className="row-name">
-          ◆ {def.name}
+          <Icon name="gem" /> {def.name}
           <span className="perk-tag">Gear Perk</span>
         </span>
         <span className="row-desc">{text}</span>
