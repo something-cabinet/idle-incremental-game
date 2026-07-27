@@ -1,10 +1,9 @@
-import { adventurerStats, isInjured, maxHp } from '../../game/adventurers';
+import { isInjured } from '../../game/adventurers';
 import {
   DAY_LENGTH_SECONDS,
   DEMON_KING_ID,
   DUNGEONS,
   DUNGEON_WINS_REQUIRED,
-  MATERIALS,
 } from '../../game/config';
 import { DUNGEON_TOTAL_ROOMS, dungeonProgress } from '../../game/dungeon';
 import { formatDuration } from '../../game/format';
@@ -15,7 +14,6 @@ import {
   forgeUnlocked,
   locationDef,
   questRates,
-  questRequiredWork,
   rosterCap,
   zones,
 } from '../../game/guild';
@@ -23,7 +21,7 @@ import { currentDay, productionPerSecond } from '../../game/logic';
 import { effectiveClickPower } from '../../game/logic';
 import { isTimeTravelUnlocked } from '../../game/prestige';
 import { guildFoundingCost } from '../../game/story';
-import type { Adventurer, GameState, LogEntry, Quest } from '../../game/types';
+import type { Adventurer, GameState, LogEntry } from '../../game/types';
 import { useFormat } from '../../hooks/useFormat';
 import { useGameState } from '../../hooks/useGame';
 import { usePanelSection } from '../../hooks/usePanelSection';
@@ -145,7 +143,6 @@ function EconomySection() {
   const state = useGameState();
   const fmt = useFormat();
   const jobsOwned = Object.values(state.jobs).reduce((a, b) => a + b, 0);
-  const materials = MATERIALS.filter((m) => (state.materials[m.id] ?? 0) > 0);
 
   return (
     <section className="rows">
@@ -157,20 +154,8 @@ function EconomySection() {
       </div>
       <div className="detail-stats">
         <Stat value={fmt(state.totalGoldEarned)} label="Earned This Run" />
-        <Stat value={fmt(state.lifetimeGoldEarned + state.totalGoldEarned)} label="Earned Ever" />
         <Stat value={fmt(state.inventory.length)} label="Items Held" />
       </div>
-      {materials.length > 0 && (
-        // Chips, not one row per material: a late-game stock of every material
-        // would otherwise push the rest of the dashboard off the screen.
-        <div className="overview-chips">
-          {materials.map((m) => (
-            <span key={m.id} className="overview-chip">
-              {m.name} <strong>{fmt(Math.floor(state.materials[m.id]))}</strong>
-            </span>
-          ))}
-        </div>
-      )}
     </section>
   );
 }
@@ -182,57 +167,26 @@ function EconomySection() {
 function GuildSection() {
   const state = useGameState();
   const fmt = useFormat();
+  const injured = state.adventurers.filter((a) => isInjured(a, state.runTimeSeconds)).length;
+  const busy = state.adventurers.filter(
+    (a) => a.assignment && !isInjured(a, state.runTimeSeconds),
+  ).length;
+
   return (
     <section className="rows">
       <h3 className="section-title">The Guild</h3>
       <div className="detail-stats">
         <Stat value={`★ ${fmt(Math.floor(state.reputation))}`} label="Reputation" />
-        <Stat value={fmt(adventurerCount(state))} label="Adventurers" />
         <Stat value={`${state.adventurers.length}/${rosterCap(state)}`} label="Champions" />
+        <Stat value={fmt(adventurerCount(state))} label="Adventurers" />
       </div>
-      {state.adventurers.length === 0 ? (
-        <div className="row locked">No champions recruited yet</div>
-      ) : (
-        state.adventurers.map((adv) => <ChampionLine key={adv.id} adv={adv} />)
+      {state.adventurers.length > 0 && (
+        <div className="row-desc overview-summary-line">
+          {busy} out on assignment · {injured} recovering ·{' '}
+          {state.adventurers.length - busy - injured} idle
+        </div>
       )}
     </section>
-  );
-}
-
-/** One champion: level, HP bar and what they're currently doing. */
-function ChampionLine({ adv }: { adv: Adventurer }) {
-  const state = useGameState();
-  const stats = adventurerStats(adv);
-  const hpMax = maxHp(adv);
-  const injured = isInjured(adv, state.runTimeSeconds);
-  const hpPct = hpMax > 0 ? Math.max(0, Math.min(100, (adv.hp / hpMax) * 100)) : 0;
-
-  let activity = 'Idle at the guild hall';
-  if (injured) {
-    activity = `🩹 Recovering — ${formatDuration(Math.max(0, adv.injuredUntil - state.runTimeSeconds))} left`;
-  } else if (adv.assignment) {
-    const where = locationDef(adv.assignment.locationId)?.name ?? adv.assignment.locationId;
-    activity =
-      adv.assignment.mode === 'auto-explore' ? `🗺️ Auto-Exploring ${where}` : `📜 On assignment: ${where}`;
-  }
-
-  return (
-    <div className="row adventurer-card">
-      <div className="row-info">
-        <span className="row-name">
-          {CLASS_ICON[adv.className]} {adv.name} <span className="row-sub">Lv {adv.level}</span>
-        </span>
-        <span className="row-sub">
-          ATK {stats.atk} · DEF {stats.def} · HP {Math.ceil(adv.hp)}/{hpMax}
-        </span>
-        <div className="progress-line">
-          <div className="progress-track">
-            <div className="progress-fill hp" style={{ width: `${hpPct}%` }} />
-          </div>
-        </div>
-        <span className={injured ? 'row-bad' : 'row-desc'}>{activity}</span>
-      </div>
-    </div>
   );
 }
 
@@ -240,8 +194,11 @@ function ChampionLine({ adv }: { adv: Adventurer }) {
 // Quest board
 // ---------------------------------------------------------------------------
 
+/** A one-line summary of the quest board — aggregate rates, not a breakdown
+ *  of each quest's own requirements/progress (the Guild tab has that). */
 function QuestBoardSection() {
   const state = useGameState();
+  const fmt = useFormat();
   if (state.quests.length === 0) {
     return (
       <section className="rows">
@@ -250,62 +207,24 @@ function QuestBoardSection() {
       </section>
     );
   }
+  let goldPerSec = 0;
+  let materialsPerSec = 0;
+  for (const quest of state.quests) {
+    const rates = questRates(state, quest);
+    goldPerSec += rates.goldPerSec;
+    for (const amount of Object.values(rates.materialsPerSec)) materialsPerSec += amount;
+  }
+
   return (
     <section className="rows">
-      <h3 className="section-title">Quest Board ({state.quests.length})</h3>
-      {state.quests.map((quest) => (
-        <QuestLine key={quest.id} quest={quest} />
-      ))}
+      <h3 className="section-title">Quest Board</h3>
+      <div className="detail-stats">
+        <Stat value={fmt(state.quests.length)} label="Posted" />
+        <Stat value={`${fmt(goldPerSec)}/s`} label="Cost" />
+        <Stat value={`${fmt(materialsPerSec)}/s`} label="Materials" />
+      </div>
     </section>
   );
-}
-
-function QuestLine({ quest }: { quest: Quest }) {
-  const state = useGameState();
-  const fmt = useFormat();
-  const rates = questRates(state, quest);
-  const required = questRequiredWork(quest);
-  const pct = required > 0 ? Math.min(100, (quest.progress / required) * 100) : 0;
-  const label = quest.requirements
-    .map((r) => `${r.batchSize}× ${questTargetName(r.targetId)}`)
-    .join(' + ');
-
-  return (
-    <div className="row">
-      <div className="row-info">
-        <span className="row-name">{label}</span>
-        <span className="row-sub">
-          {rates.adventurers} adventurer{rates.adventurers === 1 ? '' : 's'} ·{' '}
-          {quest.completedCount} done
-          {quest.repeatCount > 0 && ` / ${quest.repeatCount}`}
-        </span>
-        <div className="progress-line">
-          <div className="progress-track">
-            <div className="progress-fill" style={{ width: `${pct}%` }} />
-          </div>
-          <span className="progress-time">{Math.floor(pct)}%</span>
-        </div>
-        {rates.goldStarved ? (
-          <span className="row-bad">Stalled — the guild can’t pay for the next batch</span>
-        ) : rates.adventurers === 0 ? (
-          <span className="row-bad">Stalled — no adventurers assigned</span>
-        ) : (
-          <span className="row-good">
-            ≈ ★ {fmt(rates.reputationPerSec)}/s · {fmt(rates.goldPerSec)} gold/s spent
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function questTargetName(targetId: string): string {
-  // Target ids are kebab-case names ('gray-wolf'); good enough for a summary
-  // line, and avoids threading the full QuestTargetDef lookup through here.
-  return targetId
-    .split('-')
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(' ');
 }
 
 // ---------------------------------------------------------------------------

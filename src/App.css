@@ -1566,22 +1566,6 @@ button.row:disabled {
   color: var(--text);
 }
 
-.overview-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.overview-chip {
-  padding: 4px 9px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--panel);
-  color: var(--text-dim);
-  font-size: 0.72rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.overview-chip strong {
-  color: var(--text);
+.overview-summary-line {
+  padding: 2px 2px 0;
 }
