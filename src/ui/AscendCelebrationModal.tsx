@@ -1,0 +1,95 @@
+import { useEffect } from 'react';
+import type { Equipment } from '../game/types';
+import { useGameState } from '../hooks/useGame';
+import { itemIcon, itemStatDelta } from './itemDisplay';
+import { playAscend } from './sfx';
+
+/** Sparkle glyphs scattered around the item icon, each on its own delay/angle. */
+const SPARKLES = ['✨', '⭐', '✦', '✧', '💫', '⭐'];
+
+/**
+ * Shown once after an exalted item successfully ascends (see
+ * CraftingPanel.tsx AscendRow) — a brief celebration plus a concrete
+ * before/after of exactly what changed, so the upgrade doesn't just
+ * disappear into a re-rendered list. `before` is a snapshot taken right
+ * before the dispatch; `after` is the same item's live post-ascend state
+ * (looked up by id), so this never needs its own copy of the ascend logic.
+ */
+export function AscendCelebrationModal({
+  before,
+  after,
+  onClose,
+}: {
+  before: Equipment;
+  after: Equipment;
+  onClose: () => void;
+}) {
+  const state = useGameState();
+  const reducedMotion = state.settings.reducedMotion;
+  const deltas = itemStatDelta(before, after);
+
+  useEffect(() => {
+    if (state.settings.sfxEnabled) playAscend();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div className="story-overlay" onClick={onClose}>
+      <div
+        className={`story-modal detail-modal ascend-modal ${reducedMotion ? 'reduced-motion' : ''}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="story-title">✦ Ascension Complete!</h2>
+
+        <div className="ascend-stage">
+          <div className="ascend-glow" />
+          <div className="ascend-glow ascend-glow-fade" />
+          <span className="ascend-icon">{itemIcon(after)}</span>
+          {!reducedMotion &&
+            SPARKLES.map((glyph, i) => (
+              <span
+                key={i}
+                className="ascend-sparkle"
+                style={{
+                  '--sparkle-rot': `${(360 / SPARKLES.length) * i}deg`,
+                  animationDelay: `${i * 0.18}s`,
+                } as React.CSSProperties}
+              >
+                {glyph}
+              </span>
+            ))}
+        </div>
+
+        <div className="ascend-name-shift">
+          {before.name !== after.name && <span className="ascend-name-before">{before.name}</span>}
+          <span className="ascend-name-after">{after.name}</span>
+        </div>
+
+        <div className="ascend-rarity-shift">
+          <span className="equip-detail-rarity rarity-exalted">exalted</span>
+          <span className="ascend-delta-arrow">→</span>
+          <span className="equip-detail-rarity rarity-ascendant">ascendant</span>
+        </div>
+
+        {deltas.length > 0 && (
+          <div className="ascend-delta-list">
+            {deltas.map((d) => (
+              <div key={d.label} className="ascend-delta-row">
+                <span className="ascend-delta-label">{d.label}</span>
+                <span className="ascend-delta-before">{d.before}</span>
+                <span className="ascend-delta-arrow">→</span>
+                <span className={`ascend-delta-after ${d.after >= d.before ? 'up' : 'down'}`}>
+                  {d.after}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <button className="small-button" onClick={onClose}>
+          Continue
+        </button>
+      </div>
+    </div>
+  );
+}

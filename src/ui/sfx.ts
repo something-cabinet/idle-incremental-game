@@ -44,3 +44,11 @@ export function playNotify(): void {
   tone(523, 0, 0.15, 'sine', 0.18);
   tone(784, 0.12, 0.25, 'sine', 0.18);
 }
+
+/** Rising four-note arpeggio for ascending an item to ascendant rarity. */
+export function playAscend(): void {
+  tone(392, 0, 0.16, 'triangle', 0.16);
+  tone(523, 0.09, 0.16, 'triangle', 0.16);
+  tone(659, 0.18, 0.18, 'triangle', 0.17);
+  tone(880, 0.28, 0.4, 'sine', 0.2);
+}

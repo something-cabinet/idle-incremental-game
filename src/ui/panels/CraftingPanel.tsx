@@ -10,6 +10,7 @@ import {
   craftGoldCost,
   craftMaterialsCost,
   exaltedItems,
+  findEquipment,
   maxCraftableTier,
   startCraft,
 } from '../../game/guild';
@@ -17,6 +18,7 @@ import type { AdventurerClass, CraftJob, EquipSlot, Equipment } from '../../game
 import { useFormat } from '../../hooks/useFormat';
 import { useGameState, useGameStore } from '../../hooks/useGame';
 import { usePanelSection } from '../../hooks/usePanelSection';
+import { AscendCelebrationModal } from '../AscendCelebrationModal';
 import { itemIcon, itemStatParts, itemTypeLabel } from '../itemDisplay';
 
 function materialName(id: string): string {
@@ -196,6 +198,11 @@ function CraftingProgress({ job }: { job: CraftJob }) {
 function AscendSection() {
   const state = useGameState();
   const candidates = exaltedItems(state);
+  // Snapshot of the item as it was right before ascending, kept until the
+  // celebration modal closes — the post-ascend item is looked up live by id
+  // (see `after` below), so this never needs its own copy of ascend logic.
+  const [justAscended, setJustAscended] = useState<Equipment | null>(null);
+  const after = justAscended ? findEquipment(state, justAscended.id)?.item : undefined;
 
   return (
     <section className="rows">
@@ -213,20 +220,42 @@ function AscendSection() {
         </div>
       ) : (
         candidates.map(({ item, advId }) => (
-          <AscendRow key={item.id} item={item} advId={advId} />
+          <AscendRow key={item.id} item={item} advId={advId} onAscended={setJustAscended} />
         ))
+      )}
+
+      {justAscended && after && (
+        <AscendCelebrationModal
+          before={justAscended}
+          after={after}
+          onClose={() => setJustAscended(null)}
+        />
       )}
     </section>
   );
 }
 
-function AscendRow({ item, advId }: { item: Equipment; advId?: number }) {
+function AscendRow({
+  item,
+  advId,
+  onAscended,
+}: {
+  item: Equipment;
+  advId?: number;
+  onAscended: (before: Equipment) => void;
+}) {
   const state = useGameState();
   const store = useGameStore();
   const fmt = useFormat();
   const cost = ascendCost(item.tier);
   const canAscend = canAscendItem(state, item.id);
   const wearer = advId !== undefined ? state.adventurers.find((a) => a.id === advId) : undefined;
+
+  function handleAscend() {
+    if (!canAscend) return;
+    store.dispatch((s) => ascendItem(s, item.id));
+    onAscended(item);
+  }
 
   return (
     <div className={`row item-${item.rarity}`}>
@@ -248,11 +277,7 @@ function AscendRow({ item, advId }: { item: Equipment; advId?: number }) {
             .join(' · ')}
         </span>
       </div>
-      <button
-        className="small-button"
-        disabled={!canAscend}
-        onClick={() => store.dispatch((s) => ascendItem(s, item.id))}
-      >
+      <button className="small-button" disabled={!canAscend} onClick={handleAscend}>
         ◆ Ascend
       </button>
     </div>

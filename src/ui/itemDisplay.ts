@@ -36,3 +36,29 @@ export function itemStatParts(item: Equipment): string[] {
   }
   return parts;
 }
+
+/** One before→after line for a stat that changed (or appeared/disappeared). */
+export interface ItemStatDeltaLine {
+  label: string;
+  before: number;
+  after: number;
+}
+
+/**
+ * Every stat that differs between two versions of "the same" item (an
+ * ascension upgrade — see guild.ts ascendItem) — atk/def/hp plus every
+ * attribute either side rolled. Unchanged stats are omitted; a stat only one
+ * side has shows the other side as 0, same as a normal gain/loss.
+ */
+export function itemStatDelta(before: Equipment, after: Equipment): ItemStatDeltaLine[] {
+  const lines: ItemStatDeltaLine[] = [];
+  if (before.atk !== after.atk) lines.push({ label: '⚔ ATK', before: before.atk, after: after.atk });
+  if (before.def !== after.def) lines.push({ label: '🛡 DEF', before: before.def, after: after.def });
+  if (before.hp !== after.hp) lines.push({ label: '❤ HP', before: before.hp, after: after.hp });
+  for (const { id, abbr } of ATTRIBUTES) {
+    const b = before.attrs?.[id] ?? 0;
+    const a = after.attrs?.[id] ?? 0;
+    if (b !== a) lines.push({ label: abbr, before: b, after: a });
+  }
+  return lines;
+}
