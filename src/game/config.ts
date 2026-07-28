@@ -1100,13 +1100,13 @@ export const ESSENCE_TIER_DIV = 2;
  * costs a mix of every essence tier at once, scaled by the item's own tier —
  * by far the steepest material sink in the game, since it's the endgame
  * equipment ceiling. E.g. a tier-6 item needs 600 exalted-essence, 1200
- * epic-essence, 3000 rare-essence and 6000 common-essence.
+ * epic-essence, 1800 rare-essence and 2400 common-essence.
  */
 export const ASCEND_ESSENCE_PER_TIER: Record<'exalted' | 'epic' | 'rare' | 'common', number> = {
   exalted: 100,
   epic: 200,
-  rare: 500,
-  common: 1000,
+  rare: 300,
+  common: 400,
 };
 
 // ---------------------------------------------------------------------------

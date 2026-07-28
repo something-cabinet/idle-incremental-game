@@ -32,8 +32,8 @@ describe('ascendCost', () => {
     expect(ascendCost(6)).toEqual({
       'exalted-essence': 600,
       'epic-essence': 1200,
-      'rare-essence': 3000,
-      'common-essence': 6000,
+      'rare-essence': 1800,
+      'common-essence': 2400,
     });
   });
 
@@ -41,14 +41,14 @@ describe('ascendCost', () => {
     expect(ascendCost(1)).toEqual({
       'exalted-essence': 100,
       'epic-essence': 200,
-      'rare-essence': 500,
-      'common-essence': 1000,
+      'rare-essence': 300,
+      'common-essence': 400,
     });
     expect(ascendCost(3)).toEqual({
       'exalted-essence': 300,
       'epic-essence': 600,
-      'rare-essence': 1500,
-      'common-essence': 3000,
+      'rare-essence': 900,
+      'common-essence': 1200,
     });
   });
 });
