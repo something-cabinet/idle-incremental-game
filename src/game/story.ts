@@ -10,6 +10,8 @@ import type { GameState, StoryBeatDef } from './types';
 
 /** Story beats and act transitions. Beats fire once, queued for the UI. */
 
+export const PRESTIGE_BEAT_ID = 'prestige-celebration';
+
 /** Which beat each general's death fires. Keyed by campaign boss locationId. */
 const GENERAL_STORY_BEATS: Record<string, string> = {
   'general-marrow': 'a3-marrow-dead',
@@ -18,6 +20,14 @@ const GENERAL_STORY_BEATS: Record<string, string> = {
 };
 
 export function storyBeatDef(id: string): StoryBeatDef | undefined {
+  if (id === PRESTIGE_BEAT_ID) {
+    return {
+      id: PRESTIGE_BEAT_ID,
+      title: 'Timeline Rewritten',
+      text: 'The crystal hums with new possibilities. Everything resets, but you carry the shards forward.',
+      type: 'prestige',
+    };
+  }
   return STORY_BEATS.find((b) => b.id === id);
 }
 

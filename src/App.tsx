@@ -22,6 +22,7 @@ import { GuildPanel } from './ui/panels/GuildPanel';
 import { MapPanel } from './ui/panels/MapPanel';
 import { ItemsPanel } from './ui/panels/ItemsPanel';
 import { SettingsPanel } from './ui/panels/SettingsPanel';
+import ToastStack from './ui/ToastStack';
 import './App.css';
 
 interface OfflineReport {
@@ -72,6 +73,7 @@ export default function App() {
 
   return (
     <GameContext.Provider value={init.store}>
+      <ToastStack />
       <Shell
         tab={tab}
         settingsOpen={settingsOpen}

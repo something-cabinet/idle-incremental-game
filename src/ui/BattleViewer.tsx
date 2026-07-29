@@ -232,7 +232,7 @@ function createFighterSprite(
   const nameStyle = new TextStyle({
     fill: !isParty && isBoss ? 0xff4d6d : !isParty && isSuper ? 0xffd700 : 0xffffff,
     fontSize: !isParty && isBoss ? 9 : 7,
-    fontFamily: 'monospace',
+    fontFamily: "'Source Sans 3', 'Source Sans Pro', sans-serif",
     fontWeight: !isParty && (isBoss || isSuper) ? 'bold' : 'normal',
   });
   const nameText = new Text({ text: name, style: nameStyle });
@@ -267,7 +267,7 @@ function createFighterSprite(
     container.addChild(cdFill);
   }
 
-  const hpTextStyle = new TextStyle({ fill: 0xffffff, fontSize: HP_TEXT_SIZE, fontFamily: 'monospace' });
+  const hpTextStyle = new TextStyle({ fill: 0xffffff, fontSize: HP_TEXT_SIZE, fontFamily: "'Source Sans 3', 'Source Sans Pro', sans-serif" });
   const hpText = new Text({ text: String(maxHp), style: hpTextStyle });
   hpText.anchor.set(0.5, 1);
   hpText.y = hpBarY - 1;
@@ -314,7 +314,7 @@ function createBossBar(scene: Container, canvasW: number, name: string, maxHp: n
   const nameStyle = new TextStyle({
     fill: 0xff4d6d,
     fontSize: BOSS_BAR_NAME_SIZE,
-    fontFamily: 'monospace',
+    fontFamily: "'Source Sans 3', 'Source Sans Pro', sans-serif",
     fontWeight: 'bold',
   });
   const nameText = new Text({ text: `☠ ${name}`, style: nameStyle });
@@ -335,7 +335,7 @@ function createBossBar(scene: Container, canvasW: number, name: string, maxHp: n
   fill.roundRect(barX, barY, BOSS_BAR_W, BOSS_BAR_H, 3).fill({ color: 0xe0304f });
   scene.addChild(fill);
 
-  const hpTextStyle = new TextStyle({ fill: 0xffffff, fontSize: BOSS_BAR_HP_SIZE, fontFamily: 'monospace', fontWeight: 'bold' });
+  const hpTextStyle = new TextStyle({ fill: 0xffffff, fontSize: BOSS_BAR_HP_SIZE, fontFamily: "'Source Sans 3', 'Source Sans Pro', sans-serif", fontWeight: 'bold' });
   const hpText = new Text({ text: `${maxHp} / ${maxHp}`, style: hpTextStyle });
   hpText.anchor.set(0.5, 0);
   hpText.x = canvasW / 2;
@@ -388,7 +388,7 @@ interface Floater {
 }
 
 function createFloater(x: number, y: number, label: string, color = 0xffdd44, size = 16): Floater {
-  const style = new TextStyle({ fill: color, fontSize: size, fontFamily: 'monospace', fontWeight: 'bold' });
+  const style = new TextStyle({ fill: color, fontSize: size, fontFamily: "'Source Sans 3', 'Source Sans Pro', sans-serif", fontWeight: 'bold' });
   const text = new Text({ text: label, style });
   text.anchor.set(0.5, 0.5);
   text.x = x;
@@ -649,6 +649,7 @@ export function BattleViewer({
     const app = new Application();
 
     (async () => {
+      await document.fonts.ready;
       await app.init({
         width: w,
         height: h,

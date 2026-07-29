@@ -536,6 +536,8 @@ export interface StoryBeatDef {
   id: string;
   title: string;
   text: string;
+  /** Optional category for runtime behaviour (e.g. 'prestige' for auto-dismiss). */
+  type?: string;
 }
 
 // ---------------------------------------------------------------------------

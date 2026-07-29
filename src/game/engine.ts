@@ -8,7 +8,9 @@ import {
   questTotalGold,
   questTotalReputation,
   remainingRepeats,
+  zones,
 } from './guild';
+import { emitGameEvent } from './events';
 import { productionPerSecond } from './logic';
 import { computeModifiers } from './perks';
 import { addStats } from './stats';
@@ -60,6 +62,20 @@ export function tick(
   next.totalGoldEarned = state.totalGoldEarned + townGold;
   next.reputation = state.reputation + quest.reputation;
   next.quests = quest.quests;
+
+  // Emit for any newly unlocked zones
+  for (const zone of zones()) {
+    const wasUnlocked = state.reputation >= (zone.repRequired ?? 0);
+    const isUnlocked = next.reputation >= (zone.repRequired ?? 0);
+    if (!wasUnlocked && isUnlocked) {
+      emitGameEvent({ type: 'zone-unlocked', payload: { name: zone.name } });
+    }
+  }
+
+  // Emit when quest batches complete
+  if (quest.completions > 0) {
+    emitGameEvent({ type: 'quest-completed', payload: { count: quest.completions } });
+  }
 
   const craft = processCrafting(next, rng);
   next.crafting = craft.crafting;
@@ -215,6 +231,7 @@ function processCrafting(state: GameState, rng: Rng): CraftOutput {
   for (let i = 0; i < job.quantity; i++) {
     items.push(generateEquipment(nextId++, job.tier, rng, job.slot, CRAFT_MAX_RARITY));
   }
+  emitGameEvent({ type: 'crafting-complete' });
   return {
     crafting: null,
     inventory: [...state.inventory, ...items],

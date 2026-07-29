@@ -36,6 +36,7 @@ import {
   REROLL_BASE_COST,
   REROLL_COST_GROWTH,
 } from './config';
+import { emitGameEvent } from './events';
 import { productionPerSecond } from './logic';
 import { computeModifiers } from './perks';
 import { addStats } from './stats';
@@ -187,20 +188,25 @@ export function canBuyGuildUpgrade(state: GameState, upgradeId: string): boolean
 
 export function buyGuildUpgrade(state: GameState, upgradeId: string): GameState {
   if (!canBuyGuildUpgrade(state, upgradeId)) return state;
+  const prevValue = state.guildUpgrades[upgradeId] ?? 0;
   const cost = guildUpgradeCost(state, upgradeId);
   const materials = { ...state.materials };
   for (const [id, n] of Object.entries(cost.materials)) {
     materials[id] = (materials[id] ?? 0) - n;
   }
-  return {
+  const next = {
     ...state,
     gold: state.gold - cost.gold,
     materials,
     guildUpgrades: {
       ...state.guildUpgrades,
-      [upgradeId]: (state.guildUpgrades[upgradeId] ?? 0) + 1,
+      [upgradeId]: prevValue + 1,
     },
   };
+  if (upgradeId === 'forge' && prevValue === 0) {
+    emitGameEvent({ type: 'forge-unlocked' });
+  }
+  return next;
 }
 
 // ---------------------------------------------------------------------------
@@ -910,6 +916,7 @@ export function postQuest(
   if (targets.some((t) => t!.locationId !== locationId)) return state; // no cross-zone quests
   if (!isZoneUnlocked(state, locationId)) return state;
   const quest: Quest = { ...previewQuest(trimmed, maxAdventurers, repeatCount), id: state.nextEntityId };
+  emitGameEvent({ type: 'quest-posted' });
   return {
     ...state,
     quests: [...state.quests, quest],

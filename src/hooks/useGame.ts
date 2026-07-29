@@ -4,6 +4,7 @@ import { applyOfflineProgress, tick } from '../game/engine';
 import type { GameStore } from '../game/store';
 import type { GameState } from '../game/types';
 import { localStorageAdapter, toSaveData } from '../platform/storage';
+import { pauseToasts, resumeToasts } from '../ui/toastPause';
 
 export type OfflineCatchupResult = ReturnType<typeof applyOfflineProgress>;
 
@@ -37,13 +38,18 @@ export function useGameLoop(store: GameStore, onOfflineCatchup?: (result: Offlin
     let last = performance.now();
 
     const runCatchup = () => {
+      pauseToasts();
       let result: OfflineCatchupResult | null = null;
-      store.dispatch((s) => {
-        result = applyOfflineProgress(s);
-        return result.state;
-      });
-      last = performance.now();
-      if (result) onOfflineCatchup?.(result);
+      try {
+        store.dispatch((s) => {
+          result = applyOfflineProgress(s);
+          return result.state;
+        });
+        last = performance.now();
+        if (result) onOfflineCatchup?.(result);
+      } finally {
+        resumeToasts();
+      }
     };
 
     const loop = setInterval(() => {

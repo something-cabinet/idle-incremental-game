@@ -33,6 +33,7 @@ import {
   xpToNext,
 } from './config';
 import { rollEquipmentPerk } from './equipmentPerks';
+import { emitGameEvent } from './events';
 import { computeModifiers } from './perks';
 import type {
   Adventurer,
@@ -470,5 +471,6 @@ export function gainXp(adv: Adventurer, amount: number): Adventurer {
   if (level === adv.level) return { ...adv, xp };
   // Level-ups raise CON; grow current HP by the same amount max HP grew.
   const next = { ...adv, level, xp };
+  emitGameEvent({ type: 'champion-level-up', payload: { name: adv.name, level: level } });
   return { ...next, hp: Math.min(maxHp(next), next.hp + (maxHp(next) - maxHp(adv))) };
 }

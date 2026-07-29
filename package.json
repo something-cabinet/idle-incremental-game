@@ -8,7 +8,10 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:e2e": "codeceptjs run --config codecept.conf.ts",
+    "test:e2e:headless": "HEADLESS=true codeceptjs run --config codecept.conf.ts",
+    "test:e2e:debug": "codeceptjs run --config codecept.conf.ts --verbose"
   },
   "dependencies": {
     "pixi.js": "^8.19.0",
@@ -16,11 +19,14 @@
     "react-dom": "^19.2.7"
   },
   "devDependencies": {
+    "@codeceptjs/configure": "^4.0.0-beta.4",
     "@types/node": "^24.13.2",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
+    "codeceptjs": "^4.0.9",
     "oxlint": "^1.71.0",
+    "playwright": "^1.62.0",
     "puppeteer-core": "^23.11.1",
     "typescript": "~6.0.2",
     "vite": "^8.1.1",

@@ -613,16 +613,18 @@ function QuestCreationDialog({ zone, onClose }: { zone: LocationDef; onClose: ()
             const isSelected = !!checked[target.id];
             const checkboxDisabled = !isSelected && atCap;
             return (
-              <div
+              <label
                 key={target.id}
                 className={`row quest-checklist-row ${checkboxDisabled ? 'disabled' : ''}`}
-                onClick={() => !checkboxDisabled && toggle(target.id)}
+                htmlFor={`quest-check-${target.id}`}
               >
                 <input
+                  id={`quest-check-${target.id}`}
                   type="checkbox"
                   checked={isSelected}
                   disabled={checkboxDisabled}
-                  readOnly
+                  onChange={() => toggle(target.id)}
+                  onClick={(e) => e.stopPropagation()}
                 />
                 <div className="row-info">
                   <span className="row-name">{target.name}</span>
@@ -630,8 +632,8 @@ function QuestCreationDialog({ zone, onClose }: { zone: LocationDef; onClose: ()
                     {target.kind === 'monster' ? 'Kill' : 'Collect'} → {materialName(target.materialId)}
                   </span>
                 </div>
-                <label className="field-label" onClick={(e) => e.stopPropagation()}>
-                  amount
+                <div className="field-label" onClick={(e) => e.stopPropagation()}>
+                  <span>amount</span>
                   <input
                     type="number"
                     min={1}
@@ -640,8 +642,8 @@ function QuestCreationDialog({ zone, onClose }: { zone: LocationDef; onClose: ()
                     value={amounts[target.id] ?? String(DEFAULT_AMOUNT)}
                     onChange={(e) => setAmount(target.id, e.target.value)}
                   />
-                </label>
-              </div>
+                </div>
+              </label>
             );
           })}
         </div>
