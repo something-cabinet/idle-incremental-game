@@ -22,6 +22,7 @@ export const EMPTY_STATS: GameStats = {
   itemsDisassembled: 0,
   itemsAscended: 0,
   dungeonsCleared: 0,
+  bossesFelled: 0,
   shardsFound: 0,
 };
 

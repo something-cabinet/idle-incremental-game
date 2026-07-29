@@ -725,7 +725,7 @@ describe('quest worker allocation, repeats & caps', () => {
   });
 });
 
-describe('expeditions & prestige', () => {
+describe('campaign unlocks & prestige', () => {
   function act3State(): GameState {
     let s: GameState = { ...guildState(), act: 3 };
     s = withAdventurer(s);

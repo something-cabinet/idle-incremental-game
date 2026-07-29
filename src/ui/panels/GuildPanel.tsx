@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { adventurerStats, championPerk, championSkill, effectiveAttributes, equipDelta, isInjured, maxHp } from '../../game/adventurers';
+import { adventurerStatsIn, championPerk, championSkill, effectiveAttributes, equipDelta, isInjured, maxHp } from '../../game/adventurers';
 import { ATTRIBUTES, GUILD_UPGRADES, xpToNext } from '../../game/config';
 import { formatDuration } from '../../game/format';
 import {
@@ -191,7 +191,7 @@ function ChampionsSection() {
 
 function ChampionCard({ adv, onOpen }: { adv: Adventurer; onOpen: () => void }) {
   const state = useGameState();
-  const stats = adventurerStats(adv);
+  const stats = adventurerStatsIn(state, adv);
   const injured = isInjured(adv, state.runTimeSeconds);
   const exploring = adv.assignment?.mode === 'auto-explore';
   return (
@@ -279,7 +279,7 @@ function RecruitDialog({ onClose }: { onClose: () => void }) {
       ) : (
         <div className="rows">
           {candidates.map((c) => {
-            const stats = adventurerStats(c);
+            const stats = adventurerStatsIn(state, c);
             return (
               <button key={c.id} className="row" onClick={() => setSelectedId(c.id)}>
                 <div className="row-info">
@@ -305,7 +305,7 @@ function RecruitDialog({ onClose }: { onClose: () => void }) {
 }
 
 function ChampionDetail({ adv }: { adv: Adventurer }) {
-  const stats = adventurerStats(adv);
+  const stats = adventurerStatsIn(useGameState(), adv);
   return (
     <div className="rows">
       <p className="detail-sub">
@@ -392,7 +392,7 @@ function ChampionDetailModal({ adv, onClose }: { adv: Adventurer; onClose: () =>
 }
 
 function ChampionStatsTab({ adv }: { adv: Adventurer }) {
-  const stats = adventurerStats(adv);
+  const stats = adventurerStatsIn(useGameState(), adv);
   const attrs = effectiveAttributes(adv);
   const xpPct = Math.floor((adv.xp / xpToNext(adv.level)) * 100);
 
@@ -514,7 +514,6 @@ function ChampionGearTab({ adv }: { adv: Adventurer }) {
 function ChampionManageTab({ adv, onClose }: { adv: Adventurer; onClose: () => void }) {
   const store = useGameStore();
   const [confirmFire, setConfirmFire] = useState(false);
-  const onExpedition = adv.assignment?.mode === 'expedition';
 
   function handleFire() {
     store.dispatch((s) => fireAdventurer(s, adv.id));
@@ -557,11 +556,7 @@ function ChampionManageTab({ adv, onClose }: { adv: Adventurer; onClose: () => v
           </div>
         </div>
       ) : (
-        <button
-          className="small-button danger"
-          disabled={onExpedition}
-          onClick={() => setConfirmFire(true)}
-        >
+        <button className="small-button danger" onClick={() => setConfirmFire(true)}>
           Dismiss from guild
         </button>
       )}

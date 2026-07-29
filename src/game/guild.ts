@@ -51,7 +51,7 @@ import type {
   Rng,
 } from './types';
 
-/** Guild management actions: hiring, upgrades, gear, assignments, expeditions. */
+/** Guild management actions: hiring, upgrades, gear, assignments. */
 
 // ---------------------------------------------------------------------------
 // Roster
@@ -141,12 +141,10 @@ export function hireCandidate(state: GameState, candidateId: number): GameState 
 }
 
 /** Permanently remove a champion from the roster: unequips all their gear
- * back to the shared inventory first (nothing is lost), then drops them.
- * Refuses while on an expedition, same rule as recallAdventurer. */
+ * back to the shared inventory first (nothing is lost), then drops them. */
 export function fireAdventurer(state: GameState, advId: number): GameState {
   const adv = state.adventurers.find((a) => a.id === advId);
   if (!adv) return state;
-  if (adv.assignment?.mode === 'expedition') return state;
   let s = state;
   for (const slot of EQUIP_SLOTS) s = unequipItem(s, advId, slot);
   return { ...s, adventurers: s.adventurers.filter((a) => a.id !== advId) };
@@ -451,7 +449,7 @@ export function canStartCraft(
   quantity: number,
 ): boolean {
   if (!forgeUnlocked(state)) return false;
-  if (state.crafting) return false; // one job at a time, like expeditions
+  if (state.crafting) return false; // one job at a time
   if (tier < 1 || tier > maxCraftableTier(state)) return false;
   if (!CRAFT_QUANTITIES.includes(quantity)) return false;
   if (state.gold < craftGoldCost(tier, quantity)) return false;
@@ -578,54 +576,12 @@ export function sendPartyOnAutoExplore(
 export function recallAdventurer(state: GameState, advId: number): GameState {
   const adv = state.adventurers.find((a) => a.id === advId);
   if (!adv) return state;
-  // If on expedition, cannot recall
-  if (adv.assignment?.mode === 'expedition') return state;
   // If already idle (from injury), still clear lastAssignment so they don't auto-re-engage
   return updateAdventurer(state, advId, (a) => ({
     ...a,
     assignment: null,
     lastAssignment: null, // player explicitly stopped them, so forget past work
   }));
-}
-
-// ---------------------------------------------------------------------------
-// Expeditions (act 3 boss fights): all idle, healthy adventurers march together
-// ---------------------------------------------------------------------------
-
-export function expeditionCandidates(state: GameState): Adventurer[] {
-  return state.adventurers.filter(
-    (a) => a.assignment === null && !isInjured(a, state.runTimeSeconds),
-  );
-}
-
-export function launchExpedition(state: GameState, locationId: string): GameState {
-  const loc = locationDef(locationId);
-  if (!loc || loc.kind !== 'boss') return state;
-  if (!isBossUnlocked(state, locationId)) return state;
-  if (state.expedition) return state; // one at a time
-  const members = expeditionCandidates(state);
-  if (members.length === 0) return state;
-  const memberIds = members.map((m) => m.id);
-  return {
-    ...state,
-    expedition: {
-      locationId,
-      endsAt: state.runTimeSeconds + loc.questDuration,
-      memberIds,
-    },
-    adventurers: state.adventurers.map((a) =>
-      memberIds.includes(a.id)
-        ? {
-            ...a,
-            assignment: {
-              locationId,
-              mode: 'expedition' as const,
-              lastEncounterAt: state.runTimeSeconds,
-            },
-          }
-        : a,
-    ),
-  };
 }
 
 // ---------------------------------------------------------------------------

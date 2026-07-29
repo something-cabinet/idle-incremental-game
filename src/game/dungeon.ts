@@ -92,6 +92,13 @@ export function fightDungeonRoom(
       materials[materialId] = (materials[materialId] ?? 0) + DUNGEON_COMPLETION_MATERIAL_AMOUNT;
       next = { ...next, materials };
     }
+    // Beating a zone's dungeon is what "clearing" that zone means — the flag
+    // the Overview's progress readout counts, and the one that reveals the
+    // razed hometown (Act 3) once Frontier Pass falls (see story.ts).
+    next = {
+      ...next,
+      locationsCleared: { ...next.locationsCleared, [locationId]: true },
+    };
   }
   const carryOut: BattleCarryIn = {};
   for (const p of result.party) {

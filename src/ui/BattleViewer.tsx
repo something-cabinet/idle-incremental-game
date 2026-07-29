@@ -150,7 +150,8 @@ function createFighterSprite(
   container.y = y;
 
   // Super monsters render bigger to stand out (see combat.ts SUPER_STAT_MULT);
-  // a dungeon boss (mutually exclusive with Super — see dungeon.ts) bigger still.
+  // a boss — a dungeon's final room, or an Act 3 general/the demon king — is
+  // bigger still, and never also Super (see dungeon.ts / campaign.ts).
   const sizeScale = !isParty && isBoss ? DUNGEON_BOSS_SPRITE_SCALE : !isParty && isSuper ? SUPER_SPRITE_SCALE : 1;
   const w = (isParty ? PARTY_W : FIGHTER_W) * sizeScale;
   const h = (isParty ? PARTY_H : FIGHTER_H) * sizeScale;

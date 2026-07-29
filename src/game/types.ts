@@ -101,7 +101,7 @@ export interface Equipment {
   attrs: Partial<Attributes>;
 }
 
-export type AssignmentMode = 'auto-explore' | 'quest' | 'expedition';
+export type AssignmentMode = 'auto-explore' | 'quest';
 
 export interface Assignment {
   locationId: string;
@@ -242,7 +242,12 @@ export type ClassSkillEffect =
 export interface ClassSkillDef {
   id: string;
   name: string;
-  className: AdventurerClass;
+  /**
+   * Whose pool this skill belongs to. 'boss' skills (CAMPAIGN_SKILLS) are
+   * never drawn by a champion — skillsForClass filters on a real class — they
+   * exist so an Act 3 boss can carry a kit of its own (see campaign.ts).
+   */
+  className: AdventurerClass | 'boss';
   description: string;
   /**
    * Cooldown counted in the number of this champion's OWN turns (not a
@@ -297,7 +302,7 @@ export interface LocationDef {
   questDuration: number;
   /** Chance per encounter to find a time shard (act 3 zones are higher) */
   shardChance: number;
-  /** 'zone' = auto-explore/quest farming; 'boss' = expedition target (act 3) */
+  /** 'zone' = auto-explore/quest farming; 'boss' = Act 3 campaign target */
   kind: 'zone' | 'boss';
   /** Shards awarded when a boss is defeated */
   bossShardReward?: number;
@@ -400,10 +405,29 @@ export interface GuildUpgradeDef {
   repRequired?: number;
 }
 
-export interface Expedition {
+/**
+ * An Act 3 campaign target — one of the demon king's generals, or the king
+ * himself — paired 1:1 with a `kind: 'boss'` LocationDef of the same id.
+ *
+ * A march is a manual gauntlet, structurally the same as a dungeon run
+ * (see game/campaign.ts): CAMPAIGN_GUARD_STAGES waves of that boss's own
+ * elite minions, then the boss itself fighting alongside an escort. Unlike a
+ * dungeon it can only be won once per timeline (GameState.bossesDefeated),
+ * and the generals must fall in order before the king opens up.
+ */
+export interface CampaignBossDef {
+  /** Matches the LocationDef id it belongs to (see LOCATIONS, kind 'boss'). */
   locationId: string;
-  endsAt: number;
-  memberIds: number[];
+  /** The boss's own name in battle, e.g. 'General Marrow'. */
+  name: string;
+  /** Flavour shown on the campaign card above the march button. */
+  intro: string;
+  /** Per-boss difficulty multiplier on top of CAMPAIGN_BOSS_STAT_MULT. */
+  difficulty: number;
+  /** Active skills the boss casts in battle (see CAMPAIGN_SKILLS). */
+  skillIds: string[];
+  /** Line written to the activity log when it dies. */
+  victoryLog: string;
 }
 
 /** The Forge's single active job — one craft (of `quantity` items) at a time. */
@@ -459,7 +483,7 @@ export interface TownSkillBonuses {
 // Activity log (quest/auto-explore results shown in the Guild tab)
 // ---------------------------------------------------------------------------
 
-export type LogKind = 'quest' | 'patrol' | 'injury' | 'expedition' | 'explore' | 'dungeon';
+export type LogKind = 'quest' | 'patrol' | 'injury' | 'campaign' | 'explore' | 'dungeon';
 
 export interface LogEntry {
   id: number;
@@ -543,6 +567,8 @@ export interface GameStats {
   itemsAscended: number;
   /** Dungeon boss rooms beaten (full runs completed). */
   dungeonsCleared: number;
+  /** Act 3 campaign bosses killed, across every timeline. */
+  bossesFelled: number;
   shardsFound: number;
 }
 
@@ -581,21 +607,22 @@ export interface GameState {
   /** Standing quests posted to the guild board. */
   quests: Quest[];
 
-  // Guild — the managed Champion roster (stats/gear/expeditions). Recruiting
-  // and the equip-slot UI are live; assignment/expedition play is still
-  // DORMANT — the engine does not process this roster, so `inventory` has no
-  // drop source yet (see docs/game-design.md).
+  // Guild — the managed Champion roster (stats/gear/assignments). They farm
+  // zones via Explore/Auto-Explore, clear dungeons, and march on the Act 3
+  // campaign bosses (see docs/game-design.md).
   adventurers: Adventurer[];
   /** 3 champion candidates currently shown for recruitment (empty if not yet generated) */
   recruitCandidates: Adventurer[];
   inventory: Equipment[]; // unequipped items
   guildUpgrades: Record<string, number>;
-  expedition: Expedition | null;
   /** The Forge's single active craft job, if any (see guild.ts craft*). */
   crafting: CraftJob | null;
   nextEntityId: number; // shared id counter for adventurers/equipment
-  locationsCleared: Record<string, boolean>; // first quest success per zone
-  bossesDefeated: Record<string, boolean>; // this timeline
+  /** Zones whose dungeon has been fully cleared (see dungeon.ts). Clearing
+   *  Frontier Pass this way is what opens Act 3 — see story.ts. */
+  locationsCleared: Record<string, boolean>;
+  /** Act 3 campaign bosses felled this timeline (see game/campaign.ts). */
+  bossesDefeated: Record<string, boolean>;
   /** Manual-Explore win count / unlock state per zone locationId — see game/dungeon.ts. */
   dungeonProgress: Record<string, DungeonProgress>;
   activityLog: LogEntry[]; // newest last, capped at ACTIVITY_LOG_MAX

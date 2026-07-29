@@ -10,6 +10,13 @@ import type { GameState, StoryBeatDef } from './types';
 
 /** Story beats and act transitions. Beats fire once, queued for the UI. */
 
+/** Which beat each general's death fires. Keyed by campaign boss locationId. */
+const GENERAL_STORY_BEATS: Record<string, string> = {
+  'general-marrow': 'a3-marrow-dead',
+  'general-vex': 'a3-vex-dead',
+  'general-thane': 'a3-thane-dead',
+};
+
 export function storyBeatDef(id: string): StoryBeatDef | undefined {
   return STORY_BEATS.find((b) => b.id === id);
 }
@@ -67,9 +74,15 @@ export function checkStoryTriggers(state: GameState): GameState {
     s = queue(s, 'a2-first-adventurer');
   }
 
-  // Clearing the last zone reveals the razed hometown → Act 3
+  // Clearing the last zone's dungeon reveals the razed hometown → Act 3
+  // (see dungeon.ts, which writes locationsCleared on a full clear).
   if (s.act === 2 && s.locationsCleared['frontier-pass']) {
     s = queue({ ...s, act: 3 }, 'a3-discovery');
+  }
+
+  // One beat per general felled, in campaign order (see config CAMPAIGN_BOSSES).
+  for (const [id, beat] of Object.entries(GENERAL_STORY_BEATS)) {
+    if (s.bossesDefeated[id]) s = queue(s, beat);
   }
 
   if (s.bossesDefeated[DEMON_KING_ID]) {

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { adventurerStats, isInjured } from '../../game/adventurers';
+import { isInjured } from '../../game/adventurers';
 import { canExplore, runExplore } from '../../game/combat';
 import type { BattleCarryIn, BattleOutcome } from '../../game/combat';
 import {
@@ -24,32 +24,50 @@ import {
   targetsForLocation,
   zones,
 } from '../../game/guild';
-import type { Adventurer, DungeonDef, LocationDef, QuestRequirement, QuestTargetDef } from '../../game/types';
+import type { DungeonDef, LocationDef, QuestRequirement, QuestTargetDef } from '../../game/types';
 import { useGameState, useGameStore } from '../../hooks/useGame';
 import { BattleModal } from '../BattleModal';
+import { ExplorePartyRow } from '../PartyPicker';
+import { CampaignSection } from './CampaignSection';
 import { InfoNote, Modal, NoteRow } from '../components';
-import { CLASS_LABEL, materialName, rate } from '../display';
+import { materialName, rate } from '../display';
 import { Icon } from '../icons';
 
 export function MapPanel() {
-  const [subtab, setSubtab] = useState<'explore' | 'dungeons'>('explore');
+  const state = useGameState();
+  const [subtab, setSubtab] = useState<'explore' | 'dungeons' | 'campaign'>('explore');
+  // The campaign only exists once the razed hometown has been found (Act 3),
+  // so the subtab appears then rather than sitting dead through two acts.
+  const campaignOpen = state.act >= 3;
+  const active = subtab === 'campaign' && !campaignOpen ? 'explore' : subtab;
+
   return (
     <div className="panel">
       <div className="subtab-bar">
         <button
-          className={`subtab ${subtab === 'explore' ? 'active' : ''}`}
+          className={`subtab ${active === 'explore' ? 'active' : ''}`}
           onClick={() => setSubtab('explore')}
         >
           Explore
         </button>
         <button
-          className={`subtab ${subtab === 'dungeons' ? 'active' : ''}`}
+          className={`subtab ${active === 'dungeons' ? 'active' : ''}`}
           onClick={() => setSubtab('dungeons')}
         >
           Dungeons
         </button>
+        {campaignOpen && (
+          <button
+            className={`subtab ${active === 'campaign' ? 'active' : ''}`}
+            onClick={() => setSubtab('campaign')}
+          >
+            Campaign
+          </button>
+        )}
       </div>
-      {subtab === 'explore' ? (
+      {active === 'campaign' ? (
+        <CampaignSection />
+      ) : active === 'explore' ? (
         <section className="rows">
           <InfoNote id="wilds-help" title="How the wilds work">
             Browse each zone's monsters and gatherables, then post a quest there for whichever of
@@ -256,7 +274,6 @@ function DungeonRunDialog({
             adv={adv}
             selected={partyIds.includes(adv.id)}
             disabled={!canExplore(state, adv) && !partyIds.includes(adv.id)}
-            injured={isInjured(adv, state.runTimeSeconds)}
             onToggle={() => toggle(adv.id)}
           />
         ))}
@@ -488,8 +505,7 @@ function ExploreDialog({ zone, onClose }: { zone: LocationDef; onClose: () => vo
               adv={adv}
               selected={partyIds.includes(adv.id)}
               disabled={!canExplore(state, adv) && !partyIds.includes(adv.id)}
-              injured={isInjured(adv, state.runTimeSeconds)}
-              onToggle={() => toggle(adv.id)}
+                onToggle={() => toggle(adv.id)}
             />
           ))}
         </div>
@@ -503,38 +519,6 @@ function ExploreDialog({ zone, onClose }: { zone: LocationDef; onClose: () => vo
         Keep fighting without asking
       </label>
     </Modal>
-  );
-}
-
-function ExplorePartyRow({
-  adv,
-  selected,
-  disabled,
-  injured,
-  onToggle,
-}: {
-  adv: Adventurer;
-  selected: boolean;
-  disabled: boolean;
-  injured: boolean;
-  onToggle: () => void;
-}) {
-  const stats = adventurerStats(adv);
-  const unavailableReason = injured ? 'Injured — recovering' : adv.assignment ? 'Busy' : null;
-  return (
-    <div
-      className={`row quest-checklist-row ${disabled ? 'disabled' : ''}`}
-      onClick={() => !disabled && onToggle()}
-    >
-      <input type="checkbox" checked={selected} disabled={disabled} readOnly />
-      <div className="row-info">
-        <span className="row-name">{adv.name}</span>
-        <span className="row-desc">
-          {CLASS_LABEL[adv.className]} · Lv {adv.level} · ATK {stats.atk} · DEF {stats.def} · HP {stats.maxHp}
-        </span>
-        {unavailableReason && <span className="row-bad">{unavailableReason}</span>}
-      </div>
-    </div>
   );
 }
 

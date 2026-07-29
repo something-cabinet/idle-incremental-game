@@ -31,8 +31,9 @@ import type { CraftJob, Equipment, GameState, Quest, Rng } from './types';
  * a zone on Auto-Explore (guild.ts assignAdventurer, gated behind the
  * 'auto-explore' guild upgrade) auto-battle it every ENCOUNTER_INTERVAL via
  * processAutoExplore (combat.ts), earning XP/loot and taking injuries —
- * online and, through the same replayed loop, offline. Act 3 expeditions
- * remain parked until that system is built out.
+ * online and, through the same replayed loop, offline. Manual play (Explore,
+ * dungeon runs, Act 3 campaign marches) resolves instantly on the player's
+ * click instead, so none of it passes through here.
  */
 export function tick(
   state: GameState,

@@ -8,6 +8,7 @@ import {
   isInjured,
   maxHp,
   perkRecoveryMult,
+  skillDef,
 } from './adventurers';
 import {
   COMBAT_DAMAGE_VARIANCE,
@@ -84,6 +85,12 @@ export interface MonsterInstance {
   /** A dungeon's amplified final-room monster — see dungeon.ts. Rendered
    *  bigger and in a distinct color from a Super monster (BattleViewer). */
   isBoss?: boolean;
+  /**
+   * Active skills this monster casts, by id (see skillDef). Only Act 3
+   * campaign bosses carry any today — see campaign.ts — and, like champion
+   * skills, they only fire in a `live` battle.
+   */
+  skillIds?: string[];
 }
 
 /** A timed multiplier on one combat stat (from a skill buff). Ticks down once
@@ -277,7 +284,10 @@ export function canExplore(state: GameState, adv: Adventurer): boolean {
   return !isInjured(adv, state.runTimeSeconds) && adv.assignment === null;
 }
 
-function monsterCombatStats(target: QuestTargetDef, tier: number) {
+/** A monster's combat stats, derived from its location tier and its own
+ *  QuestTargetDef.difficulty — the single formula every monster in the game
+ *  goes through, campaign bosses and their minions included (campaign.ts). */
+export function monsterCombatStats(target: QuestTargetDef, tier: number) {
   const hp = Math.round((MONSTER_HP_BASE + MONSTER_HP_PER_TIER * tier) * target.difficulty);
   const atk = Math.round((MONSTER_ATK_BASE + MONSTER_ATK_PER_TIER * tier) * target.difficulty);
   const def = Math.round((MONSTER_DEF_BASE + MONSTER_DEF_PER_TIER * tier) * target.difficulty);
@@ -329,7 +339,7 @@ export function rollMonsterGroup(locationId: string, rng: Rng): MonsterInstance[
 /** Monster names/log entries/sprites are all matched by `name`, so duplicates
  * within a group (e.g. two "Wolf"s rolled back to back) are disambiguated
  * once here with " A", " B", " C"... suffixes rather than at each call site. */
-function disambiguateMonsterNames(group: MonsterInstance[]): MonsterInstance[] {
+export function disambiguateMonsterNames(group: MonsterInstance[]): MonsterInstance[] {
   const counts: Record<string, number> = {};
   for (const m of group) counts[m.name] = (counts[m.name] ?? 0) + 1;
   const seen: Record<string, number> = {};
@@ -404,6 +414,7 @@ export function simulateBattle(
 ): BattleOutcome {
   const loc = locationDef(locationId);
   const tier = loc?.tier ?? 1;
+  const mods = computeModifiers(state);
 
   // Live-combat perk effects keyed by champion id (empty unless `live`).
   const critById: Record<number, { chance: number; mult: number }> = {};
@@ -421,7 +432,9 @@ export function simulateBattle(
 
   const combatants: Combatant[] = [
     ...party.map((a): Combatant => {
-      const stats = adventurerStats(a);
+      // Cross-timeline power perks fold in here, so they apply to every battle
+      // (manual, Auto-Explore and offline alike) — see adventurerStats.
+      const stats = adventurerStats(a, mods.powerMult);
       // Champions only bring their active skill to manual Explore battles.
       const skill = live ? championSkill(a.skillId) : undefined;
       const carry = carryIn?.[a.id];
@@ -455,7 +468,15 @@ export function simulateBattle(
       speed: m.speed,
       buffs: [],
       statuses: [],
-      skills: [],
+      // Only campaign bosses carry skills, and only in a live battle — the
+      // same rule champion skills follow. They enter half-charged too, so the
+      // party gets a couple of turns before the first cast lands.
+      skills: live
+        ? (m.skillIds ?? []).flatMap((id) => {
+            const def = skillDef(id);
+            return def ? [{ def, cooldownRemaining: Math.ceil(def.cooldownTurns / 2) }] : [];
+          })
+        : [],
     })),
   ];
 
@@ -837,7 +858,7 @@ export function simulateBattle(
 
   const outcome: 'win' | 'loss' = alive('party') && !alive('monsters') ? 'win' : 'loss';
   const healSpeedMult =
-    computeModifiers(state).healSpeedMult * (1 + INFIRMARY_HEAL_BONUS * (state.guildUpgrades.infirmary ?? 0));
+    mods.healSpeedMult * (1 + INFIRMARY_HEAL_BONUS * (state.guildUpgrades.infirmary ?? 0));
 
   // Track damage dealt and kills per party member
   const partyDamage: Record<number, number> = {};

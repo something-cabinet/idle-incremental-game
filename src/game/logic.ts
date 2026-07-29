@@ -51,7 +51,6 @@ export function createInitialState(now = Date.now()): GameState {
     recruitCandidates: [],
     inventory: [],
     guildUpgrades: {},
-    expedition: null,
     crafting: null,
     nextEntityId: 1,
     locationsCleared: {},
@@ -78,7 +77,13 @@ export function createInitialState(now = Date.now()): GameState {
 export function migrateSave(data: SaveData, now = Date.now()): GameState {
   if (data.version < 3) return createInitialState(now);
   const base = createInitialState(data.state.lastUpdate ?? now);
-  const s = data.state;
+  // v18 replaced the never-implemented timed `expedition` with the manual Act 3
+  // campaign (game/campaign.ts). Strip the stale field so it can't ride the
+  // spread below back into live state; boss progress lives in bossesDefeated,
+  // which is unchanged.
+  const { expedition: _legacyExpedition, ...s } = data.state as GameState & {
+    expedition?: unknown;
+  };
   const preV5 = data.version < 5;
   return {
     ...base,
@@ -137,12 +142,17 @@ function migrateEquipment(item: Equipment): Equipment {
   return { ...item, tier: item.tier ?? 1 };
 }
 
-/** v13 renamed the 'patrol' assignment mode to 'auto-explore'. */
+/**
+ * v13 renamed the 'patrol' assignment mode to 'auto-explore'. v18 dropped
+ * 'expedition' entirely (Act 3 marches are instant manual runs now, not a
+ * standing assignment), so anyone mid-"expedition" in an old save simply comes
+ * home idle.
+ */
 function migrateAssignment<T extends { mode: string } | null | undefined>(assignment: T): T {
   if (!assignment) return assignment;
-  return (assignment as { mode: string }).mode === 'patrol'
-    ? ({ ...assignment, mode: 'auto-explore' } as T)
-    : assignment;
+  const mode = (assignment as { mode: string }).mode;
+  if (mode === 'expedition') return null as T;
+  return mode === 'patrol' ? ({ ...assignment, mode: 'auto-explore' } as T) : assignment;
 }
 
 /** Deterministic class-skill pick for pre-v15 saves (no rng at load). */

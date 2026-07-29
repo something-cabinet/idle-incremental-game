@@ -1,13 +1,16 @@
 import { useEffect } from 'react';
 import { dismissStory, storyBeatDef } from '../game/story';
 import { useGameState, useGameStore } from '../hooks/useGame';
+import { useBattleOpen } from './battlePresence';
 import { playNotify } from './sfx';
 
-/** Shows the oldest pending story beat; dismissing marks it seen. */
+/** Shows the oldest pending story beat; dismissing marks it seen. Beats wait
+ *  while a battle is playing rather than cutting over it — see battlePresence. */
 export function StoryModal() {
   const store = useGameStore();
   const state = useGameState();
-  const beatId = state.pendingStories[0] as string | undefined;
+  const battleOpen = useBattleOpen();
+  const beatId = battleOpen ? undefined : (state.pendingStories[0] as string | undefined);
   useEffect(() => {
     if (beatId && store.getState().settings.sfxEnabled) playNotify();
   }, [beatId, store]);

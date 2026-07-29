@@ -26,7 +26,9 @@ Three layers, dependencies point inward only:
   `Math.random`) so tests are deterministic. All balance/tuning numbers and
   content (jobs, locations, perks, story beats) live in `config.ts` only.
   - `logic.ts` town economy · `guild.ts` roster/gear/assignments ·
-    `engine.ts` the tick (patrols, quests, expeditions, offline catch-up) ·
+    `engine.ts` the tick (quest board, crafting, Auto-Explore, offline catch-up) ·
+    `combat.ts` turn-based battles · `dungeon.ts` per-zone gauntlets ·
+    `campaign.ts` the Act 3 marches on the generals & demon king ·
     `story.ts` beats & act transitions · `prestige.ts` time travel ·
     `adventurers.ts` generation/stats · `perks.ts` shard-bought modifiers
 - **`src/platform/`** — platform adapters behind interfaces (`SaveAdapter`
@@ -35,8 +37,9 @@ Three layers, dependencies point inward only:
 - **`src/ui/`, `src/hooks/`, `App.tsx`** — React. Reads state via
   `useGameState()`, mutates only by dispatching pure functions through the
   `GameStore`. Five tabs — Overview / Town / Guild / Map / Items — the last
-  three act-gated (Act 2). Settings sits behind the header gear; Timeline is
-  an Overview subtab, revealed once time travel unlocks.
+  three act-gated (Act 2). Map has Explore / Dungeons subtabs, plus Campaign
+  once Act 3 opens. Settings sits behind the header gear; Timeline is an
+  Overview subtab, revealed once time travel unlocks.
   - `ui/icons.tsx` — the whole icon vocabulary as monochrome 24×24 SVG stroked
     with `currentColor`. **No emoji in the UI.** Icons are deliberately shared
     across similar concepts; extend this set rather than adding one-off glyphs.
@@ -66,7 +69,7 @@ PixiJS/canvas — so don't leak UI assumptions into `src/game/`.
   `.row-locked` / `unaffordable` treatment.
 - Long explanations belong in an `InfoNote`, collapsed by default and passed
   `defaultOpen` when the surrounding UI is empty — not in permanent prose.
-- Saves are versioned (`SAVE_VERSION`, currently 3); when changing `GameState`
+- Saves are versioned (`SAVE_VERSION`, currently 18); when changing `GameState`
   shape, bump it and extend `migrateSave` in `game/logic.ts` — never break
   existing player saves (pre-v3 saves intentionally reset: full redesign).
 

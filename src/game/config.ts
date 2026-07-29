@@ -3,6 +3,7 @@ import type {
   AttributeDef,
   AttributeId,
   Attributes,
+  CampaignBossDef,
   ChampionPerkDef,
   ClassSkillDef,
   DungeonDef,
@@ -52,7 +53,7 @@ export const AUTOSAVE_INTERVAL_MS = 10_000;
  * interval firing on schedule — see useGameLoop's visibility listeners.
  */
 export const BACKGROUND_CATCHUP_GAP_MS = 3_000;
-export const SAVE_VERSION = 17;
+export const SAVE_VERSION = 18;
 
 // ---------------------------------------------------------------------------
 // Act 1 — town income (low numbers by design)
@@ -653,8 +654,9 @@ export const MATERIALS: MaterialDef[] = [
 ];
 
 /**
- * Zones unlock in order: a zone opens once the previous zone's quest has been
- * cleared. Clearing the last zone's quest triggers Act 3.
+ * Zones unlock at reputation thresholds. Clearing the last zone's *dungeon*
+ * (Frontier Pass) reveals the razed hometown and triggers Act 3 — after which
+ * the `kind: 'boss'` entries below become campaign targets (see campaign.ts).
  *
  * Power curve: tiers 1-6 grow ~1.75x per tier (vs the old ~1.6x), and boss
  * tiers 7-10 grow ~1.6x with a steeper final jump for the demon king. This
@@ -694,7 +696,7 @@ export const LOCATIONS: LocationDef[] = [
     materialId: 'demon-ash', questDuration: 900, shardChance: 0.01, repRequired: 1600,
     description: 'The road home. Something burned through here.',
   },
-  // ---- Act 3 expedition targets ----
+  // ---- Act 3 campaign targets (see CAMPAIGN_BOSSES below) ----
   {
     id: 'general-marrow', name: "General Marrow's Camp", kind: 'boss', tier: 7,
     power: 500, materialId: 'demon-ash', questDuration: 600, shardChance: 0.02,
@@ -759,8 +761,8 @@ export const QUEST_TARGETS: QuestTargetDef[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// Dungeons — one per zone (tiers 1-6 only; Act 3 boss expeditions aren't
-// built out yet, see engine.ts). Unlocked once a zone's manual-Explore win
+// Dungeons — one per zone (tiers 1-6 only; the Act 3 boss tiers have their own
+// gauntlet, see the campaign section below). Unlocked once a zone's manual-Explore win
 // count reaches DUNGEON_WINS_REQUIRED (see combat.ts recordDungeonWin) — a
 // repeatable multi-room gauntlet (DUNGEON_ROOM_COUNT regular rooms then one
 // amplified boss room) resolved by game/dungeon.ts, reusing the zone's own
@@ -800,6 +802,168 @@ export const DUNGEONS: DungeonDef[] = [
   {
     id: 'frontier-pass-dungeon', locationId: 'frontier-pass', name: 'The Ashen Barracks',
     description: 'A demon legion camped here before the front moved on.', bossName: 'Legion Captain',
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Act 3 — the campaign against the demon king's legion
+//
+// Each `kind: 'boss'` LocationDef above is marched on as a manual gauntlet
+// (game/campaign.ts), structurally a dungeon run that can only be won once per
+// timeline: CAMPAIGN_GUARD_STAGES waves of that boss's own elite minions, then
+// the boss itself fighting alongside an escort. Generals must fall in order;
+// felling all three opens the citadel, and killing the king unlocks time
+// travel (see prestige.ts). Balance numbers are placeholders, per docs.
+// ---------------------------------------------------------------------------
+
+/** Minion waves fought before the boss stage of a march. */
+export const CAMPAIGN_GUARD_STAGES = 3;
+
+/**
+ * A campaign boss's stats are its location tier run through the usual monster
+ * formula, times the boss's own `difficulty`, times these. HP is inflated far
+ * more than attack (a long, survivable slugfest rather than a coin-flip on who
+ * lands the first blow), and Defense least of all — the damage formula's
+ * K/(K+def) curve means a big Defense number quickly makes a boss unkillable
+ * rather than merely tough.
+ */
+export const CAMPAIGN_BOSS_HP_MULT = 7;
+export const CAMPAIGN_BOSS_ATK_MULT = 2.4;
+export const CAMPAIGN_BOSS_DEF_MULT = 1.4;
+
+/** One-time spoils for felling a campaign boss, on top of the battle's own
+ *  drops and the location's `bossShardReward` time shards. */
+export const CAMPAIGN_VICTORY_MATERIAL_AMOUNT = 40;
+export const CAMPAIGN_VICTORY_EQUIPMENT_COUNT = 2;
+
+/**
+ * Elite minions, one pool per campaign boss. Deliberately kept out of
+ * QUEST_TARGETS: the quest board posts bounties on the *wilds*, and no town
+ * adventurer is being sent to farm the demon king's honor guard.
+ */
+export const CAMPAIGN_MINIONS: QuestTargetDef[] = [
+  // General Marrow's Camp (tier 7)
+  { id: 'flesh-reaver', locationId: 'general-marrow', kind: 'monster', name: 'Flesh Reaver', materialId: 'demon-ash', difficulty: 1.3 },
+  { id: 'bone-houndmaster', locationId: 'general-marrow', kind: 'monster', name: 'Bone Houndmaster', materialId: 'beast-pelt', difficulty: 1.1 },
+  { id: 'gore-standard', locationId: 'general-marrow', kind: 'monster', name: 'Gore Standard-Bearer', materialId: 'iron-ore', difficulty: 1.2 },
+  // General Vex's Spire (tier 8)
+  { id: 'ashen-acolyte', locationId: 'general-vex', kind: 'monster', name: 'Ashen Acolyte', materialId: 'spirit-essence', difficulty: 1.2 },
+  { id: 'void-familiar', locationId: 'general-vex', kind: 'monster', name: 'Void Familiar', materialId: 'crystal', difficulty: 1.1 },
+  { id: 'spire-sentinel', locationId: 'general-vex', kind: 'monster', name: 'Spire Sentinel', materialId: 'iron-ore', difficulty: 1.4 },
+  // General Thane's Bastion (tier 9)
+  { id: 'bastion-pikeman', locationId: 'general-thane', kind: 'monster', name: 'Bastion Pikeman', materialId: 'iron-ore', difficulty: 1.3 },
+  { id: 'ironclad-zealot', locationId: 'general-thane', kind: 'monster', name: 'Ironclad Zealot', materialId: 'demon-ash', difficulty: 1.4 },
+  { id: 'siege-ogre', locationId: 'general-thane', kind: 'monster', name: 'Siege Ogre', materialId: 'raw-meat', difficulty: 1.5 },
+  // The Demon King's Citadel (tier 10)
+  { id: 'royal-executioner', locationId: 'demon-king', kind: 'monster', name: 'Royal Executioner', materialId: 'demon-ash', difficulty: 1.5 },
+  { id: 'abyssal-herald', locationId: 'demon-king', kind: 'monster', name: 'Abyssal Herald', materialId: 'spirit-essence', difficulty: 1.4 },
+  { id: 'crown-wyrm', locationId: 'demon-king', kind: 'monster', name: 'Crown Wyrm', materialId: 'crystal', difficulty: 1.6 },
+];
+
+/**
+ * Boss kits. Same ClassSkillDef shape champions use — the combat engine is
+ * side-agnostic, so a boss buffing 'allies' rallies its escort and one
+ * targeting 'enemy-all' hits the whole party (see combat.ts). `className:
+ * 'boss'` keeps them out of every champion generation pool.
+ *
+ * A boss casts its first *ready* skill, so list order is priority order.
+ */
+export const CAMPAIGN_SKILLS: ClassSkillDef[] = [
+  // ---- Marrow, the butcher: raw sustained damage ----
+  {
+    id: 'boss-butchery', name: 'Butchery', className: 'boss', cooldownTurns: 4,
+    description: 'A wide, wet arc across the whole party for 110% attack.',
+    effects: [{ kind: 'damage', targeting: 'aoe', power: 1.1 }],
+  },
+  {
+    id: 'boss-blood-frenzy', name: 'Blood Frenzy', className: 'boss', cooldownTurns: 7,
+    description: 'The legion smells blood: +50% attack to the boss and its escort for 6 turns.',
+    effects: [{ kind: 'buff', stat: 'atk', mult: 1.5, targeting: 'allies', durationTurns: 6 }],
+  },
+  // ---- Vex, the sorcerer: burn, control ----
+  {
+    id: 'boss-hellfire', name: 'Hellfire', className: 'boss', cooldownTurns: 4,
+    description: '65% attack to the whole party and sets them burning for 3 turns.',
+    effects: [
+      { kind: 'damage', targeting: 'aoe', power: 0.65 },
+      { kind: 'status', status: 'burn', targeting: 'enemy-all', durationTurns: 3, potency: 0.25 },
+    ],
+  },
+  {
+    id: 'boss-unmaking', name: 'Unmaking', className: 'boss', cooldownTurns: 5,
+    description: '150% attack to one champion and stuns them for 2 turns.',
+    effects: [
+      { kind: 'damage', targeting: 'single', power: 1.5 },
+      { kind: 'status', status: 'stun', targeting: 'enemy-single', durationTurns: 2 },
+    ],
+  },
+  // ---- Thane, the shield: defensive, grinding ----
+  {
+    id: 'boss-bastion', name: 'Bastion', className: 'boss', cooldownTurns: 6,
+    description: 'Locks shields: +60% defense to the boss and its escort for 6 turns.',
+    effects: [{ kind: 'buff', stat: 'def', mult: 1.6, targeting: 'allies', durationTurns: 6 }],
+  },
+  {
+    id: 'boss-shieldbreaker', name: 'Shieldbreaker', className: 'boss', cooldownTurns: 4,
+    description: '210% attack to one champion, slowing them for 3 turns.',
+    effects: [
+      { kind: 'damage', targeting: 'single', power: 2.1 },
+      { kind: 'status', status: 'slow', targeting: 'enemy-single', durationTurns: 3, potency: 0.5 },
+    ],
+  },
+  // ---- The demon king: everything at once ----
+  {
+    id: 'boss-doom', name: 'Doom', className: 'boss', cooldownTurns: 3,
+    description: '240% attack to one champion.',
+    effects: [{ kind: 'damage', targeting: 'single', power: 2.4 }],
+  },
+  {
+    id: 'boss-cataclysm', name: 'Cataclysm', className: 'boss', cooldownTurns: 5,
+    description: '110% attack to the whole party.',
+    effects: [{ kind: 'damage', targeting: 'aoe', power: 1.1 }],
+  },
+  {
+    id: 'boss-dread-crown', name: 'Dread Crown', className: 'boss', cooldownTurns: 6,
+    description: 'Dread grips the party: −50% speed for 3 turns, and poison besides.',
+    effects: [
+      { kind: 'status', status: 'slow', targeting: 'enemy-all', durationTurns: 3, potency: 0.5 },
+      { kind: 'status', status: 'poison', targeting: 'enemy-all', durationTurns: 4, potency: 0.3 },
+    ],
+  },
+];
+
+export const CAMPAIGN_BOSSES: CampaignBossDef[] = [
+  {
+    locationId: 'general-marrow', name: 'General Marrow', difficulty: 3.1,
+    intro:
+      'Marrow keeps no maps and no prisoners. His camp is a slaughter-yard with banners, and he ' +
+      'has been waiting for someone worth the walk.',
+    skillIds: ['boss-butchery', 'boss-blood-frenzy'],
+    victoryLog: 'General Marrow has fallen. The butcher’s camp burns behind you.',
+  },
+  {
+    locationId: 'general-vex', name: 'General Vex', difficulty: 2.8,
+    intro:
+      'Vex razed your hometown from a mile away and never looked up from her work. The spire ' +
+      'still hums with the spell she used to do it.',
+    skillIds: ['boss-hellfire', 'boss-unmaking'],
+    victoryLog: 'General Vex has fallen. Her spire goes dark for the first time in years.',
+  },
+  {
+    locationId: 'general-thane', name: 'General Thane', difficulty: 3.5,
+    intro:
+      'Thane has never lost a wall. He knows exactly who you are, and he has already decided ' +
+      'this changes nothing.',
+    skillIds: ['boss-bastion', 'boss-shieldbreaker'],
+    victoryLog: 'General Thane has fallen. The road to the citadel lies open.',
+  },
+  {
+    locationId: 'demon-king', name: 'The Demon King', difficulty: 3.5,
+    intro:
+      'He does not remember your town. He does not remember your family. That, in the end, is ' +
+      'the whole of it.',
+    skillIds: ['boss-doom', 'boss-cataclysm', 'boss-dread-crown'],
+    victoryLog: 'The Demon King is dead. In his chamber, a crystal hums with borrowed time.',
   },
 ];
 
@@ -1309,6 +1473,18 @@ export const STORY_BEATS: StoryBeatDef[] = [
   {
     id: 'a3-discovery', title: 'The Road Home',
     text: 'Past Frontier Pass, the scouts go quiet. Then the report: your hometown. Razed. The demon king’s legion did this — and their banners still fly over the ruins. You are done running.',
+  },
+  {
+    id: 'a3-marrow-dead', title: 'The Butcher’s Camp',
+    text: 'Marrow dies the way he lived — loudly, and in the middle of everything. His camp burns behind you. Two banners still fly between you and the citadel.',
+  },
+  {
+    id: 'a3-vex-dead', title: 'The Spire Goes Dark',
+    text: 'Vex never asked who you were. At the end she looked genuinely puzzled that a town she had erased in an afternoon had sent someone back. The spire goes dark. One banner left.',
+  },
+  {
+    id: 'a3-thane-dead', title: 'The Wall That Fell',
+    text: 'Thane held his line to the last, and told you — almost kindly — that killing him changes nothing. Then the wall came down, and the road to the citadel lay open.',
   },
   {
     id: 'a3-king-dead', title: 'The Chamber of the King',

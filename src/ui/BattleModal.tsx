@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { BattleOutcome } from '../game/combat';
+import { markBattleOpen } from './battlePresence';
 import { CLASS_ICON } from './display';
 import { Icon } from './icons';
 import { BattleViewer } from './BattleViewer';
@@ -24,6 +25,9 @@ import type { PartyStatusEntry } from './BattleViewer';
 export function BattleModal({
   result,
   locationName,
+  /** What the party is doing here — 'Exploring' unless a caller says otherwise
+   *  (an Act 3 march is 'Marching on'). */
+  verb = 'Exploring',
   tier,
   reducedMotion,
   onClose,
@@ -32,12 +36,17 @@ export function BattleModal({
 }: {
   result: BattleOutcome;
   locationName: string;
+  verb?: string;
   tier: number;
   reducedMotion: boolean;
   onClose: () => void;
   autoAdvance: boolean;
   onStop: () => void;
 }) {
+  // Story beats hold while this is up, so the climax isn't cut over — see
+  // battlePresence.
+  useEffect(() => markBattleOpen(), []);
+
   const [pixiDone, setPixiDone] = useState(false);
   const [stopClicked, setStopClicked] = useState(false);
   const [partyStatus, setPartyStatus] = useState<PartyStatusEntry[]>([]);
@@ -76,7 +85,7 @@ export function BattleModal({
     <div className="story-overlay battle-overlay">
       <div className="story-modal detail-modal battle-modal">
         <div className="detail-header">
-          <h2 className="story-title">Exploring — {locationName}</h2>
+          <h2 className="story-title">{verb} — {locationName}</h2>
         </div>
 
         <BattleViewer

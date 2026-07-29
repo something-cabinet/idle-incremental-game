@@ -7,6 +7,7 @@ import {
   BONUS_ATTR_TIER_DIV,
   CHAMPION_PERKS,
   CLASS_DEFS,
+  CAMPAIGN_SKILLS,
   CLASS_SKILLS,
   DEF_PER_CON,
   DEF_PER_RES,
@@ -286,6 +287,12 @@ export function championSkill(skillId: string | undefined): ClassSkillDef | unde
   return CLASS_SKILLS.find((s) => s.id === skillId);
 }
 
+/** Any active skill by id — champion class pools and Act 3 boss kits alike
+ *  (see CAMPAIGN_SKILLS). Used by combat.ts to arm a boss combatant. */
+export function skillDef(skillId: string | undefined): ClassSkillDef | undefined {
+  return championSkill(skillId) ?? CAMPAIGN_SKILLS.find((s) => s.id === skillId);
+}
+
 /** The active perk's effects (empty if the champion somehow has no valid perk). */
 export function championPerkEffects(adv: Adventurer): ChampionPerkEffect[] {
   return championPerk(adv.perkId)?.effects ?? [];
@@ -366,7 +373,14 @@ function weaponStatScale(stat: number): number {
   return Math.min(WEAPON_SCALE_MAX, WEAPON_SCALE_BASE + stat / WEAPON_SCALE_DIV);
 }
 
-export function adventurerStats(adv: Adventurer): {
+/**
+ * A champion's combat stats. `powerMult` is the cross-timeline adventurer-power
+ * perk multiplier (computeModifiers(state).powerMult) — callers that have the
+ * state pass it so the number they show is the number that fights; the default
+ * of 1 is for comparisons where it would cancel out anyway (e.g. ranking two
+ * candidate items in autoEquipBest).
+ */
+export function adventurerStats(adv: Adventurer, powerMult = 1): {
   atk: number;
   def: number;
   maxHp: number;
@@ -387,25 +401,34 @@ export function adventurerStats(adv: Adventurer): {
     }
     def += item.def;
   }
-  return { atk: Math.round(atk), def: Math.round(def), maxHp: maxHp(adv) };
+  return {
+    atk: Math.round(atk * powerMult),
+    def: Math.round(def * powerMult),
+    maxHp: maxHp(adv),
+  };
 }
 
-/** Combat rating used against location power (perk multiplier applied). */
+/** Convenience wrapper for the common "stats as they'll actually fight" call. */
+export function adventurerStatsIn(state: GameState, adv: Adventurer) {
+  return adventurerStats(adv, computeModifiers(state).powerMult);
+}
+
+/** Single combat rating (atk + def), for rough strength comparisons. */
 export function adventurerPower(state: GameState, adv: Adventurer): number {
-  const { atk, def } = adventurerStats(adv);
-  return (atk + def) * computeModifiers(state).powerMult;
+  const { atk, def } = adventurerStatsIn(state, adv);
+  return atk + def;
 }
 
 /** Stats this adventurer would have with `item` occupying its slot. */
-export function statsWithItem(adv: Adventurer, item: Equipment): {
+export function statsWithItem(adv: Adventurer, item: Equipment, powerMult = 1): {
   atk: number;
   def: number;
   maxHp: number;
 } {
-  return adventurerStats({
-    ...adv,
-    equipment: { ...adv.equipment, [item.slot]: item },
-  });
+  return adventurerStats(
+    { ...adv, equipment: { ...adv.equipment, [item.slot]: item } },
+    powerMult,
+  );
 }
 
 /**

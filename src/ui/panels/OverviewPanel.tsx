@@ -285,6 +285,11 @@ function ProgressSection() {
           {DUNGEON_TOTAL_ROOMS} rooms each
         </Milestone>
       )}
+      {state.act === 2 && (
+        <Milestone done={false}>
+          Clear the Frontier Pass dungeon to find the road home
+        </Milestone>
+      )}
       {state.act >= 3 && (
         <>
           <Milestone done={bossesSlain > 0}>
@@ -337,6 +342,7 @@ function RecordsSection() {
           <Stat value={`${winRate}%`} label="Win Rate" />
           <Stat value={fmt(stats.monstersDefeated)} label="Monsters Slain" />
           <Stat value={fmt(stats.dungeonsCleared)} label="Dungeons Cleared" />
+          <Stat value={fmt(stats.bossesFelled)} label="Great Foes Felled" />
           <Stat value={fmt(stats.injuries)} label="Injuries" />
           <Stat value={fmt(stats.shardsFound)} label="Shards Found" />
         </div>
