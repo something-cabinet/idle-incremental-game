@@ -10,12 +10,14 @@ import { GameStore } from './game/store';
 import { formatDuration } from './game/format';
 import { GameContext, useGameLoop, useGameState, type OfflineCatchupResult } from './hooks/useGame';
 import { useFormat } from './hooks/useFormat';
+import { NavigationContext } from './hooks/useNavigation';
 import { localStorageAdapter } from './platform/storage';
 import { materialsSummary } from './ui/display';
 import { Icon } from './ui/icons';
 import { playClick, playNotify } from './ui/sfx';
 import { StoryModal } from './ui/StoryModal';
 import { TabBar, type TabId } from './ui/TabBar';
+import { ArrivalLanding } from './ui/ArrivalLanding';
 import { OverviewPanel } from './ui/panels/OverviewPanel';
 import { TownPanel } from './ui/panels/TownPanel';
 import { GuildPanel } from './ui/panels/GuildPanel';
@@ -73,18 +75,21 @@ export default function App() {
 
   return (
     <GameContext.Provider value={init.store}>
-      <ToastStack />
-      <Shell
-        tab={tab}
-        settingsOpen={settingsOpen}
-        onTab={(next) => {
-          setSettingsOpen(false);
-          setTab(next);
-        }}
-        onToggleSettings={() => setSettingsOpen((v) => !v)}
-        offlineReport={offlineReport}
-        onDismissOffline={() => setOfflineReport(null)}
-      />
+      <NavigationContext.Provider value={(next) => { setSettingsOpen(false); setTab(next); }}>
+        <ArrivalLanding />
+        <ToastStack />
+        <Shell
+          tab={tab}
+          settingsOpen={settingsOpen}
+          onTab={(next) => {
+            setSettingsOpen(false);
+            setTab(next);
+          }}
+          onToggleSettings={() => setSettingsOpen((v) => !v)}
+          offlineReport={offlineReport}
+          onDismissOffline={() => setOfflineReport(null)}
+        />
+      </NavigationContext.Provider>
     </GameContext.Provider>
   );
 }

@@ -10,6 +10,20 @@ import type { GameState, StoryBeatDef } from './types';
 
 /** Story beats and act transitions. Beats fire once, queued for the UI. */
 
+/**
+ * True only for an absolute-first-run save: never prestiged, act 1,
+ * and the arrival beat has not yet been dismissed. The landing threshold
+ * owns this beat; StoryModal must suppress it.
+ */
+export function isFirstRunArrival(state: GameState): boolean {
+  return (
+    state.act === 1 &&
+    state.prestigeCount === 0 &&
+    !state.storyFlags['a1-arrival'] &&
+    state.pendingStories.includes('a1-arrival')
+  );
+}
+
 export const PRESTIGE_BEAT_ID = 'prestige-celebration';
 
 /** Which beat each general's death fires. Keyed by campaign boss locationId. */
