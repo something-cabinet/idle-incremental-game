@@ -13,8 +13,9 @@ import { canTimeTravel, timeTravel } from '../../game/prestige';
 import type { PerkDef } from '../../game/types';
 import { useFormat } from '../../hooks/useFormat';
 import { useGameState, useGameStore } from '../../hooks/useGame';
-import { NoteRow } from '../components';
+import { ConfirmModal, NoteRow } from '../components';
 import { Icon } from '../icons';
+import { useState } from 'react';
 
 /**
  * Prestige, as an Overview section rather than its own tab — it appears only
@@ -28,15 +29,12 @@ export function TimelineSection() {
   const ready = canTimeTravel(state);
   const day = currentDay(state);
   const beforeDeadline = day <= HOMETOWN_DEADLINE_DAY;
+  const [travelOpen, setTravelOpen] = useState(false);
 
   const travel = () => {
     if (!ready) return;
-    if (
-      state.settings.confirmPrestige &&
-      !confirm(
-        'Travel back in time? The town, guild, and adventurers reset. Time Shards and perks persist.',
-      )
-    ) {
+    if (state.settings.confirmPrestige) {
+      setTravelOpen(true);
       return;
     }
     store.dispatch((s) => timeTravel(s));
@@ -74,6 +72,28 @@ export function TimelineSection() {
             <Icon name="hourglass" /> Travel Back in Time
           </button>
         </div>
+      )}
+
+      {travelOpen && (
+        <ConfirmModal
+          title="Travel Back in Time"
+          message={
+            <>
+              The town, guild, and adventurers will reset.
+              <br /><br />
+              <strong>Time Shards and perks persist across timelines.</strong> Are you ready to begin again?
+            </>
+          }
+          confirmLabel="Travel Back"
+          cancelLabel="Stay Here"
+          variant="primary"
+          icon="hourglass"
+          onConfirm={() => {
+            store.dispatch((s) => timeTravel(s));
+            setTravelOpen(false);
+          }}
+          onCancel={() => setTravelOpen(false)}
+        />
       )}
 
       <section className="rows">

@@ -16,6 +16,18 @@
   --exalted: #ff9d3d;
   --ascendant: #ff5ed4;
 
+  --font-display: 'Cinzel', 'Cinzel Decorative', 'Playfair Display', serif;
+  --font-body: 'Source Sans 3', 'Source Sans Pro', 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  --text-xs: 0.66rem;
+  --text-sm: 0.75rem;
+  --text-md: 0.85rem;
+  --text-base: 1rem;
+  --text-lg: 1.2rem;
+  --text-xl: 1.5rem;
+  --text-2xl: 1.8rem;
+  --text-3xl: 2.4rem;
+
   /* Spacing scale — everything below is a multiple of these, so tightening
      density is a change to four numbers rather than two hundred. */
   --gap-xs: 4px;
@@ -51,7 +63,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family: var(--font-body);
 }
 
 .game {
@@ -88,7 +100,8 @@ body {
 }
 
 .energy-amount {
-  font-size: 1.5rem;
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
   font-weight: 700;
   color: var(--accent);
   font-variant-numeric: tabular-nums;
@@ -101,7 +114,7 @@ body {
 
 .eps {
   color: var(--green);
-  font-size: 0.78rem;
+  font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -112,7 +125,7 @@ body {
   justify-content: flex-end;
   gap: var(--gap-md);
   margin-left: auto;
-  font-size: 0.82rem;
+  font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
 }
 
@@ -125,14 +138,17 @@ body {
 
 .day-counter {
   color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
 }
 
 .shard-counter {
   color: var(--shard);
+  font-variant-numeric: tabular-nums;
 }
 
 .rep-counter {
   color: var(--accent);
+  font-variant-numeric: tabular-nums;
 }
 
 /* Settings moved out of the tab bar into the header, freeing a nav slot. */
@@ -209,13 +225,14 @@ body {
 }
 
 .tab-icon {
-  font-size: 1.15rem;
+  font-size: var(--text-lg);
   line-height: 1;
 }
 
 .tab-label {
+  font-family: var(--font-body);
   /* Down from eight tabs to five, so labels can be legible instead of 10px. */
-  font-size: 0.7rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   white-space: nowrap;
 }
@@ -234,15 +251,15 @@ body {
 }
 
 .section-title {
+  font-family: var(--font-display);
   display: flex;
   align-items: center;
   gap: 6px;
   margin: 2px 0 0;
-  font-size: 0.72rem;
+  font-size: var(--text-sm);
   color: var(--text-dim);
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.02em;
 }
 
 .row,
@@ -395,17 +412,20 @@ button.row:disabled::after {
 }
 
 .row-name {
+  font-family: var(--font-body);
   font-weight: 600;
 }
 
 .row-sub {
+  font-family: var(--font-body);
   color: var(--text-dim);
   font-weight: 400;
-  font-size: 0.85em;
+  font-size: var(--text-md);
 }
 
 .row-desc {
-  font-size: 0.78rem;
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
   color: var(--text-dim);
 }
 
@@ -439,7 +459,7 @@ button.row:disabled::after {
   margin-left: 0.5em;
   padding: 0.05em 0.45em;
   border-radius: 999px;
-  font-size: 0.62rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.03em;
@@ -449,12 +469,12 @@ button.row:disabled::after {
 }
 
 .row-good {
-  font-size: 0.78rem;
+  font-size: var(--text-sm);
   color: var(--green);
 }
 
 .row-bad {
-  font-size: 0.78rem;
+  font-size: var(--text-sm);
   color: var(--red);
 }
 
@@ -470,16 +490,17 @@ button.row:disabled::after {
 }
 
 .mat-cost {
-  font-size: 0.72rem;
+  font-size: var(--text-sm);
   color: var(--text-dim);
   font-weight: 400;
 }
 
 /* ---- Click & act buttons ---- */
 .click-button {
+  font-family: var(--font-display);
   position: relative;
   padding: 14px;
-  font-size: 1.1rem;
+  font-size: var(--text-lg);
   font-weight: 700;
   border: 2px solid var(--accent-dim);
   border-radius: var(--radius-lg);
@@ -505,7 +526,7 @@ button.row:disabled::after {
 }
 
 .click-power {
-  font-size: 0.78rem;
+  font-size: var(--text-sm);
   font-weight: 400;
   color: var(--text-dim);
 }
@@ -523,7 +544,7 @@ button.row:disabled::after {
   position: absolute;
   left: 50%;
   top: 8px;
-  font-size: 0.95rem;
+  font-size: var(--text-base);
   font-weight: 700;
   color: var(--accent);
   text-shadow: 0 2px 6px rgba(0, 0, 0, 0.7);
@@ -558,6 +579,7 @@ button.row:disabled::after {
 }
 
 .found-guild {
+  font-family: var(--font-display);
   padding: 14px;
   font-size: 1rem;
   font-weight: 700;
@@ -578,7 +600,7 @@ button.row:disabled::after {
 }
 
 .found-guild-hint {
-  font-size: 0.75rem;
+  font-size: var(--text-sm);
   font-weight: 400;
   color: var(--text-dim);
 }
@@ -611,7 +633,7 @@ button.row:disabled::after {
   background: var(--panel);
   color: var(--text-dim);
   font: inherit;
-  font-size: 0.85rem;
+  font-size: var(--text-md);
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
@@ -627,11 +649,11 @@ button.row:disabled::after {
   flex: 0 0 auto;
   min-width: 46px;
   padding: 0 10px;
-  font-size: 0.82rem;
+  font-size: var(--text-sm);
 }
 
 .buy-amount-label {
-  font-size: 0.78rem;
+  font-size: var(--text-sm);
   color: var(--text-dim);
 }
 
@@ -748,7 +770,7 @@ button.row:disabled::after {
 }
 
 .attr-abbr {
-  font-size: 0.62rem;
+  font-size: var(--text-xs);
   color: var(--text-dim);
   letter-spacing: 0.04em;
 }
@@ -763,7 +785,7 @@ button.row:disabled::after {
 }
 
 .attr-hint {
-  font-size: 0.72rem;
+  font-size: var(--text-sm);
   margin-top: 2px;
 }
 
@@ -774,7 +796,8 @@ button.row:disabled::after {
 }
 
 .progress-time {
-  font-size: 0.7rem;
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
   color: var(--text-dim);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
@@ -794,9 +817,10 @@ button.row:disabled::after {
 }
 
 .log-entry {
+  font-family: var(--font-body);
   display: flex;
   gap: 8px;
-  font-size: 0.76rem;
+  font-size: var(--text-xs);
   line-height: 1.4;
 }
 
@@ -839,9 +863,10 @@ button.row:disabled::after {
 }
 
 .detail-sub {
+  font-family: var(--font-body);
   margin: 0;
   color: var(--text-dim);
-  font-size: 0.85rem;
+  font-size: var(--text-md);
 }
 
 /* Fits as many tiles per row as will actually fit, instead of forcing three.
@@ -868,7 +893,7 @@ button.row:disabled::after {
 }
 
 .stat-bar-label {
-  font-size: 0.72rem;
+  font-size: var(--text-sm);
   font-weight: 600;
   color: var(--text-dim);
 }
@@ -888,7 +913,7 @@ button.row:disabled::after {
 
 .stat-bar-value {
   text-align: right;
-  font-size: 0.78rem;
+  font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
   color: var(--text-dim);
 }
@@ -917,7 +942,7 @@ button.row:disabled::after {
   background: var(--panel-hover);
   color: var(--text);
   font: inherit;
-  font-size: 0.85rem;
+  font-size: var(--text-md);
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
@@ -975,7 +1000,7 @@ button.row:disabled::after {
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-dim);
-  font-size: 1.15rem;
+  font-size: var(--text-lg);
   cursor: pointer;
   transition: background 0.12s, color 0.12s;
 }
@@ -1016,7 +1041,7 @@ button.row:disabled::after {
   border-radius: 8px;
   padding: 6px 8px;
   font: inherit;
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
   max-width: 170px;
 }
 
@@ -1060,7 +1085,7 @@ button.row:disabled::after {
 
 .materials-list-name {
   flex: 1;
-  font-size: 0.85rem;
+  font-size: var(--text-md);
   color: var(--text-dim);
 }
 
@@ -1101,7 +1126,8 @@ button.row:disabled::after {
 }
 
 .stat-label {
-  font-size: 0.66rem;
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
   color: var(--text-dim);
   text-align: center;
   line-height: 1.25;
@@ -1143,7 +1169,7 @@ button.row:disabled::after {
   background: none;
   color: var(--text-dim);
   font: inherit;
-  font-size: 0.78rem;
+  font-size: var(--text-sm);
   text-align: left;
   cursor: pointer;
 }
@@ -1161,9 +1187,10 @@ button.row:disabled::after {
 }
 
 .info-note-body {
+  font-family: var(--font-body);
   margin: 0;
   padding: 0 10px 10px;
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
   line-height: 1.5;
   color: var(--text-dim);
 }
@@ -1321,7 +1348,7 @@ button.row:disabled::after {
 
 .equip-menu-group {
   padding: 6px 8px 2px;
-  font-size: 0.65rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   color: var(--text-dim);
   text-transform: uppercase;
@@ -1338,7 +1365,7 @@ button.row:disabled::after {
   background: none;
   color: var(--text);
   font: inherit;
-  font-size: 0.82rem;
+  font-size: var(--text-sm);
   text-align: left;
   text-transform: capitalize;
   cursor: pointer;
@@ -1363,12 +1390,12 @@ button.row:disabled::after {
 }
 
 .equip-grid-slot {
-  font-size: 1.4rem;
+  font-size: var(--text-lg);
   line-height: 1;
 }
 
 .equip-grid-name {
-  font-size: 0.7rem;
+  font-size: var(--text-sm);
   text-align: center;
   line-height: 1.2;
   overflow: hidden;
@@ -1396,11 +1423,11 @@ button.row:disabled::after {
 
 .equip-detail-name {
   font-weight: 700;
-  font-size: 1.05rem;
+  font-size: var(--text-base);
 }
 
 .equip-detail-rarity {
-  font-size: 0.7rem;
+  font-size: var(--text-sm);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -1437,7 +1464,7 @@ button.row:disabled::after {
 .equip-detail-stats {
   display: flex;
   gap: 14px;
-  font-size: 0.85rem;
+  font-size: var(--text-md);
   color: var(--text-dim);
   flex-wrap: wrap;
 }
@@ -1518,7 +1545,7 @@ button.row:disabled::after {
   gap: 8px;
   flex-wrap: wrap;
   margin-top: 3px;
-  font-size: 0.72rem;
+  font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1540,7 +1567,7 @@ button.row:disabled::after {
 }
 
 .equip-detail-hint {
-  font-size: 0.72rem;
+  font-size: var(--text-sm);
   color: var(--text-dim);
 }
 
@@ -1589,27 +1616,29 @@ button.row:disabled::after {
 }
 
 .currency-amount {
-  font-size: 1.8rem;
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
   font-weight: 700;
   color: var(--shard);
   font-variant-numeric: tabular-nums;
 }
 
 .currency-label {
-  font-size: 0.78rem;
+  font-size: var(--text-sm);
   color: var(--text-dim);
 }
 
 .prestige-blurb {
   margin: 0;
-  font-size: 0.85rem;
+  font-size: var(--text-md);
   color: var(--text-dim);
   line-height: 1.5;
 }
 
 .prestige-button {
+  font-family: var(--font-display);
   padding: 16px;
-  font-size: 1.1rem;
+  font-size: var(--text-lg);
   font-weight: 700;
   border: 2px solid var(--shard);
   border-radius: 12px;
@@ -1629,6 +1658,10 @@ button.row:disabled::after {
 }
 
 /* ---- Story modal ---- */
+.modal-body h3 {
+  font-family: var(--font-display);
+}
+
 .story-overlay {
   position: fixed;
   inset: 0;
@@ -1716,13 +1749,16 @@ button.row:disabled::after {
 }
 
 .story-title {
+  font-family: var(--font-display);
   margin: 0 0 10px;
   color: var(--accent);
-  font-size: 1.2rem;
+  font-size: var(--text-lg);
 }
 
 .story-text {
+  font-family: var(--font-body);
   margin: 0 0 18px;
+  font-size: var(--text-md);
   line-height: 1.6;
   color: var(--text);
 }
@@ -1758,11 +1794,12 @@ button.row:disabled::after {
 }
 
 .settings-label {
+  font-family: var(--font-body);
   font-weight: 600;
 }
 
 .settings-hint {
-  font-size: 0.75rem;
+  font-size: var(--text-sm);
   color: var(--text-dim);
 }
 
@@ -1818,7 +1855,8 @@ button.row:disabled::after {
 /* ---- Offline toast ---- */
 .offline-toast {
   position: fixed;
-  /* Clears the fixed tab bar instead of covering navigation. */
+  /* Clears the fixed tab bar instead of covering navigation. Sits above the
+     toast stack (z-index: 7) so it doesn't overlap during runtime catch-up. */
   bottom: calc(72px + env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%);
@@ -1829,17 +1867,18 @@ button.row:disabled::after {
   border: 1px solid var(--accent-dim);
   border-radius: var(--radius-md);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
-  z-index: 6;
+  z-index: 8;
   display: flex;
   align-items: flex-start;
   gap: var(--gap-md);
-  font-size: 0.85rem;
+  font-size: var(--text-md);
   line-height: 1.5;
 }
 
 /* ---- Quest board (map location detail + posted quests) ---- */
 .rep-counter {
   color: var(--accent, #d8a24a);
+  font-variant-numeric: tabular-nums;
 }
 
 /* The reworked zone card is a vertical container: a header button that
@@ -1867,7 +1906,7 @@ button.row:disabled::after {
   position: absolute;
   top: 0;
   right: 0;
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
   color: var(--text-dim);
   display: flex;
   gap: 8px;
@@ -1904,7 +1943,7 @@ button.row:disabled::after {
 .field-label {
   display: flex;
   flex-direction: column;
-  font-size: 0.65rem;
+  font-size: var(--text-xs);
   color: var(--text-dim);
   gap: 2px;
   flex-shrink: 0;
@@ -1919,7 +1958,7 @@ button.row:disabled::after {
   border-radius: var(--radius-sm);
   padding: 0 8px;
   font: inherit;
-  font-size: 0.9rem;
+  font-size: var(--text-md);
 }
 
 .field-label input:disabled {
@@ -1984,7 +2023,7 @@ button.row:disabled::after {
 }
 
 .party-status-row .row-name {
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
 }
 
 .party-status-row .row-sub {
@@ -2001,7 +2040,7 @@ button.row:disabled::after {
 .battle-vs {
   color: var(--text-dim);
   font-weight: 700;
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
 }
 
 .battle-side {
@@ -2157,13 +2196,13 @@ button.row:disabled::after {
 .ascend-name-before {
   color: var(--text-dim);
   text-decoration: line-through;
-  font-size: 0.85rem;
+  font-size: var(--text-md);
 }
 
 .ascend-name-after {
   color: var(--ascendant);
   font-weight: 700;
-  font-size: 1.05rem;
+  font-size: var(--text-base);
 }
 
 .ascend-delta-list {
@@ -2221,7 +2260,7 @@ button.row:disabled::after {
 }
 
 .ascend-perk-heading {
-  font-size: 0.68rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -2234,4 +2273,126 @@ button.row:disabled::after {
 .reduced-motion .ascend-icon,
 .reduced-motion .ascend-sparkle {
   animation: none;
+}
+
+/* ===== Toast System ===== */
+.toast-stack {
+  position: fixed;
+  bottom: calc(96px + env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 440px;
+  width: calc(100% - 32px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 7;
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--panel);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  font-size: var(--text-md);
+  animation: toast-in 0.25s ease-out;
+}
+
+.toast.toast-out {
+  animation: toast-out 0.2s ease-in forwards;
+}
+
+.toast-tone-success {
+  border-color: var(--green);
+}
+.toast-tone-success .icon {
+  color: var(--green);
+}
+
+.toast-tone-warning {
+  border-color: var(--red);
+}
+.toast-tone-warning .icon {
+  color: var(--red);
+}
+
+.toast-tone-info {
+  border-color: var(--accent-dim);
+}
+.toast-tone-info .icon {
+  color: var(--accent);
+}
+
+.toast-close {
+  margin-left: auto;
+  padding: 0;
+  min-width: var(--touch);
+  min-height: var(--touch);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+@keyframes toast-in {
+  from { transform: translateY(12px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+
+@keyframes toast-out {
+  from { transform: none; opacity: 1; }
+  to { transform: translateY(8px); opacity: 0; }
+}
+
+.reduced-motion .toast {
+  animation: none;
+}
+.reduced-motion .toast.toast-out {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    animation: none !important;
+  }
+}
+
+/* ===== Prestige Celebration ===== */
+.story-modal.prestige-beat {
+  border-color: var(--shard);
+  background: linear-gradient(180deg, #10222e, #0b1822);
+}
+
+.prestige-beat .story-title {
+  color: var(--shard);
+}
+
+.prestige-beat .story-text {
+  color: var(--text-dim);
+}
+
+.prestige-beat .story-continue {
+  border-color: var(--shard);
+  background: linear-gradient(180deg, #10222e, #0b1822);
+  color: var(--shard);
+}
+
+/* ===== Crafting ===== */
+.cost-part {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  font-size: var(--text-sm);
+  color: var(--text-dim);
 }

@@ -24,11 +24,17 @@ export function ExplorePartyRow({
   const injured = isInjured(adv, state.runTimeSeconds);
   const unavailableReason = injured ? 'Injured — recovering' : adv.assignment ? 'Busy' : null;
   return (
-    <div
+    <label
       className={`row quest-checklist-row ${disabled ? 'disabled' : ''}`}
-      onClick={() => !disabled && onToggle()}
+      htmlFor={`party-check-${adv.id}`}
     >
-      <input type="checkbox" checked={selected} disabled={disabled} readOnly />
+      <input
+        id={`party-check-${adv.id}`}
+        type="checkbox"
+        checked={selected}
+        disabled={disabled}
+        onChange={() => !disabled && onToggle()}
+      />
       <div className="row-info">
         <span className="row-name">{adv.name}</span>
         <span className="row-desc">
@@ -37,6 +43,6 @@ export function ExplorePartyRow({
         </span>
         {unavailableReason && <span className="row-bad">{unavailableReason}</span>}
       </div>
-    </div>
+    </label>
   );
 }

@@ -9,11 +9,14 @@ import type { NumberFormat } from '../../game/types';
 import { useGameState, useGameStore } from '../../hooks/useGame';
 import { localStorageAdapter } from '../../platform/storage';
 import { Icon } from '../icons';
+import { ConfirmModal } from '../components';
+import { useState } from 'react';
 
 export function SettingsPanel() {
   const store = useGameStore();
   const state = useGameState();
   const { settings } = state;
+  const [resetOpen, setResetOpen] = useState(false);
 
   return (
     <div className="panel settings-panel">
@@ -106,18 +109,33 @@ export function SettingsPanel() {
       </Row>
 
       <div className="settings-danger">
-        <button
-          className="danger-button"
-          onClick={() => {
-            if (confirm('Wipe your entire save and start over? This cannot be undone.')) {
-              localStorageAdapter.clear();
-              store.dispatch(() => createInitialState());
-            }
-          }}
-        >
+        <button className="danger-button" onClick={() => setResetOpen(true)}>
           Reset all progress
         </button>
       </div>
+
+      {resetOpen && (
+        <ConfirmModal
+          title="Reset All Progress"
+          message={
+            <>
+              Wipe your entire save and start over? <strong>This cannot be undone.</strong>
+              <br /><br />
+              Your timeline, champions, and inventory will be lost forever.
+            </>
+          }
+          confirmLabel="Reset Everything"
+          cancelLabel="Keep Playing"
+          variant="danger"
+          icon="warning"
+          onConfirm={() => {
+            localStorageAdapter.clear();
+            store.dispatch(() => createInitialState());
+            setResetOpen(false);
+          }}
+          onCancel={() => setResetOpen(false)}
+        />
+      )}
     </div>
   );
 }

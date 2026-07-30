@@ -1,5 +1,6 @@
 import { DEMON_KING_ID } from './config';
 import { createInitialState } from './logic';
+import { PRESTIGE_BEAT_ID } from './story';
 import type { GameState } from './types';
 
 /**
@@ -33,6 +34,6 @@ export function timeTravel(state: GameState, now = Date.now()): GameState {
     settings: state.settings,
     // Returning travelers skip the intro beat; they've lived this before.
     storyFlags: { 'a1-arrival': true },
-    pendingStories: [],
+    pendingStories: [PRESTIGE_BEAT_ID],
   };
 }

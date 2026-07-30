@@ -5,7 +5,7 @@
  * slightly different classes.
  */
 
-import { useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import type { StatChip } from './display';
 import { Icon, type IconName } from './icons';
 
@@ -130,6 +130,7 @@ export function Modal({
   footer,
   dismissable = true,
   className,
+  ariaDescribedby,
 }: {
   title: ReactNode;
   onClose: () => void;
@@ -138,17 +139,76 @@ export function Modal({
   /** Blocking modals (a battle in progress) opt out of click-outside. */
   dismissable?: boolean;
   className?: string;
+  /** Optional aria-describedby id for the dialog (e.g. from ConfirmModal). */
+  ariaDescribedby?: string;
 }) {
+  const titleId = useId();
+  const modalRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    const trigger = document.activeElement as HTMLElement | null;
+    const modalEl = modalRef.current;
+    if (!modalEl) return;
+
+    const focusables = modalEl.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+
+    // Only focus first element if nothing inside modal already has focus
+    // (preserves React's autoFocus placement)
+    if (!modalEl.contains(document.activeElement)) first?.focus();
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== 'Tab' || focusables.length === 0) return;
+      if (e.shiftKey) {
+        if (document.activeElement === first) {
+          e.preventDefault();
+          last?.focus();
+        }
+      } else {
+        if (document.activeElement === last) {
+          e.preventDefault();
+          first?.focus();
+        }
+      }
+    }
+
+    function onEscape(e: KeyboardEvent) {
+      if (e.key === 'Escape' && dismissable) {
+        const activeInModal = modalEl!.contains(document.activeElement);
+        if (activeInModal) {
+          onCloseRef.current();
+        }
+      }
+    }
+
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('keydown', onEscape);
+
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('keydown', onEscape);
+      trigger?.focus();
+    };
+  }, [dismissable]);
+
   return (
     <div className="story-overlay" onClick={dismissable ? onClose : undefined}>
       <div
+        ref={modalRef}
         className={`story-modal detail-modal ${className ?? ''}`}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={ariaDescribedby}
       >
         <div className="detail-header">
-          <h2 className="story-title">{title}</h2>
+          <h2 className="story-title" id={titleId}>{title}</h2>
           {dismissable && (
             <button className="icon-button" onClick={onClose} aria-label="Close">
               <Icon name="close" />
@@ -186,5 +246,62 @@ export function NoteRow({
       {icon && <Icon name={icon} className="row-static-icon" />}
       <div className="row-info">{children}</div>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Confirmation modal
+// ---------------------------------------------------------------------------
+
+export function ConfirmModal({
+  title,
+  message,
+  confirmLabel = 'Confirm',
+  cancelLabel = 'Cancel',
+  variant = 'primary',
+  onConfirm,
+  onCancel,
+  dismissable = true,
+  icon,
+}: {
+  title: string;
+  message: ReactNode;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  variant?: 'danger' | 'primary';
+  onConfirm: () => void;
+  onCancel?: () => void;
+  dismissable?: boolean;
+  icon?: IconName;
+}) {
+  const descId = useId();
+
+  return (
+    <Modal
+      title={icon ? <><Icon name={icon} /> {title}</> : title}
+      onClose={() => onCancel?.()}
+      dismissable={dismissable}
+      ariaDescribedby={descId}
+      footer={
+        <>
+          <button
+            className="small-button"
+            onClick={() => onCancel?.()}
+            autoFocus={variant === 'danger'}
+          >
+            {cancelLabel}
+          </button>
+          <button
+            className={`small-button ${variant === 'danger' ? 'danger' : 'primary'}`}
+            onClick={onConfirm}
+            autoFocus={variant === 'primary'}
+          >
+            {confirmLabel}
+          </button>
+        </>
+      }
+    >
+      <p className="story-text" id={descId}>{message}</p>
+    </Modal>
   );
 }

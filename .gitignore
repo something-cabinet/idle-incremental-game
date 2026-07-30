@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Deepwork state (git-local, OpenCode-readable)
+.slim/deepwork/
