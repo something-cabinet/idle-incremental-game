@@ -9,6 +9,8 @@ interface ToastItem {
   tone: 'info' | 'success' | 'warning';
   icon?: IconName;
   duration: number;
+  /** Rare progression beats receive the guild's heraldic notice treatment. */
+  ceremonial?: boolean;
 }
 
 let toastId = 0;
@@ -60,12 +62,16 @@ function ToastRow({ toast, onDismiss, toastId }: { toast: ToastItem; onDismiss: 
 
   return (
     <div
-      className={`toast toast-tone-${toast.tone} ${exiting ? 'toast-out' : ''}`}
+      className={`toast toast-tone-${toast.tone} ${toast.ceremonial ? 'toast-herald' : ''} ${exiting ? 'toast-out' : ''}`}
       role={toast.tone === 'warning' ? 'alert' : 'status'}
       aria-live={toast.tone === 'warning' ? 'assertive' : 'polite'}
     >
-      {toast.icon && <Icon name={toast.icon} />}
-      <span style={{ flex: 1, color: 'var(--text)' }}>{toast.message}</span>
+      {toast.icon && (
+        <span className="toast-seal" aria-hidden="true">
+          <Icon name={toast.icon} />
+        </span>
+      )}
+      <span className="toast-message">{toast.message}</span>
       <button
         className="toast-close"
         onClick={handleClose}
@@ -83,7 +89,7 @@ function eventToToast(event: GameEvent): ToastItem | null {
       return { id: ++toastId, message: 'Forging complete — new equipment ready!', tone: 'success', icon: 'hammer', duration: 3500 };
     case 'champion-level-up': {
       const p = event.payload as { name: string; level: number } | undefined;
-      return { id: ++toastId, message: p ? `${p.name} reached level ${p.level}!` : 'A champion gained a level!', tone: 'success', icon: 'star', duration: 3500 };
+      return { id: ++toastId, message: p ? `${p.name} reached level ${p.level}!` : 'A champion gained a level!', tone: 'success', icon: 'star', duration: 3500, ceremonial: true };
     }
     case 'quest-posted':
       return { id: ++toastId, message: 'Quest posted to the board.', tone: 'info', icon: 'plus', duration: 3000 };
@@ -91,10 +97,10 @@ function eventToToast(event: GameEvent): ToastItem | null {
       return { id: ++toastId, message: 'A quest was fulfilled!', tone: 'success', icon: 'check', duration: 3500 };
     case 'zone-unlocked': {
       const p = event.payload as { name: string } | undefined;
-      return { id: ++toastId, message: p ? `${p.name} is now open!` : 'A new zone is open!', tone: 'success', icon: 'map', duration: 4000 };
+      return { id: ++toastId, message: p ? `${p.name} is now open!` : 'A new zone is open!', tone: 'success', icon: 'map', duration: 4000, ceremonial: true };
     }
     case 'forge-unlocked':
-      return { id: ++toastId, message: 'The Forge is open — craft your own gear.', tone: 'success', icon: 'hammer', duration: 4000 };
+      return { id: ++toastId, message: 'The Forge is open — craft your own gear.', tone: 'success', icon: 'hammer', duration: 4000, ceremonial: true };
     case 'offline-summary': {
       const p = event.payload as { questsCompleted: number; championsLeveled: number; itemsForged: number } | undefined;
       if (!p || (p.questsCompleted === 0 && p.championsLeveled === 0 && p.itemsForged === 0)) return null;

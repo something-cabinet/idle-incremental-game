@@ -1,0 +1,211 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-30T11:22:00.000Z",
+  "title": "Design System: Guild of Second Chances",
+  "extensions": {
+    "colorMeta": {
+      "hall-black": { "role": "neutral", "displayName": "Hall Black", "canonical": "oklch(8% 0.01 55)", "tonalRamp": ["oklch(4% 0.005 55)", "oklch(6% 0.008 55)", "oklch(8% 0.01 55)", "oklch(11% 0.012 55)", "oklch(14% 0.015 55)", "oklch(22% 0.018 55)", "oklch(35% 0.02 55)", "oklch(60% 0.012 55)"] },
+      "charred-timber": { "role": "neutral", "displayName": "Charred Timber", "canonical": "oklch(14% 0.015 55)", "tonalRamp": ["oklch(7% 0.008 55)", "oklch(10% 0.012 55)", "oklch(14% 0.015 55)", "oklch(18% 0.018 55)", "oklch(22% 0.02 55)", "oklch(30% 0.022 55)", "oklch(45% 0.025 55)", "oklch(68% 0.012 55)"] },
+      "charter-surface": { "role": "neutral", "displayName": "Charter Surface", "canonical": "oklch(19% 0.02 60)", "tonalRamp": ["oklch(10% 0.012 60)", "oklch(14% 0.016 60)", "oklch(19% 0.02 60)", "oklch(24% 0.022 60)", "oklch(30% 0.024 60)", "oklch(40% 0.025 60)", "oklch(54% 0.02 60)", "oklch(76% 0.01 60)"] },
+      "charter-raised": { "role": "neutral", "displayName": "Charter Raised", "canonical": "oklch(24% 0.022 60)", "tonalRamp": ["oklch(12% 0.014 60)", "oklch(18% 0.018 60)", "oklch(24% 0.022 60)", "oklch(28% 0.024 60)", "oklch(34% 0.026 60)", "oklch(44% 0.025 60)", "oklch(58% 0.02 60)", "oklch(78% 0.012 60)"] },
+      "brass-deep": { "role": "primary", "displayName": "Brass Deep", "canonical": "oklch(45% 0.06 75)", "tonalRamp": ["oklch(22% 0.03 75)", "oklch(30% 0.04 75)", "oklch(38% 0.05 75)", "oklch(45% 0.06 75)", "oklch(52% 0.065 75)", "oklch(60% 0.06 75)", "oklch(72% 0.05 75)", "oklch(86% 0.025 75)"] },
+      "brass-lit": { "role": "primary", "displayName": "Brass Lit", "canonical": "oklch(75% 0.09 80)", "tonalRamp": ["oklch(38% 0.045 80)", "oklch(48% 0.06 80)", "oklch(56% 0.07 80)", "oklch(64% 0.08 80)", "oklch(72% 0.09 80)", "oklch(78% 0.085 80)", "oklch(85% 0.06 80)", "oklch(93% 0.03 80)"] },
+      "warm-dusk": { "role": "neutral", "displayName": "Warm Dusk", "canonical": "oklch(12% 0.015 60)", "tonalRamp": ["oklch(6% 0.01 60)", "oklch(9% 0.012 60)", "oklch(12% 0.015 60)", "oklch(16% 0.018 60)", "oklch(20% 0.02 60)", "oklch(30% 0.022 60)", "oklch(45% 0.025 60)", "oklch(70% 0.015 60)"] },
+      "gilded-surface": { "role": "neutral", "displayName": "Gilded Surface", "canonical": "oklch(18% 0.018 65)", "tonalRamp": ["oklch(9% 0.012 65)", "oklch(14% 0.015 65)", "oklch(18% 0.018 65)", "oklch(22% 0.02 65)", "oklch(28% 0.022 65)", "oklch(38% 0.024 65)", "oklch(52% 0.02 65)", "oklch(75% 0.01 65)"] },
+      "gilded-surface-hover": { "role": "neutral", "displayName": "Gilded Surface Hover", "canonical": "oklch(22% 0.02 65)", "tonalRamp": ["oklch(11% 0.014 65)", "oklch(16% 0.017 65)", "oklch(22% 0.02 65)", "oklch(26% 0.022 65)", "oklch(32% 0.024 65)", "oklch(42% 0.025 65)", "oklch(56% 0.022 65)", "oklch(78% 0.012 65)"] },
+      "aged-brass": { "role": "neutral", "displayName": "Aged Brass", "canonical": "oklch(30% 0.03 75)", "tonalRamp": ["oklch(15% 0.02 75)", "oklch(22% 0.025 75)", "oklch(30% 0.03 75)", "oklch(38% 0.035 75)", "oklch(46% 0.038 75)", "oklch(54% 0.035 75)", "oklch(65% 0.03 75)", "oklch(80% 0.015 75)"] },
+      "parchment-cream": { "role": "neutral", "displayName": "Parchment Cream", "canonical": "oklch(90% 0.015 85)", "tonalRamp": ["oklch(45% 0.01 85)", "oklch(55% 0.012 85)", "oklch(65% 0.014 85)", "oklch(72% 0.014 85)", "oklch(80% 0.015 85)", "oklch(86% 0.015 85)", "oklch(90% 0.015 85)", "oklch(95% 0.01 85)"] },
+      "warm-ember": { "role": "neutral", "displayName": "Warm Ember", "canonical": "oklch(68% 0.035 75)", "tonalRamp": ["oklch(34% 0.02 75)", "oklch(42% 0.025 75)", "oklch(52% 0.03 75)", "oklch(60% 0.032 75)", "oklch(68% 0.035 75)", "oklch(76% 0.03 75)", "oklch(84% 0.025 75)", "oklch(92% 0.015 75)"] },
+      "shadow-ash": { "role": "neutral", "displayName": "Shadow Ash", "canonical": "oklch(55% 0.02 70)", "tonalRamp": ["oklch(28% 0.012 70)", "oklch(36% 0.015 70)", "oklch(44% 0.018 70)", "oklch(50% 0.02 70)", "oklch(55% 0.02 70)", "oklch(62% 0.018 70)", "oklch(72% 0.015 70)", "oklch(85% 0.01 70)"] },
+      "guild-gold": { "role": "primary", "displayName": "Guild Gold", "canonical": "oklch(85% 0.12 85)", "tonalRamp": ["oklch(42% 0.06 85)", "oklch(52% 0.08 85)", "oklch(62% 0.1 85)", "oklch(70% 0.11 85)", "oklch(78% 0.12 85)", "oklch(85% 0.12 85)", "oklch(90% 0.1 85)", "oklch(95% 0.06 85)"] },
+      "muted-gold": { "role": "primary", "displayName": "Muted Gold", "canonical": "oklch(62% 0.08 75)", "tonalRamp": ["oklch(31% 0.04 75)", "oklch(40% 0.05 75)", "oklch(48% 0.06 75)", "oklch(55% 0.07 75)", "oklch(62% 0.08 75)", "oklch(70% 0.07 75)", "oklch(80% 0.055 75)", "oklch(90% 0.03 75)"] },
+      "emerald-growth": { "role": "secondary", "displayName": "Emerald Growth", "canonical": "oklch(75% 0.11 140)", "tonalRamp": ["oklch(35% 0.06 140)", "oklch(45% 0.08 140)", "oklch(55% 0.1 140)", "oklch(63% 0.11 140)", "oklch(70% 0.12 140)", "oklch(75% 0.11 140)", "oklch(82% 0.08 140)", "oklch(92% 0.04 140)"] },
+      "battle-wound": { "role": "secondary", "displayName": "Battle Wound", "canonical": "oklch(70% 0.14 30)", "tonalRamp": ["oklch(35% 0.07 30)", "oklch(45% 0.09 30)", "oklch(52% 0.11 30)", "oklch(60% 0.13 30)", "oklch(66% 0.14 30)", "oklch(70% 0.14 30)", "oklch(78% 0.1 30)", "oklch(90% 0.05 30)"] },
+      "frost-crystal": { "role": "secondary", "displayName": "Frost Crystal", "canonical": "oklch(75% 0.08 220)", "tonalRamp": ["oklch(35% 0.04 220)", "oklch(45% 0.05 220)", "oklch(55% 0.06 220)", "oklch(63% 0.07 220)", "oklch(70% 0.08 220)", "oklch(75% 0.08 220)", "oklch(82% 0.06 220)", "oklch(92% 0.03 220)"] },
+      "azure-lore": { "role": "tertiary", "displayName": "Azure Lore", "canonical": "oklch(65% 0.1 250)", "tonalRamp": ["oklch(32% 0.05 250)", "oklch(42% 0.07 250)", "oklch(50% 0.08 250)", "oklch(58% 0.09 250)", "oklch(65% 0.1 250)", "oklch(72% 0.09 250)", "oklch(80% 0.07 250)", "oklch(92% 0.03 250)"] },
+      "arcane-violet": { "role": "tertiary", "displayName": "Arcane Violet", "canonical": "oklch(62% 0.12 300)", "tonalRamp": ["oklch(30% 0.06 300)", "oklch(40% 0.08 300)", "oklch(48% 0.1 300)", "oklch(56% 0.11 300)", "oklch(62% 0.12 300)", "oklch(70% 0.1 300)", "oklch(80% 0.07 300)", "oklch(92% 0.03 300)"] },
+      "blazing-sun": { "role": "tertiary", "displayName": "Blazing Sun", "canonical": "oklch(72% 0.14 65)", "tonalRamp": ["oklch(36% 0.07 65)", "oklch(45% 0.09 65)", "oklch(54% 0.11 65)", "oklch(62% 0.13 65)", "oklch(68% 0.14 65)", "oklch(72% 0.14 65)", "oklch(80% 0.1 65)", "oklch(92% 0.05 65)"] },
+      "royal-magenta": { "role": "tertiary", "displayName": "Royal Magenta", "canonical": "oklch(65% 0.16 0)", "tonalRamp": ["oklch(32% 0.08 0)", "oklch(42% 0.1 0)", "oklch(50% 0.12 0)", "oklch(58% 0.14 0)", "oklch(65% 0.16 0)", "oklch(72% 0.12 0)", "oklch(82% 0.08 0)", "oklch(92% 0.04 0)"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Gold amounts, story titles, ceremonial headers — Cinzel at its largest. One per viewport." },
+      "headline": { "displayName": "Headline", "purpose": "Section titles, modal headers, prestige amounts." },
+      "title": { "displayName": "Title", "purpose": "Row names, item names, panel section headers — the smallest Cinzel step." },
+      "body": { "displayName": "Body", "purpose": "Default text — descriptions, story text, stats, item details. Source Sans 3 at 0.85rem." },
+      "label": { "displayName": "Label", "purpose": "Tab labels, attribute abbreviations, stat labels, metadata." },
+      "small": { "displayName": "Small", "purpose": "Subtitles, secondary descriptions, progress times, log content." },
+      "mono": { "displayName": "Mono", "purpose": "Debug panels, console output only." }
+    },
+    "shadows": [
+      { "name": "modal", "value": "0 12px 40px rgba(0,0,0,0.6)", "purpose": "Deep atmospheric shadow for modals and dialogs." },
+      { "name": "dropdown", "value": "0 8px 24px rgba(0,0,0,0.5)", "purpose": "Floating menus, equipment pickers, dropdowns." },
+      { "name": "toast", "value": "0 6px 20px rgba(0,0,0,0.45)", "purpose": "Floating notification toasts above the tab bar." },
+      { "name": "tab-bar", "value": "0 -6px 20px rgba(0,0,0,0.4)", "purpose": "Fixed bottom tab bar separation from scroll content." },
+      { "name": "exalted-glow", "value": "0 0 8px rgba(255,157,61,0.35)", "purpose": "Exalted rarity equipment aura." },
+      { "name": "ascendant-glow", "value": "0 0 8px rgba(255,94,212,0.4)", "purpose": "Ascendant rarity equipment aura." }
+    ],
+    "motion": [
+      { "name": "ease-out", "value": "ease-out", "purpose": "Default easing for all authored motion. Elements decelerate to a stop — smooth arrival, no bounce." },
+      { "name": "ease-in", "value": "ease-in", "purpose": "Recovery phase of battle lunge. Slow start, fast finish — reads as pulling back from a strike." },
+      { "name": "ease-out-cubic", "value": "cubic-bezier(0.215, 0.61, 0.355, 1)", "purpose": "Battle lunge approach. Cubic deceleration makes the fighter's advance feel committed." },
+      { "name": "ease-in-cubic", "value": "cubic-bezier(0.55, 0.055, 0.675, 0.19)", "purpose": "Battle recover return. Slow start accelerating to snap back to position." },
+      { "name": "ease-expressive", "value": "cubic-bezier(0.34, 1.56, 0.64, 1)", "purpose": "Spring-like overshoot for celebratory pops (ascension icon pop-in). The system's only overshoot easing." },
+      { "name": "ease-linear", "value": "linear", "purpose": "Progress bar width. Linear reads as mechanical/precise, not subjective." },
+      { "name": "tier-instant", "value": "≤60ms", "purpose": "Press feedback, scale transforms. Input acknowledgment must feel simultaneous." },
+      { "name": "tier-fast", "value": "100–150ms", "purpose": "Hover, focus, toggle, border/color shifts. Smooth arrival, no waiting." },
+      { "name": "tier-standard", "value": "180–250ms", "purpose": "Sheet slide-up, toast enter/exit, button transitions." },
+      { "name": "tier-slow", "value": "700ms–1.6s", "purpose": "Ceremonial animations: click-pop float, ascension glow/sparkles, story ceremony." },
+      { "name": "keyframe-click-pop", "value": "0.7s ease-out forwards", "purpose": "Floating '+N' on odd-job clicks. Rises 42px, scales 0.8→1.1→1, fades out." },
+      { "name": "keyframe-sheet-rise", "value": "0.18s ease-out", "purpose": "Mobile modal docks from bottom. Short translateY(12px)→none." },
+      { "name": "keyframe-toast-in", "value": "0.25s ease-out", "purpose": "Toast slides up from below and fades in." },
+      { "name": "keyframe-toast-out", "value": "0.2s ease-in forwards", "purpose": "Toast slides down and fades out on dismiss." },
+      { "name": "keyframe-ascend-glow-pulse", "value": "1.6s ease-out infinite", "purpose": "Ascension radial glow sphere — scales 0.7→1.5, opacity 0.9→0.15. Reads as breathing." },
+      { "name": "keyframe-ascend-glow-fadeout", "value": "1.2s ease-out forwards", "purpose": "Ascension second glow layer — from 1.3→0.6 scale. Marks the transition moment." },
+      { "name": "keyframe-ascend-pop", "value": "0.7s cubic-bezier(0.34, 1.56, 0.64, 1)", "purpose": "Ascension item icon pop-in — 0→1.15→1. System's only overshoot." },
+      { "name": "keyframe-ascend-sparkle", "value": "1.4s ease-out infinite", "purpose": "Ascension sparkle particles — 6 sparkles on staggered 0.18s delays, rising 70px." },
+      { "name": "battle-lunge", "value": "180ms easeOutCubic", "purpose": "Fighter slides toward target. Cubic deceleration for committed feel." },
+      { "name": "battle-impact", "value": "120ms", "purpose": "White flash overlay on defender, damage number appears. Flash fades in first 60ms." },
+      { "name": "battle-recover", "value": "160ms easeInCubic", "purpose": "Attacker returns to base position. Slow start, fast finish." },
+      { "name": "battle-float", "value": "700ms", "purpose": "Damage numbers rise 30px and fade. Normal (gold 16px), crit (red 22px with !), block (ice-blue 13px), DoT (orange 14px)." },
+      { "name": "battle-particle", "value": "400–600ms", "purpose": "8 particles burst on defeat. Random velocity, gravity 0.05px/ms², fade." },
+      { "name": "battle-shake", "value": "200–320ms linear decay", "purpose": "Screen shake on impact. Random offset, decays linearly. Crits shake harder." },
+      { "name": "reduced-motion-fallback", "value": "opacity 0.15s", "purpose": "Reduced-motion fallback for toasts. All keyframe animations killed; opacity transition only." },
+      { "name": "charter-fast", "value": "140ms cubic-bezier(0.2, 0.8, 0.2, 1)", "purpose": "Charter amplification layer — smooth deceleration for shell controls, rows, and subtabs." },
+      { "name": "seal-strike", "value": "700ms ease-out", "purpose": "Charter earned feedback — pressure ring + rising amount on the Odd Jobs click. Exponential ease-out, never loops." }
+    ],
+    "breakpoints": [
+      { "name": "mobile-narrow", "value": "420px", "purpose": "Below this: attribute grid condenses to 3-column." },
+      { "name": "mobile-wide", "value": "480px", "purpose": "Below this: equipment grid condenses to 2-column, skill tree to 1-column." },
+      { "name": "tablet", "value": "560px", "purpose": "Below this: modals dock to bottom sheet." },
+      { "name": "container", "value": "520px", "purpose": "Max-width of .game container; content centered beyond this." }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one action a screen is actually for — filled gold gradient, ceremonial weight.",
+      "html": "<button class=\"ds-btn-primary\">Recruit</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 14px; border: 1px solid #a98f3a; border-radius: 8px; background: linear-gradient(180deg, #4a3d16, #332a0f); color: #ffd75e; font: inherit; font-size: 0.85rem; font-weight: 600; cursor: pointer; white-space: nowrap; transition: background 0.12s, border-color 0.12s, transform 0.06s; } .ds-btn-primary:hover { border-color: #ffd75e; } .ds-btn-primary:active { transform: scale(0.97); } .ds-btn-primary:disabled { color: #7d765f; background: transparent; border: 1px dashed #3a3324; cursor: default; }"
+    },
+    {
+      "name": "Default Button",
+      "kind": "button",
+      "refersTo": "button-default",
+      "description": "Secondary action — panel-hover surface, brass border, full touch target.",
+      "html": "<button class=\"ds-btn-default\">Cancel</button>",
+      "css": ".ds-btn-default { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 14px; border: 1px solid #3a3324; border-radius: 8px; background: #2b2519; color: #ece7db; font: inherit; font-size: 0.85rem; font-weight: 600; cursor: pointer; white-space: nowrap; transition: background 0.12s, border-color 0.12s, transform 0.06s; } .ds-btn-default:hover { border-color: #a98f3a; } .ds-btn-default:active { transform: scale(0.97); } .ds-btn-default:disabled { color: #7d765f; background: transparent; border: 1px dashed #3a3324; cursor: default; }"
+    },
+    {
+      "name": "Danger Button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Destructive action — transparent with red border, intensifies on hover.",
+      "html": "<button class=\"ds-btn-danger\">Disassemble</button>",
+      "css": ".ds-btn-danger { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 14px; border: 1px solid #703038; border-radius: 8px; background: transparent; color: #ff8b7a; font: inherit; font-size: 0.85rem; font-weight: 600; cursor: pointer; white-space: nowrap; transition: background 0.12s, border-color 0.12s, transform 0.06s; } .ds-btn-danger:hover { border-color: #ff8b7a; } .ds-btn-danger:active { transform: scale(0.97); } .ds-btn-danger:disabled { color: #7d765f; background: transparent; border: 1px dashed #3a3324; cursor: default; }"
+    },
+    {
+      "name": "Interactive Row",
+      "kind": "card",
+      "refersTo": "row-interactive",
+      "description": "Tappable list item with chevron affordance — job, adventurer, zone, settings.",
+      "html": "<button class=\"ds-row-interactive\" style=\"width:100%\"><span class=\"ds-row-info\"><span class=\"ds-row-name\">Lumber Mill</span><span class=\"ds-row-sub\">Produces 3.2 gold/sec</span></span><span class=\"ds-row-cost\">150g</span></button>",
+      "css": ".ds-row-interactive { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 9px 11px; border: 1px solid #3a3324; border-radius: 10px; background: linear-gradient(180deg, #2b2519, #201c15); color: #ece7db; text-align: left; font: inherit; cursor: pointer; transition: background 0.12s, border-color 0.12s, transform 0.06s; } .ds-row-interactive::after { content: ''; width: 7px; height: 7px; flex-shrink: 0; border-right: 1.5px solid #7d765f; border-bottom: 1.5px solid #7d765f; transform: rotate(-45deg); margin-left: -2px; } .ds-row-interactive:hover { border-color: #a98f3a; } .ds-row-interactive:active { transform: scale(0.995); } .ds-row-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; } .ds-row-name { font-weight: 600; } .ds-row-sub { color: #a1997f; font-size: 0.85rem; } .ds-row-cost { font-weight: 600; color: #ffd75e; white-space: nowrap; font-variant-numeric: tabular-nums; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }"
+    },
+    {
+      "name": "Static Row (NoteRow)",
+      "kind": "card",
+      "refersTo": "row-default",
+      "description": "Read-only informational row with full-contrast text, no interaction affordance.",
+      "html": "<div class=\"ds-row-static\"><span class=\"ds-row-icon\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#a1997f\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 2.5 15 8v7H9V8z\"/><path d=\"M6.5 15h11M12 15v5M10 20.5h4\"/></svg></span><div class=\"ds-row-info\"><span class=\"ds-row-name\">Total Battles</span><span class=\"ds-row-sub\">247 wins · 3 losses</span></div></div>",
+      "css": ".ds-row-static { display: flex; align-items: center; gap: 6px; padding: 9px 11px; background: transparent; color: #ece7db; border: 1px solid #3a3324; border-radius: 10px; } .ds-row-icon { color: #a1997f; align-self: flex-start; margin-top: 0.15em; display: inline-flex; flex-shrink: 0; } .ds-row-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; } .ds-row-name { font-weight: 600; } .ds-row-sub { color: #a1997f; font-size: 0.85rem; }"
+    },
+    {
+      "name": "Modal Dialog",
+      "kind": "card",
+      "refersTo": "modal",
+      "description": "Three-part modal: fixed header, scrollable body, pinned footer. On mobile docks as bottom sheet.",
+      "html": "<div style=\"background:rgba(0,0,0,0.72);padding:16px;display:flex;align-items:center;justify-content:center\"><div class=\"ds-modal\"><div class=\"ds-modal-header\"><h2 class=\"ds-modal-title\">Equip Weapon</h2><button class=\"ds-modal-close\" aria-label=\"Close\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#a1997f\" stroke-width=\"2\" stroke-linecap=\"round\"><path d=\"M6 6l12 12M18 6l-12 12\"/></svg></button></div><div class=\"ds-modal-body\"><p style=\"margin:0 0 10px;font-size:0.85rem;line-height:1.5;color:#ece7db\">Choose a weapon for your adventurer.</p></div><div class=\"ds-modal-footer\"><button class=\"ds-btn-primary\" style=\"flex:1\">Equip</button><button class=\"ds-btn-default\" style=\"flex:1\">Cancel</button></div></div></div>",
+      "css": ".ds-modal { width: 100%; max-width: 440px; display: flex; flex-direction: column; background: #201c15; border: 1px solid #a98f3a; border-radius: 14px; box-shadow: 0 12px 40px rgba(0,0,0,0.6); } .ds-modal-header { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 18px; border-bottom: 1px solid #3a3324; flex-shrink: 0; } .ds-modal-title { margin: 0; font-family: 'Cinzel', 'Playfair Display', serif; font-size: 1.2rem; font-weight: 700; color: #ffd75e; } .ds-modal-close { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; flex-shrink: 0; padding: 0; border: none; border-radius: 8px; background: transparent; color: #a1997f; cursor: pointer; } .ds-modal-close:hover { background: #2b2519; color: #ece7db; } .ds-modal-body { display: flex; flex-direction: column; gap: 10px; padding: 14px; overflow-y: auto; overscroll-behavior: contain; } .ds-modal-footer { display: flex; gap: 6px; padding: 10px 14px calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid #3a3324; background: #201c15; }"
+    },
+    {
+      "name": "Tab Bar Navigation",
+      "kind": "nav",
+      "refersTo": "tab-default",
+      "description": "Fixed bottom navigation — five tabs (Overview, Town, Guild, Map, Items) with icon + label stack.",
+      "html": "<nav style=\"width:100%;max-width:520px;display:flex;gap:2px;background:#201c15;border:1px solid #3a3324;border-radius:12px 12px 0 0;padding:6px 6px calc(6px + env(safe-area-inset-bottom));box-shadow:0 -6px 20px rgba(0,0,0,0.4)\"><button class=\"ds-tab ds-tab-active\"><span class=\"ds-tab-icon\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 2.5 15 8v7H9V8z\"/><path d=\"M6.5 15h11M12 15v5M10 20.5h4\"/></svg></span><span class=\"ds-tab-label\">Overview</span></button><button class=\"ds-tab\"><span class=\"ds-tab-icon\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M3 8.5 12 3l9 5.5V20H3z\"/><path d=\"M9 15h6v5H9z\"/></svg></span><span class=\"ds-tab-label\">Town</span></button><button class=\"ds-tab\"><span class=\"ds-tab-icon\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4 21V9l8-6 8 6v12\"/><path d=\"M9 21V13h6v8\"/></svg></span><span class=\"ds-tab-label\">Guild</span></button><button class=\"ds-tab\"><span class=\"ds-tab-icon\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"8.5\"/><path d=\"M2 12h20M12 2.5A15 15 0 0 0 7 12a15 15 0 0 0 5 9.5A15 15 0 0 0 17 12a15 15 0 0 0-5-9.5z\"/></svg></span><span class=\"ds-tab-label\">Map</span></button><button class=\"ds-tab\"><span class=\"ds-tab-icon\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z\"/><path d=\"M12 22V12\"/></svg></span><span class=\"ds-tab-label\">Items</span></button></nav>",
+      "css": ".ds-tab { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 44px; padding: 5px 2px; border: none; border-radius: 8px; background: none; color: #a1997f; cursor: pointer; font: inherit; transition: background 0.1s, color 0.1s; } .ds-tab:hover { color: #ece7db; } .ds-tab-active { background: #2b2519; color: #ffd75e; } .ds-tab-icon { font-size: 1.2rem; line-height: 1; } .ds-tab-label { font-size: 0.66rem; font-weight: 600; white-space: nowrap; }"
+    },
+    {
+      "name": "Stat Tile",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Labelled value tile used in stat grids — fits auto-fill columns, one per metric.",
+      "html": "<div class=\"ds-stat\"><span class=\"ds-stat-value\" style=\"color:#ffd75e\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 2.5 15 8v7H9V8z\"/><path d=\"M6.5 15h11M12 15v5M10 20.5h4\"/></svg> 1,247</span><span class=\"ds-stat-label\">Battles Won</span></div>",
+      "css": ".ds-stat { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 8px 4px; border: 1px solid #3a3324; border-radius: 8px; background: #201c15; } .ds-stat-value { display: inline-flex; align-items: center; gap: 4px; font-weight: 700; font-variant-numeric: tabular-nums; color: #ece7db; } .ds-stat-label { font-size: 0.66rem; font-weight: 600; color: #a1997f; text-align: center; line-height: 1.25; }"
+    },
+    {
+      "name": "Progress Bar",
+      "kind": "custom",
+      "refersTo": "card",
+      "description": "Thin progress track with colored fill — XP (emerald), HP (red gradient), or generic (gold).",
+      "html": "<div style=\"display:flex;align-items:center;gap:8px\"><span class=\"ds-progress-track\"><span class=\"ds-progress-fill\" style=\"width:67%;background:#a98f3a\"></span></span><span class=\"ds-progress-time\">2h 14m</span></div>",
+      "css": ".ds-progress-track { flex: 1; height: 6px; border-radius: 3px; background: #14120e; border: 1px solid #3a3324; overflow: hidden; } .ds-progress-fill { display: block; height: 100%; transition: width 0.2s linear; } .ds-progress-fill.xp { background: #8fdc6f; } .ds-progress-fill.hp { background: linear-gradient(90deg, #d0473b, #ff8b7a); } .ds-progress-time { font-size: 0.66rem; color: #a1997f; white-space: nowrap; font-variant-numeric: tabular-nums; }"
+    },
+    {
+      "name": "Toggle Switch",
+      "kind": "custom",
+      "refersTo": "toggle-off",
+      "description": "Binary toggle with pill track and circular knob — off (dark) and on (gold).",
+      "html": "<button class=\"ds-toggle\" role=\"switch\" aria-checked=\"false\"><span class=\"ds-toggle-knob\"></span></button>",
+      "css": ".ds-toggle { width: 44px; height: 26px; border-radius: 13px; border: 1px solid #3a3324; background: #14120e; cursor: pointer; padding: 2px; display: flex; transition: background 0.15s; } .ds-toggle[aria-checked=\"true\"] { background: #a98f3a; justify-content: flex-end; } .ds-toggle-knob { width: 20px; height: 20px; border-radius: 50%; background: #ece7db; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Guild Hall Fire",
+    "overview": "The interface is a guild hall at dusk: deep wood-panelled walls, warm candlelight, the gleam of gold on dark surfaces. Every screen sits in this room — the fire is always within sight, even when the player is deep in a menu or studying an item's stats. The warmth comes from the palette (cream text on brown-black grounds, gold as the voice of action and progress) and from the craft: borders are burnished brass, interactive elements lift with purpose, and every rarity tier has its own distinct gem-like glow.\n\nThe game's RPG systems (adventurers, equipment, stats) demand scanability and density, so the visual system stays disciplined under the fantasy surface. Typography carries the gravitas — Cinzel for the guild's voice, Source Sans 3 for the ledgers — while spacing, radius, and tonal layering keep information legible on a phone-sized screen.",
+    "keyCharacteristics": [
+      "Warm dark: not blue-black or neutral grey, but warm brown-black — the dark of a fire-lit interior.",
+      "Gold as action: the accent isn't decorative; it marks wealth, progress, interactive intent, and the player's agency.",
+      "Tonal depth: surfaces stack by luminance, not by shadow. The deeper the surface, the darker the tone.",
+      "Ceremonious components: buttons have linear gradients, distinct borders, and press feedback — every action feels weighty.",
+      "Purposeful motion: every animation serves feedback (press, progress, notification), ceremony (ascension, story beats), or spatial orientation (sheet rise, dropdown). No decorative loops.",
+      "Jewel-box rarities: five rarity tiers with distinct hues (blue → purple → orange → magenta) each with tinted surfaces and soft glows.",
+      "Reduced motion as a system property: animations degrade gracefully — .reduced-motion class and prefers-reduced-motion media query are first-class constraints."
+    ],
+    "rules": [
+      { "name": "The Hearth Rule", "body": "Gold (Guild Gold) is always the warmest element on screen. No other color competes with it for the role of 'what demands attention.' When a rarity color or Frost Crystal appears, gold recedes to its structural role.", "section": "colors" },
+      { "name": "The Rarity Gradient Rule", "body": "Rarity tiers follow a fixed hue arc (blue → purple → orange → magenta) that never varies. Every equipment item, border, and label uses its tier's exact hue — no interpolation, no custom tints.", "section": "colors" },
+      { "name": "The One Cinzel Per View Rule", "body": "No more than one Cinzel element per distinct visual region — the gold amount in the header, a story title in a modal, a headline on a panel. Two Cinzel elements in the same viewport compete for the ceremonial voice and both lose.", "section": "typography" },
+      { "name": "The Flat-by-Default Rule", "body": "Surfaces at rest have no shadow. A shadow must be earned by being a floating element (modal, dropdown, toast, fixed bar) or a rarity glow. If it sits in the scroll flow, it's tonal, not lifted.", "section": "elevation" },
+      { "name": "The Decoration Rule", "body": "If an animation cannot be named by what it communicates (press feedback, state change, ceremony, spatial orientation), it does not belong. Decorative looping animations — idle spinners, rotating icons, background parallax — are not part of the system.", "section": "motion" },
+      { "name": "The Reduced Motion Invariant", "body": "Every animated element has a non-animated end state that carries the same information. The reduced-motion path is not a degraded experience; it is the same experience without motion.", "section": "motion" },
+      { "name": "The Heraldic Geometry Rule", "body": "The charter layer uses opposed notched corners (3px 11px 3px 11px, scaling to 4px 18px 4px 18px for ceremonial controls). Apply to the shell's important controls, chapter panels, floating notices, and modals — not to every dense data tile. Circles are reserved for coins, wax-seal notices, and impact rings.", "section": "shapes" },
+      { "name": "The Charter Responsive Rule", "body": "At desktop widths the 520px operating column is visibly mounted inside the darker timber field with fine brass side rules. At phone widths the outer frame disappears and the charter becomes full-bleed; touch targets, information density, and the fixed navigation contract do not change.", "section": "layout" }
+    ],
+    "dos": [
+      "Do use Guild Gold as the single point of action on any screen. When everything is gold, nothing is.",
+      "Do use tonal layering (darker → lighter surfaces) for depth instead of shadows. Shadows are for floating elements only.",
+      "Do keep rarity colors locked to their hue positions in the arc (blue → purple → orange → magenta). No interpolation between tiers.",
+      "Do use dashed borders as the universal 'unavailable' signal — works for locked rows, disabled buttons, empty slots.",
+      "Do let Cinzel breathe — one display-face element per viewport, not competing voices.",
+      "Do make every tappable element at least 44px in one dimension. The game is thumb-operated on phones.",
+      "Do use ease-out for authored motion. Elements should arrive at their destination and stop — no bounce, no overshoot unless the moment is specifically ceremonial.",
+      "Do animate press feedback with a transform snap (≤60ms), not a longer transition. Input acknowledgment must feel simultaneous with the finger.",
+      "Do use reduced-motion variants for every animated element: prefer opacity transitions over keyframe-driven animations when the user opts out.",
+      "Do give every ceremonial animation a static end state that carries the same information — the reduced-motion path is not a degraded experience."
+    ],
+    "donts": [
+      "Don't put body text in white (#fff). Use Parchment Cream (#ece7db) — it reads as warm light, not a cold screen.",
+      "Don't use opacity to dim text. Use the dedicated neutral text tokens (Warm Ember, Shadow Ash). Opacity compounds unpredictably against varied backgrounds.",
+      "Don't split rarity tinting rules — every equipment picker, grid item, detail panel, and equipped-slot label uses the same tier → hue mapping.",
+      "Don't invent additional elevation layers. The system has three surface tones and three shadow levels. A fourth tone without a role weakens the hierarchy.",
+      "Don't use solid borders on disabled controls. Dashed is the established contract.",
+      "Don't add a subscription, pricing, or any commerce surface — the game is free, single-player, no monetization.",
+      "Don't add decorative looping animations — idle spinners, rotating icons, background parallax, or any motion that cannot be named by what it communicates.",
+      "Don't animate tab switches or panel transitions. Navigation is instant — delaying it reads as lag, not polish.",
+      "Don't animate elements that appear and disappear in the normal flow (tooltips, pickers, dropdowns). Use the fast tier only for the state change that triggered them."
+    ]
+  }
+}

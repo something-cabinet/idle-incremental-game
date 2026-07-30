@@ -1,84 +1,45 @@
-# Guild of Second Chances — narrative RPG management idle game
+# CLAUDE
 
-React + TypeScript + Vite. Target: web now, later wrapped in Electron for Steam
-(and possibly Capacitor for mobile). The developer designs and steers; AI writes
-most of the code — so keep the architecture boundaries below strict, and keep
-`src/game/` covered by tests.
+Compatibility entrypoint for runtimes that auto-detect `CLAUDE.md`.
 
-**The game design is canonical in `docs/game-design.md`** — three acts
-(refugee → guild leader → revenge), time-travel prestige with Time Shards,
-finite ending. Read it before changing systems. Names/prose/balance numbers
-are placeholders until the theme/balance passes.
+<!-- WIKI-MEM GUIDELINES START -->
 
-## Commands
+**CRITICAL: You MUST read and follow `WIKI-MEM.md` in the repository root before doing any work. It is the canonical source of truth for all agent behavior in this project.**
 
-- `npm run dev` — dev server with HMR
-- `npm test` — vitest (pure logic tests in `src/game/*.test.ts`)
-- `npm run build` — typecheck + production build
+## Canonical Guidance
 
-## Architecture (important)
+- WM is the repository memory layer for humans and the AI-friendly working layer for agents.
+- The source of truth for repo-level agent guidance is `WIKI-MEM.md`.
+- Read `WIKI-MEM.md` first whenever the runtime supports reading repository files.
+- Load behavior, memory policy, and workflow rules from `WIKI-MEM.md`; treat this file only as a compatibility entrypoint.
+- If this file and `WIKI-MEM.md` differ, follow `WIKI-MEM.md`.
 
-Three layers, dependencies point inward only:
+## Minimum Rules
 
-- **`src/game/`** — pure TypeScript game logic. No React, no DOM, no imports
-  from outside this folder. All state transitions are pure functions
-  `(state) => state`. Randomness is injected (`Rng` param, defaults to
-  `Math.random`) so tests are deterministic. All balance/tuning numbers and
-  content (jobs, locations, perks, story beats) live in `config.ts` only.
-  - `logic.ts` town economy · `guild.ts` roster/gear/assignments ·
-    `engine.ts` the tick (quest board, crafting, Auto-Explore, offline catch-up) ·
-    `combat.ts` turn-based battles · `dungeon.ts` per-zone gauntlets ·
-    `campaign.ts` the Act 3 marches on the generals & demon king ·
-    `story.ts` beats & act transitions · `prestige.ts` time travel ·
-    `adventurers.ts` generation/stats · `perks.ts` shard-bought modifiers
-- **`src/platform/`** — platform adapters behind interfaces (`SaveAdapter`
-  in `storage.ts`). Web uses localStorage; the Electron/Steam build will swap in
-  file-based + Steam Cloud adapters here without touching game or UI code.
-- **`src/ui/`, `src/hooks/`, `App.tsx`** — React. Reads state via
-  `useGameState()`, mutates only by dispatching pure functions through the
-  `GameStore`. Five tabs — Overview / Town / Guild / Map / Items — the last
-  three act-gated (Act 2). Map has Explore / Dungeons subtabs, plus Campaign
-  once Act 3 opens. Settings sits behind the header gear; Timeline is an
-  Overview subtab, revealed once time travel unlocks.
-  - `ui/icons.tsx` — the whole icon vocabulary as monochrome 24×24 SVG stroked
-    with `currentColor`. **No emoji in the UI.** Icons are deliberately shared
-    across similar concepts; extend this set rather than adding one-off glyphs.
-  - `ui/display.ts` — the only place game data becomes display strings and icon
-    names (`materialName`, `CLASS_ICON`, `itemStatParts`, `rate`, …). Don't
-    redeclare these in a panel; they previously drifted out of sync.
-  - `ui/components.tsx` — `Modal` (bottom sheet on phones), `InfoNote`
-    (collapsible help), `Stat`, `StatChips`, `NoteRow`.
+- Use WM MCP tools (`wm_*`) as the canonical system for tasks, docs, templates, memory, search, code intelligence, and workflow state.
+- Never manually edit WM-managed task or doc markdown.
+- Search first, then read only relevant docs and code.
+- Use `wm_search.query` for discovery; use `wm_search.retrieve` when a workflow needs structured context with citations.
+- For code operations, use `wm_code.search` for AST-aware search, symbol lookup, and dependency analysis.
+- Plan before implementation unless the user explicitly overrides that workflow.
+- Validate before considering work complete.
+- Use memory tools: `wm_memory.list` at session start, `wm_memory.add` after tasks for reusable knowledge.
+- Proactively capture durable memory; do not wait for explicit instruction.
+- Read all rules from `.wm/wiki/rules/` at session start and obey them.
 
-The game loop (`useGameLoop`) ticks 10×/sec with clamped dt. `engine.tick`
-handles any dt — offline catch-up runs through the same code path, processing
-patrol encounters in fixed game-time steps (capped). Game time runs 1:1 with
-real time; 1 in-game day = `DAY_LENGTH_SECONDS` (20 min).
+## Quick Reference
 
-A later feature to keep in mind: an animated town-overview window (town grows
-with upgrades). It will be a render layer reading game state — likely
-PixiJS/canvas — so don't leak UI assumptions into `src/game/`.
+```bash
+wm-cli serve              # Start MCP server
+wm init                   # Init project
+wm init --full            # Install + PATH + config + init
+wm upgrade                # Install binary to PATH
+wm setup opencode         # MCP config + sync skills
+wm page list              # List wiki pages
+wm search <q>             # Search wiki
+wm task board             # Task board
+wm lint check             # Wiki health
+wm validate               # Validate refs
+```
 
-## Conventions
-
-- New mechanics: add pure functions + tests in `src/game/` first, then UI.
-- Never put balance numbers inline in components — they go in `game/config.ts`.
-- UI is mobile-first. Action buttons clear a 44px touch target (`--touch`);
-  spacing uses the `--gap-*` / `--radius-*` tokens, not raw pixels.
-- Information the player acts on must stay full-contrast. `.row-static` is
-  readable body text; only genuinely unavailable controls get the dimmed
-  `.row-locked` / `unaffordable` treatment.
-- Long explanations belong in an `InfoNote`, collapsed by default and passed
-  `defaultOpen` when the surrounding UI is empty — not in permanent prose.
-- Saves are versioned (`SAVE_VERSION`, currently 18); when changing `GameState`
-  shape, bump it and extend `migrateSave` in `game/logic.ts` — never break
-  existing player saves (pre-v3 saves intentionally reset: full redesign).
-
-## Design references
-
-`docs/` holds design material — consult before system/theme decisions:
-
-- `docs/game-design.md` — **the game's canonical design** (user-authored).
-- `docs/design-research-idle-games.md` — genre research: prestige math,
-  platform tuning, monetization, pitfalls.
-- `docs/spaceplan-framework-notes.md` — finite narrative idle structure
-  (this game follows the act/paradigm-shift pattern described there).
+<!-- WIKI-MEM GUIDELINES END -->

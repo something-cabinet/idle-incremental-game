@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "appRoot": "/Users/nhkhanh/projects/idle-incremental-game",
+  "repoRoot": "/Users/nhkhanh/projects/idle-incremental-game",
+  "contextRoot": "/Users/nhkhanh/projects/idle-incremental-game",
+  "sessionRoot": "/Users/nhkhanh/projects/idle-incremental-game/.impeccable/live",
+  "productPath": "/Users/nhkhanh/projects/idle-incremental-game/PRODUCT.md",
+  "designPath": "/Users/nhkhanh/projects/idle-incremental-game/DESIGN.md",
+  "resolvedFrom": "cwd"
+}

@@ -13,20 +13,27 @@ import { Icon, type IconName } from './icons';
 // Stat tiles
 // ---------------------------------------------------------------------------
 
-/** A labelled tile. `icon` is optional and sits before the value. */
+/** A labelled tile. `icon` is optional and sits before the value.
+ *  `size` tiers the visual weight:
+ *  - 'hero': one per section max, large value, promoted
+ *  - 'standard': the default grid cell (unchanged from before)
+ *  - 'compact': smaller footprint, inline-friendly, for tail stats
+ */
 export function Stat({
   value,
   label,
   icon,
   tone,
+  size = 'standard',
 }: {
   value: string | number;
   label: string;
   icon?: IconName;
   tone?: 'accent' | 'shard' | 'green';
+  size?: 'hero' | 'standard' | 'compact';
 }) {
   return (
-    <div className="stat">
+    <div className={`stat stat-${size}`}>
       <span className={`stat-value ${tone ? `tone-${tone}` : ''}`}>
         {icon && <Icon name={icon} />}
         {value}

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type CSSProperties, type MouseEvent } from 'react';
 import { JOBS, TOWN_SKILLS, WORKER_CAP, WORKER_PRODUCTION } from '../../game/config';
 import {
   buyJob,
@@ -26,21 +26,37 @@ import { Icon } from '../icons';
 
 const BUY_AMOUNTS = [1, 5, 10, 100] as const;
 
+interface ClickFeedback {
+  id: number;
+  amount: number;
+  x: number;
+  drift: number;
+  tilt: number;
+}
+
 export function TownPanel() {
   const store = useGameStore();
   const state = useGameState();
   const fmt = useFormat();
   const [section, setSection] = usePanelSection<'jobs' | 'skills'>('town', 'jobs');
   const [buyAmount, setBuyAmount] = useState<number>(1);
-  // Each click spawns a short-lived "+N" that floats off the button. The core
-  // loop had no feedback beyond a 0.97 scale, so taps felt unacknowledged.
-  const [pops, setPops] = useState<{ id: number; amount: number }[]>([]);
+  // The core action lands like a guild seal: a pressure ring appears exactly
+  // where the player struck, then the earned amount lifts clear of the button.
+  const [pops, setPops] = useState<ClickFeedback[]>([]);
 
-  function handleClick() {
+  function handleClick(event: MouseEvent<HTMLButtonElement>) {
     const amount = effectiveClickPower(state);
     const id = Date.now() + Math.random();
-    setPops((p) => [...p.slice(-6), { id, amount }]);
-    setTimeout(() => setPops((p) => p.filter((x) => x.id !== id)), 700);
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const pointerX = event.detail === 0
+      ? 50
+      : ((event.clientX - bounds.left) / bounds.width) * 100;
+    const x = Math.max(18, Math.min(82, pointerX));
+    const drift = Math.round((Math.random() - 0.5) * 28);
+    const tilt = Math.round((Math.random() - 0.5) * 8);
+
+    setPops((current) => [...current.slice(-4), { id, amount, x, drift, tilt }]);
+    setTimeout(() => setPops((current) => current.filter((item) => item.id !== id)), 720);
     store.dispatch(click);
   }
 
@@ -55,9 +71,18 @@ export function TownPanel() {
         </span>
         <span className="click-power">+{fmt(effectiveClickPower(state))} gold per click</span>
         <span className="click-pops" aria-hidden="true">
-          {pops.map((p) => (
-            <span key={p.id} className="click-pop">
-              +{fmt(p.amount)}
+          {pops.map((pop) => (
+            <span
+              key={pop.id}
+              className="click-feedback"
+              style={{
+                '--feedback-x': `${pop.x}%`,
+                '--feedback-drift': `${pop.drift}px`,
+                '--feedback-tilt': `${pop.tilt}deg`,
+              } as CSSProperties}
+            >
+              <span className="click-impact" />
+              <span className="click-pop">+{fmt(pop.amount)}</span>
             </span>
           ))}
         </span>

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    "./OPENCODE.md"
+  ],
+  "mcp": {
+    "wm": {
+      "command": [
+        "wm-cli",
+        "mcp"
+      ],
+      "enabled": true,
+      "type": "local"
+    }
+  }
+}
